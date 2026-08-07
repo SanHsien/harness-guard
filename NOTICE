@@ -1,0 +1,47 @@
+NOTICE — 第三方來源與授權
+=========================
+
+本 repo 的 LICENSE（MIT, Copyright (c) 2026 Dustin Yuchen Teng）涵蓋本人撰寫
+的部分。以下項目衍生自他人作品，其原始授權一併適用，原始版權聲明保留於此。
+
+
+1. hooks/claim-guard/
+   claim-evidence-guard.sh, claim-ledger-tracker.sh
+---------------------------------------------------
+改寫自 AlethiaQuizForge/no-hallucination 的 verify-guard / claim-guard 與
+verify-tracker / search-tracker。原本的四支腳本在此合併為兩支，改用 session
+隔離的帳本路徑，並加入中文觸發詞。
+
+    來源：https://github.com/AlethiaQuizForge/no-hallucination
+    授權：MIT License
+    Copyright (c) 2026 Markus Lien
+
+
+2. hooks/no-emoji-guard/no-emoji-guard.py
+------------------------------------------
+腳本本身為原創。其中兩張字元範圍表（EMOJI_PRESENTATION、EXT_PICTOGRAPHIC）
+由 Unicode 官方 emoji-data.txt v17.0 解析產生。
+
+    來源：https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-data.txt
+    授權：Unicode License v3
+    Copyright (c) 1991-2025 Unicode, Inc. All rights reserved.
+
+
+3. skills/neat-freak/
+----------------------
+衍生自 KKKKhazix/khazix-skills 的 neat-freak skill。SKILL.md 已大幅重寫並
+縮減（原 210 行 / 15KB，本版 49 行 / 2.2KB），流程改為與本人的 checkpoint
+skill 整合、改用 bounded subagent 執行、並新增 scripts/enumerate.sh 機械枚舉
+步驟。references/ 中 sync-matrix.md 與 agent-paths.md 沿用上游檔名。
+
+    來源：https://github.com/KKKKhazix/khazix-skills
+    授權：MIT License
+    Copyright (c) 2026 数字生命卡兹克
+
+
+未收錄的項目
+------------
+first-principles skill 中的 explore-unknowns 模組未收錄於本 repo。該模組的
+概念與部分表述可追溯至 Thariq Shihipar 的文章〈A Field Guide to Fable:
+Finding Your Unknowns〉，但本機留存的檔案無法確認其撰寫者與授權狀態，故不
+發布。

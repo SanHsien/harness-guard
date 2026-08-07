@@ -1,0 +1,47 @@
+{
+  "_comment": "把需要的區塊併進你的 ~/.claude/settings.json 的 hooks 物件。已有同名事件就把 hooks 陣列的內容加進去，不要整段覆蓋。註冊後重開 session 才生效。",
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/no-emoji-guard.py",
+            "statusMessage": "Scanning for emoji..."
+          }
+        ]
+      }
+    ],
+
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/claim-ledger-tracker.sh"
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/claim-evidence-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "LINT_CMD='npm run lint' FAIL_PATTERN='[1-9][0-9]* error' ~/.claude/hooks/lint-gate.sh",
+            "timeout": 30,
+            "statusMessage": "收工前檢查中..."
+          }
+        ]
+      }
+    ]
+  }
+}
