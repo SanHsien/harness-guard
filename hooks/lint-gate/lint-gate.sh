@@ -1,19 +1,21 @@
 #!/bin/bash
-# lint-gate.sh — Stop hook
+# lint-gate.sh
 #
-# 收工閘門：Claude 想結束這一輪時，先跑你指定的檢查指令；有錯就把錯誤丟回去
-# 要它修完再結束。純本地腳本，不呼叫任何模型，不花 token。
+# 這支在 AI 想結束這一輪的時候跑一次你指定的檢查指令。有錯就把錯誤內容丟回去
+# 給它，並且不准它結束，直到修完為止。
 #
-# 為什麼要有這個：把「記得跑 lint」寫進 CLAUDE.md 是沒有強制力的，模型會忘、
-# 會覺得這次不重要。做成 Stop hook 之後，「沒過就不准收工」變成系統行為，
-# 不再依賴模型自律。
+# 為什麼需要：把「記得先跑檢查」寫在規則檔裡是沒有用的。它會忘，而且忘的時候
+# 不會講。改成這樣以後，「沒過不准走」是電腦在管，不是靠它自律。
 #
-# 設定：改下面三個變數，或用同名環境變數覆寫。
-#   LINT_CMD       要跑的檢查指令（相對路徑以 CLAUDE_PROJECT_DIR 為基準）
-#   FAIL_PATTERN   在輸出中命中這個 regex 就算失敗
-#   PASS_PATTERN   命中這個就算通過；留空表示「只要沒命中 FAIL_PATTERN 就算過」
+# 只有本機的指令在跑，不呼叫任何 AI，不花錢。
 #
-# 例：
+# 要改的設定有三個，直接改下面，或是在啟動時用同名的環境變數蓋過去：
+#
+#   LINT_CMD       要跑什麼檢查指令
+#   FAIL_PATTERN   檢查結果裡出現什麼文字，就算這次沒過
+#   PASS_PATTERN   出現什麼文字算過。留空的話，就是「只要沒出現失敗的文字就算過」
+#
+# 幾個例子：
 #   LINT_CMD='npm run lint'        FAIL_PATTERN='[1-9][0-9]* error'
 #   LINT_CMD='ruff check .'        FAIL_PATTERN='^Found [1-9]'
 #   LINT_CMD='python3 lint.py'     FAIL_PATTERN='ERROR total: [1-9]'  PASS_PATTERN='ERROR total: 0'
@@ -26,8 +28,9 @@ PASS_PATTERN="${PASS_PATTERN:-}"
 
 input=$(cat)
 
-# 防無限迴圈：這一輪已經是被本 hook 擋下來才停的，就放行。
-# 沒有這段的話，修不好的錯誤會讓 Claude 永遠結束不了。
+# 這段千萬不要刪。它在問「這次會停下來，是不是因為我上一輪擋了它」。
+# 是的話就放行。沒有這段的話，遇到修不好的錯誤，它會變成想結束、被擋、
+# 再想結束、又被擋，整個卡死在無限迴圈裡。
 if echo "$input" | jq -e '.stop_hook_active == true' >/dev/null 2>&1; then
   exit 0
 fi
@@ -39,8 +42,8 @@ cd "$PROJECT_DIR" 2>/dev/null || exit 0
 
 out=$(eval "$LINT_CMD" 2>&1)
 
-# Fail-open：檢查指令自己壞掉（找不到、crash、沒有輸出）時放行，
-# 不要因為工具壞了就讓使用者永遠收不了工。
+# 檢查指令自己壞掉的時候（打錯字、程式當掉、什麼都沒印出來）一律放行。
+# 不能因為檢查工具自己有問題，就讓使用者永遠收不了工。
 [ -n "$out" ] || exit 0
 
 if [ -n "$PASS_PATTERN" ]; then

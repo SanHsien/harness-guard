@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 """
-no-emoji-guard.sh (PreToolUse: Write|Edit|MultiEdit)
+no-emoji-guard.py
 
-擋下寫入內容中的 emoji。全域規則：對外與內部文件一律禁 emoji。
+AI 要寫檔案之前，先檢查內容裡有沒有表情符號，有就擋下來不讓它寫。
 
-判準（依 Unicode UTS #51 emoji-data.txt v17.0，2025-07-25 官方檔）：
-  1. Emoji_Presentation=Yes 的字元——預設就以彩色 emoji 呈現（例：✅ ❌ ⏳ ⏩ 🔒）
-  2. Extended_Pictographic 字元後接 VS16（U+FE0F）——被明確要求以 emoji 呈現（例：⚠️ ️）
+怎麼判斷哪些算表情符號？不是我自己列一張清單，是照 Unicode 官方的定義。
+Unicode 就是全世界統一規定「哪個編號代表哪個字」的那套標準，表情符號也在裡面。
+官方檔案說是的就是，說不是的就不是，沒有我個人的判斷。
 
-刻意「不」擋（這些是排版符號不是 emoji，品牌規範有用到）：
-  ✓ ✕ → ← ↑ ↓ 　© ® ™（未接 VS16 時）
+兩種情況會擋：
+  一、本來就長成彩色表情符號的字（像打勾的綠底白勾、紅色叉叉、沙漏、鎖頭）
+  二、本來是黑白符號，但後面被特別加了一個「請顯示成彩色」的隱形標記
 
-來源：https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-data.txt
-更新方式：重跑該檔解析，替換下方兩張表。
+刻意不擋的（這些是排版符號，不是表情符號）：
+  ✓ ✕ → ← ↑ ↓ 　以及沒有被加隱形標記的 © ® ™
+
+字元表出處：https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-data.txt
+（依 v17.0，2025-07-25 版本產生）
+要更新的話：重新解析上面那個官方檔案，把下面兩張表整個換掉。
 
 已知限制：本 hook 只掃 Write/Edit/MultiEdit 當下要寫入的原始字元，掃不到 HTML numeric
 entity（例如某個 emoji 的十進位碼點寫成 `&#12xxxx;` 這種格式）。人工稽核既有 HTML 檔案
@@ -32,7 +37,7 @@ VS16 = 0xFE0F
 # ── 設定 ───────────────────────────────────────────────────────────────
 # 路徑含以下任一子字串時整檔放行。典型用途是 Obsidian vault：那裡的到期日與
 # 完成標記是 Tasks plugin 的功能語法，被清掉會弄壞待辦追蹤。
-# 例：EXEMPT_PATH_SUBSTRINGS = ["/knowledge-base/", "/vault/"]
+# 例：EXEMPT_PATH_SUBSTRINGS = ["/my-notes/", "/vault/"]
 EXEMPT_PATH_SUBSTRINGS = []
 # ───────────────────────────────────────────────────────────────────────
 

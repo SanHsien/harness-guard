@@ -1,11 +1,25 @@
 #!/bin/bash
-# claim-evidence-guard.sh — Stop hook
-# 「行動完成宣稱＝事實主張」的強制閘門（task-execution.md 的可執行版）：
-#   A) 回覆宣稱「驗證通過/測試通過/實測跑通」→ 本 session 帳本必須有驗證類指令紀錄
-#   B) 回覆做出「不存在/找不到」負向斷言 → 帳本必須有搜尋動作紀錄
-# 帳本由 claim-ledger-tracker.sh（PostToolUse）寫入。純 bash+jq，無 LLM 呼叫、無額外 token。
-# 改寫自 AlethiaQuizForge/no-hallucination（MIT）verify-guard + claim-guard，加中文觸發詞。
-# 安全失效模式：欄位缺失或 jq 失敗一律放行（絕不誤擋），只在「有宣稱且零證據」時才擋。
+# claim-evidence-guard.sh
+#
+# 這支在 AI 想要結束這一輪對話的時候跑，負責對帳。
+#
+# 它檢查兩件事：
+#   一、它說了「測試過了」「驗證通過」「實測沒問題」→ 帳本裡就要有真的跑過檢查的紀錄
+#   二、它說了「找不到」「沒有這個東西」→ 帳本裡就要有真的搜尋過的紀錄
+# 對不上就擋下來，不准結束，並且把缺什麼講給它聽。
+#
+# 帳本是隔壁的 claim-ledger-tracker.sh 記的，兩支要一起裝，少一支就失效。
+#
+# 為什麼需要這個：「我測試過了」這句話對 AI 來說幾乎沒有成本，它可以在完全沒跑過
+# 的情況下用一模一樣的語氣講出來，你分辨不出來。與其相信它，不如去查紀錄。
+#
+# 全程只有本機的小指令在跑，不呼叫任何 AI，不花錢。
+#
+# 讀不到資料或格式不對的時候一律放行，寧可漏擋也不誤擋。只有在「明確講了、
+# 而且完全零紀錄」的情況下才會攔。
+#
+# 改寫自 AlethiaQuizForge/no-hallucination（MIT 授權）的 verify-guard 與 claim-guard，
+# 合併並加上中文的觸發詞。
 
 LEDGER_DIR="$HOME/.cache/claude-guard-hooks"
 

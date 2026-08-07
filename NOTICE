@@ -1,47 +1,68 @@
-NOTICE — 第三方來源與授權
-=========================
+NOTICE：這裡面有哪些東西是別人的
+================================
 
-本 repo 的 LICENSE（MIT, Copyright (c) 2026 Dustin Yuchen Teng）涵蓋本人撰寫
-的部分。以下項目衍生自他人作品，其原始授權一併適用，原始版權聲明保留於此。
+這個資料夾整體用 MIT 授權（Copyright (c) 2026 Dustin Yuchen Teng），
+但其中幾樣是改寫自別人的作品。原作者的授權一樣有效，署名列在下面。
+
+如果你要拿這些東西去用、去改、去賣，這份檔案請一起留著。這是 MIT 授權
+唯一真正要求你做的事。
 
 
-1. hooks/claim-guard/
-   claim-evidence-guard.sh, claim-ledger-tracker.sh
----------------------------------------------------
-改寫自 AlethiaQuizForge/no-hallucination 的 verify-guard / claim-guard 與
-verify-tracker / search-tracker。原本的四支腳本在此合併為兩支，改用 session
-隔離的帳本路徑，並加入中文觸發詞。
+一、hooks/claim-guard/
+   claim-evidence-guard.sh、claim-ledger-tracker.sh
+--------------------------------------------------
+改寫自 AlethiaQuizForge/no-hallucination 裡的四支腳本，我把它們合併成兩支，
+換掉了紀錄檔的存放位置，並加上中文的觸發詞。
 
-    來源：https://github.com/AlethiaQuizForge/no-hallucination
+    出處：https://github.com/AlethiaQuizForge/no-hallucination
     授權：MIT License
     Copyright (c) 2026 Markus Lien
 
 
-2. hooks/no-emoji-guard/no-emoji-guard.py
-------------------------------------------
-腳本本身為原創。其中兩張字元範圍表（EMOJI_PRESENTATION、EXT_PICTOGRAPHIC）
-由 Unicode 官方 emoji-data.txt v17.0 解析產生。
+二、hooks/no-emoji-guard/no-emoji-guard.py
+-------------------------------------------
+腳本是我自己寫的。但裡面那兩張很長的字元編號表，是從 Unicode 官方檔案
+解析出來的，不是我列的。
 
-    來源：https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-data.txt
+    出處：https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-data.txt
     授權：Unicode License v3
     Copyright (c) 1991-2025 Unicode, Inc. All rights reserved.
 
 
-3. skills/neat-freak/
-----------------------
-衍生自 KKKKhazix/khazix-skills 的 neat-freak skill。SKILL.md 已大幅重寫並
-縮減（原 210 行 / 15KB，本版 49 行 / 2.2KB），流程改為與本人的 checkpoint
-skill 整合、改用 bounded subagent 執行、並新增 scripts/enumerate.sh 機械枚舉
-步驟。references/ 中 sync-matrix.md 與 agent-paths.md 沿用上游檔名。
+三、skills/neat-freak/
+-----------------------
+從 KKKKhazix/khazix-skills 的同名 skill 改來的。主檔已經大幅重寫並縮減
+（原本 210 行、15KB，現在 49 行、2.2KB），做事的流程也整個換過：改成跟
+checkpoint 串在一起、改用獨立的子代理執行、另外加了一支先把現況數一遍的
+腳本。references 資料夾裡有兩個檔名沿用上游。
 
-    來源：https://github.com/KKKKhazix/khazix-skills
+    出處：https://github.com/KKKKhazix/khazix-skills
     授權：MIT License
     Copyright (c) 2026 数字生命卡兹克
 
 
-未收錄的項目
-------------
-first-principles skill 中的 explore-unknowns 模組未收錄於本 repo。該模組的
-概念與部分表述可追溯至 Thariq Shihipar 的文章〈A Field Guide to Fable:
-Finding Your Unknowns〉，但本機留存的檔案無法確認其撰寫者與授權狀態，故不
-發布。
+四、skills/polite/
+-------------------
+翻譯並改編自 hardikpthv/agent-skills 的 empathetic-tone-basic 與
+professional-tone-basic 兩個 skill，我把它們合併成一個，並加上「不要幫對方
+編造處境」這條規則。
+
+    出處：https://github.com/hardikpthv/agent-skills
+    授權：MIT License
+    Copyright (c) 2026 hardikpthv
+
+
+五、skills/first-principles/references/explore-unknowns/
+--------------------------------------------------------
+這個模組用的「四象限盤點法」來自 Thariq Shihipar 的文章
+〈A Field Guide to Fable: Finding Your Unknowns〉。方法是他的，功勞算他的。
+
+    出處：https://x.com/trq212
+
+要說明的是：我電腦裡原本那份檔案是誰打字寫下來的、有沒有授權，我查不出來
+（作者名下沒有公開的 skill 專案，也搜不到相同內容）。所以開場那段跟原文
+用字太接近的部分我重寫過了，改成自己的話，並在檔案開頭直接標明方法出處。
+概念本身不受著作權保護，特定的文字表達才受保護，所以處理方式是「留想法、
+換句子、標出處」。
+
+如果 Thariq 認為這樣仍不妥，我會照他的意思調整或撤下。

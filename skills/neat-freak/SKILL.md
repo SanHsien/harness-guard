@@ -42,8 +42,8 @@ description: "Deep fact reconciliation for KB masters, project docs, and authori
 
 ## 邊界
 
-- `/obsidian log`：流水帳。
-- `/checkpoint`：唯一完整收尾入口。
-- `vault-maintenance`：週期性 lint、歸檔、索引與鏡像維護。
+- 寫日誌：那是流水帳，不是對帳，交給你的日誌流程。
+- `/checkpoint`：完整收尾的唯一入口，本 skill 是它的其中一段。
+- 定期維護（格式檢查、歸檔、索引重建）：另外排，不要塞進這裡。
 
 沒有 enumerate 最終輸出，就沒有完成 neat-freak。

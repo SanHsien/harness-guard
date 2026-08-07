@@ -27,7 +27,7 @@ allowed-tools: Bash(git status *) Bash(git diff *) Bash(git log *) Agent Read
    - `repos`：repo、branch、可歸因檔案、已跑測試。
    - `coverage`：每個 changed file，以及每個對外動作／排程／付款／待辦變更，都標成 `fact_delta: yes`（連到 fact list）或 `fact_delta: no`（附一句理由）。有未分類項目不得派工。
 4. 比對今日 daily、recent commits 與目前檔案狀態；其他 session 已寫入更晚且相同的內容時標 `daily_action: skip_duplicate`，不得重複或倒填。
-5. manifest 必含 `mode`、`memory_mode`、active checkpoint/neat-freak/obsidian skill dirs、memory dir、vault、project roots。
+5. manifest 必含 `mode`、`memory_mode`、目前用到的各個流程腳本所在資料夾、記憶資料夾、知識庫根目錄、以及所有要收尾的專案資料夾。
 
 `memory_mode` 預設 `read-only`；只有使用者明確要求 `neat-freak`、記憶同步或記憶清理時才是 `update`。
 

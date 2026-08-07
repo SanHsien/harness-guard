@@ -1,9 +1,19 @@
 #!/bin/bash
-# claim-ledger-tracker.sh — PostToolUse (Bash|Grep|Glob)
-# 默默記錄本 session 的「驗證類指令」與「搜尋類動作」到帳本，
-# 供 claim-evidence-guard.sh 在 Stop 時比對宣稱與證據。
-# 改寫自 AlethiaQuizForge/no-hallucination（MIT）的 verify-tracker + search-tracker，
-# 合併為單一腳本並改用 session 隔離帳本（避免污染 repo 工作樹）。
+# claim-ledger-tracker.sh
+#
+# 這支像行車紀錄器：AI 每跑一個指令它就在旁邊記一筆，全程不出聲、不干擾。
+#
+# 它只記兩類事：
+#   一、跑過哪些檢查類的指令（測試、編譯、版本查詢那些）
+#   二、做過哪些搜尋（找檔案、找關鍵字）
+#
+# 記下來的東西給隔壁的 claim-evidence-guard.sh 用，那支會在收工時拿這本帳
+# 去對「它剛才說的話有沒有憑據」。兩支要一起裝。
+#
+# 帳本放在使用者家目錄的快取資料夾，按對話分開存，不會弄髒你的專案。
+#
+# 改寫自 AlethiaQuizForge/no-hallucination（MIT 授權）的 verify-tracker 與
+# search-tracker，合併成一支並改用隔離的帳本路徑。
 
 LEDGER_DIR="$HOME/.cache/claude-guard-hooks"
 

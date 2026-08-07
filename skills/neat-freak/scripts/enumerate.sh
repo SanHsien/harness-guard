@@ -75,7 +75,7 @@ if [[ -n "$VAULT" ]]; then
       echo "daily note today: MISSING (daily/$TODAY.md; latest = ${latest:-none})"
     fi
     done_main=$(grep -rc --include='*.md' "✅ $TODAY" "${MAIN_DIRS[@]}" 2>/dev/null | awk -F: '{s+=$NF} END {print s+0}')
-    echo "'✅ $TODAY' in 主檔 (pillars/projects/decisions/personal): $done_main"
+    echo "'✅ $TODAY' in 主檔 (${VAULT_MAIN_DIRS:-預設資料夾}): $done_main"
 
     # 2. 開放待辦缺分類 tag（見檔頭 TAG_PATTERN）
     miss=$(grep -rn --include='*.md' '^- \[ \]' "${MAIN_DIRS[@]}" 2>/dev/null | grep -v '_TEMPLATE' | grep -Ev "$TAG_PATTERN" | wc -l | tr -d ' ')
@@ -103,7 +103,7 @@ if [[ -n "$VAULT" ]]; then
     echo "relative-time hits in 主檔 todo/狀態行: $rel"
     [[ "$rel" -gt 0 ]] && grep -rEn --include='*.md' '^(- \[[ /]\]|> \*\*狀態)' "${MAIN_DIRS[@]}" 2>/dev/null | grep -E "$REL_TIME_PATTERN" | sed "s|$VAULT/||" | head -10
 
-    # 6. vault 根目錄誤生的日期空檔（obsidian daily:path 陷阱）
+    # 6. 知識庫根目錄誤生的日期空檔（日誌工具設錯路徑時會在這裡留下空檔）
     stray=$(ls "$VAULT" 2>/dev/null | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$' | wc -l | tr -d ' ')
     echo "stray date-named md at vault root: $stray"
     [[ "$stray" -gt 0 ]] && ls "$VAULT" | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$' | sed 's/^/  STRAY: /'

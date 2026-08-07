@@ -13,9 +13,9 @@
 
 除 `git-only`、`daily_action: skip_duplicate` 或沒有 material session 外，讀取：
 
-`<obsidian-skill-dir>/references/daily-log-protocol.md`
-
-依 manifest 的 `daily_entries` 寫一次。不要 invoke 完整 Obsidian skill；不要在 neat-freak 階段再寫。
+依你自己的日誌格式規範寫一次（若你有另外的日誌流程腳本，讀它的規範檔，
+但不要整支叫起來跑，那會重複做事）。內容用 manifest 裡的 `daily_entries`。
+同一輪不要在對帳階段再寫第二次。
 
 ## 3. 條件式事實對帳
 
