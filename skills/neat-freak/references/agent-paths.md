@@ -21,7 +21,7 @@
 | 跨會話指令（全域） | `~/.codex/AGENTS.md` 或 `$CODEX_HOME/AGENTS.md` |
 | 專案級指令 | 專案根 `AGENTS.md`（可層級嵌套） |
 | 專案級 override | `AGENTS.override.md`（若存在，覆蓋同目錄 AGENTS.md） |
-| Skills 目錄 | `~/.codex/skills/<name>/SKILL.md` 或專案內 `.codex/skills/<name>/` |
+| Skills 目錄 | `~/.agents/skills/<name>/SKILL.md` 或專案內 `.agents/skills/<name>/` |
 
 Codex 沒有獨立的「記憶文件 + 索引」機制，所有跨會話資訊都直接寫在 `AGENTS.md` 裡。同步時把「專案事實」那部分內容統一放 AGENTS.md。
 
