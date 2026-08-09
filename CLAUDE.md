@@ -58,6 +58,8 @@ claim-guard 那兩支腳本要**一起裝**。只裝其中一支的話功能是�
 
 複製到 `~/.claude/skills/`，保留各自的資料夾。不需要登記，放進去就能用。
 
+review-loop 帶了腳本與模板，整包一起複製，不要只搬 SKILL.md。裝完把 SKILL.md 裡「指令」那段的路徑改成他實際的安裝路徑，並且跑一次 `bash skills/review-loop/examples/regression/run-test.sh` 給他看（應該是通過 10、失敗 0），順便解釋那在測什麼。他如果沒有「反覆改版長文件」的需求，這個可以不裝。
+
 checkpoint 跟 neat-freak 這兩個要照使用者自己的檔案擺法調整才會準。裝完之後問他平常筆記跟專案放在哪，然後幫他改 `skills/neat-freak/references/sync-matrix.md` 那張表。他答不出來就先跳過，那兩個 skill 沒調整過也不會壞，只是對帳結果會不準。
 
 explain 跟 polite 直接可用，不用調整。

@@ -1,2 +1,6 @@
 .DS_Store
 *.swp
+
+# review-loop 產物（每次 render 都會重生，不進版控）
+*.review-state.json
+*-review-v*.html
