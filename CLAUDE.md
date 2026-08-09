@@ -43,7 +43,7 @@ brew install jq
 
 ### hooks（三個攔截工具）
 
-1. 把 `hooks/` 底下各資料夾裡的腳本檔複製到 `~/.claude/hooks/`，**放在該資料夾的最外層，不要保留這裡的子資料夾結構**。
+1. 把 `hooks/<工具名>/**claude-code**/` 底下的腳本檔複製到 `~/.claude/hooks/`，**放在該資料夾的最外層，不要保留這裡的子資料夾結構**。注意要拿 `claude-code/` 那份，不要拿到 `codex/` 那份——兩份判斷邏輯一樣但介面寫法不同，拿錯不會動。
 2. 給執行權限：`chmod +x ~/.claude/hooks/<檔名>`
 3. 改 `~/.claude/settings.json` 做登記。寫法參考 `settings-example.json`。
 

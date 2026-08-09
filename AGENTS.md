@@ -4,28 +4,21 @@
 
 這份檔案只補充 Codex 跟 Claude Code 不一樣的地方。
 
-## hooks 不能照搬
+## hooks 現在有 Codex 版了
 
-`hooks/` 底下那三支是照 Claude Code 的機制寫的，直接複製到 Codex 環境不會動。
+`hooks/<工具名>/codex/` 底下就是。三支都有，判斷邏輯跟 Claude Code 版一模一樣，介面的部分已經改好，**直接複製到 `~/.codex/hooks/` 就能用，不用自己移植**。
 
-**先更正一件事**：這份文件原本寫「事件名稱不一樣」，那是錯的。Codex 的 hooks 一樣用 `PreToolUse`、`PostToolUse`、`SessionStart`、`Stop`、`UserPromptSubmit`、`PermissionRequest`、`SubagentStart`、`SubagentStop` 這些名字，連 `matcher` ＋ `hooks` 的結構都一樣。真正要改的是下面這幾項。
+安裝步驟：
 
-| | Claude Code | Codex |
-|---|---|---|
-| 設定放哪 | `settings.json` 裡的 `hooks` 區塊 | 獨立的 `~/.codex/hooks.json`，另外 `config.toml` 要有 `hooks = true` |
-| matcher 裡的工具名 | `Write`／`Edit`／`MultiEdit`／`Bash`／`WebFetch` | 改檔案是 `apply_patch`，執行指令是 `exec`／`shell`／`exec_command`，抓網頁是 `web_fetch`。寫成 `apply_patch\|Write\|Edit\|MultiEdit` 這種兩邊都涵蓋的形式最省事 |
-| 環境變數 | `CLAUDE_PROJECT_DIR`（`lint-gate.sh` 有用到） | 沒有這個，要換成別的取法 |
-| 信任機制 | 無 | hook 要先被信任才會執行，第一次啟用要確認 |
-| 事件涵蓋範圍 | 另有 `PreCompact`、`SessionEnd`、`Notification` 等 | 另有 `PostCompact`。兩邊各有對方沒有的事件，移植前先確認你要掛的那個存不存在 |
+1. 複製 `hooks/<工具名>/codex/` 底下的腳本到 `~/.codex/hooks/`，`chmod +x`
+2. 把 repo 根目錄 `codex-hooks-example.json` 需要的區塊併進 `~/.codex/hooks.json`（已有同名事件就把 hooks 陣列的內容加進去，不要整段覆蓋）
+3. 確認 `~/.codex/config.toml` 有 `hooks = true`
+4. Codex 對 hook 有信任機制，第一次啟用要確認
+5. 重開 session
 
-**還有一項沒被驗證過**：傳進腳本的那包 JSON 欄位（`tool_name`、`tool_input`、`session_id`、`stop_hook_active`、`last_assistant_message`）在 Codex 是不是同名，我沒有實測過。移植時務必實跑一次確認腳本真的讀到值——**不要看它沒報錯就當成生效了**，那正是這三支 hook 想防的事。
+**裝完要實際觸發一次確認它真的有反應**，不要看它沒報錯就宣稱裝好了。
 
-所以遇到使用者拿這包給 Codex 裝的時候，**先講清楚這件事，不要照抄然後宣稱裝好了**。
-
-可行的做法有兩條，讓使用者選：
-
-1. 只裝 `skills/`，那部分是純文字的做事步驤，兩邊通用。
-2. 你依照 Codex 現行的機制，把那三支的判斷邏輯重寫一遍。原理很簡單（記帳、對帳、比對文字），重寫不難，但要實際測過再說裝好了。
+兩邊的介面差異、以及想自己移植其他 hook 時要改什麼，見 `hooks/README.md` 的對照表。簡短版：事件名稱兩邊一樣，要改的是 `session_id` → `turn_id`、matcher 補 `apply_patch`／`exec`／`shell`、沒有 `CLAUDE_PROJECT_DIR` 改讀 payload 的 `cwd`、放行時要印 `{}`、擋下來是回 `{"decision":"block","reason":...}` 而不是 exit 2。
 
 ## skills 可以直接用
 
