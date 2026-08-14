@@ -1,52 +1,67 @@
-# 社區讀書會改版企劃（範例文件）
+# Community Book Club Redesign Proposal (sample document)
 
-這份是拿來示範用的假企劃，內容不重要，重點是看每一段怎麼被標上代號、
-以及審查頁長什麼樣。你可以直接改這份試玩，改壞了也沒關係。
+This is a fake proposal made for demonstration -- the content doesn't matter, what
+matters is seeing how each block gets tagged with an id and what the review
+page ends up looking like. Feel free to edit this directly to try it out;
+breaking it doesn't matter.
 
 <!-- @block why -->
-## 為什麼要改
+## Why change
 
-現在的讀書會每個月一次、每次兩小時，來的人固定就那七八個。新報名的人
-通常來一次就不再出現，問過幾個之後得到的答案幾乎一樣：進來的時候大家
-已經在討論第三本書了，插不進話。
+The current book club meets once a month for two hours, and it's the same
+seven or eight people every time. New people who sign up almost never come
+back a second time -- asked around, and the answer is nearly always the
+same: by the time they arrive, everyone's already deep into the third book
+and there's no way in.
 
-問題不在內容，在「新來的人沒有入口」。
+The problem isn't the content, it's that **new people have no entry point.**
 
 <!-- @block format -->
-## 新的形式
+## New format
 
-改成每兩個月一個主題、四場為一輪。第一場是導讀，任何人都可以來；
-後面三場才進到細讀。這樣新來的人每兩個月有一次乾淨的起點。
+Switch to a theme every two months, four sessions per round. The first
+session is an intro session anyone can attend; the next three go deep. That
+way new people get a clean starting point every two months.
 
-每場維持兩小時，不加長。時間拉長不會讓討論變好，只會讓後半段沒人講話。
+Each session stays at two hours -- not longer. A longer session doesn't
+make the discussion better, it just means the second half goes quiet.
 
 <!-- @block reading -->
-## 選書方式
+## How books get picked
 
-現在是主辦人選，改成每輪結束前由參加者提名三本，現場投票決定下一輪。
+Right now the organizer picks. Change it so that before each round ends,
+attendees nominate three books and vote on the spot for the next round.
 
-提名要附一句「為什麼想讀」，不接受只丟書名。這一句話本身就會篩掉
-一半隨手提名的，剩下的通常是真的想讀。
+Nominations require one sentence on "why I want to read this" -- title-only
+nominations don't count. That one sentence alone filters out about half the
+casual nominations; what's left is usually something people actually want
+to read.
 
 <!-- @block space -->
-## 場地
+## Venue
 
-維持在社區活動中心。有人提議改到咖啡廳，但那會產生低消，等於變相收費，
-跟「任何人都可以來」衝突。
+Stays at the community center. Someone suggested a café, but that comes
+with a minimum spend, which is effectively a fee, and conflicts with
+"anyone can come."
 
 <!-- @block money -->
-## 費用
+## Cost
 
-不收費。書自己準備，二手或圖書館借都可以。
+Free. Bring your own book -- secondhand or borrowed from the library both
+work.
 
-唯一的支出是每場的茶水，一場大約三百元，由主辦人自行吸收。如果之後
-人數超過十五人，再來討論要不要分攤。
+The only expense is drinks each session, roughly NT$300 a time, covered by
+the organizer out of pocket. If attendance ever passes fifteen, revisit
+whether to split that cost.
 
 <!-- @block risk -->
-## 可能會失敗的地方
+## Where this could fail
 
-**導讀場來了一堆人，細讀場又只剩原本那七八個。**如果連續兩輪都這樣，
-代表問題不是入口，是細讀的門檻本身太高，那要改的是細讀的進行方式。
+**The intro session draws a crowd and the deep-dive sessions are back down
+to the same seven or eight.** If that happens two rounds running, the
+problem isn't the entry point, it's that the deep-dive sessions themselves
+have too high a bar, and that's what needs to change.
 
-**投票選出來的書太硬，讀不完。**先試一輪再說，真的發生就加一條規則：
-提名的人要負責那本書的導讀。
+**The voted-in book is too dense to finish.** Try one round first; if it
+actually happens, add a rule that whoever nominated a book is responsible
+for leading its intro session.

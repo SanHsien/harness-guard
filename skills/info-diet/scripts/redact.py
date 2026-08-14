@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 """
-redact.py — 依使用者指名的關鍵字，從報告裡刪掉整行。
+redact.py — drop whole lines from the report, by keywords the user names.
 
-存在的理由：讓使用者「指揮 AI 刪」，而不是「自己開檔案刪」。
-零技術背景的人不一定有辦法開檔、找行、存檔——但他一定講得出
-「不要有跟醫院有關的」或「把某某網站拿掉」。
+Why this exists: it lets the user "tell the AI what to delete", instead of
+"open the file and delete it yourself". Someone with zero technical
+background may not be able to open a file, find a line, and save it — but
+they can absolutely say "nothing related to hospitals" or "take out that
+one site."
 
-**這支腳本的輸出絕對不含被刪掉的內容。** 它只回報刪了幾行、命中哪幾個關鍵字。
-所以 AI 可以在完全沒看過報告的情況下執行刪除，然後才第一次讀那份報告。
-這是整個隱私承諾能夠成立的關鍵——承諾由流程保證，不是靠 AI 自律。
+**This script's output never contains the deleted content.** It only
+reports how many lines were removed and which keywords matched. So the AI
+can run it without ever having seen the report, and only read the report
+for the first time after the deletion has happened.
+This is what makes the whole privacy promise hold up — it's guaranteed by
+the process, not by the AI's self-restraint.
 
-用法：
-  python3 redact.py --report ~/.info-diet/report.txt --terms "醫院,求職,某某網站"
-  python3 redact.py --report ... --terms "..." --dry-run    # 只看會刪幾行，不動檔案
+Usage:
+  python3 redact.py --report ~/.info-diet/report.txt --terms "hospital,job search,some-site"
+  python3 redact.py --report ... --terms "..." --dry-run    # preview line count only, no file changes
 """
 
 import argparse
@@ -23,22 +28,22 @@ import sys
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--report", required=True, help="要處理的報告檔")
+    ap.add_argument("--report", required=True, help="the report file to process")
     ap.add_argument("--terms", required=True,
-                    help="使用者指名要拿掉的關鍵字，逗號分隔。不分大小寫。")
+                    help="keywords the user named to remove, comma-separated. Case-insensitive.")
     ap.add_argument("--dry-run", action="store_true",
-                    help="只回報會刪幾行，不真的改檔案")
+                    help="only report how many lines would be removed, don't touch the file")
     args = ap.parse_args()
 
     path = os.path.expanduser(args.report)
     if not os.path.exists(path):
-        print(f"找不到報告檔：{path}", file=sys.stderr)
+        print(f"Report file not found: {path}", file=sys.stderr)
         print("STATUS=nofile")
         return 1
 
     terms = [t.strip().lower() for t in args.terms.split(",") if t.strip()]
     if not terms:
-        print("沒有給任何關鍵字，沒事可做。")
+        print("No keywords given, nothing to do.")
         print("STATUS=noterms")
         return 0
 
@@ -56,15 +61,15 @@ def main():
 
     total_removed = len(lines) - len(kept)
 
-    # 只講數量，不講內容。這一行是這支腳本的重點。
-    print(f"指定的關鍵字：{len(terms)} 個")
+    # Only report counts, never content. This line is the whole point of this script.
+    print(f"Keywords given: {len(terms)}")
     for t in terms:
-        print(f"  「{t}」命中 {removed_by[t]} 行")
-    print(f"合計刪除 {total_removed} 行，報告從 {len(lines)} 行剩下 {len(kept)} 行。")
-    print("（刪掉的內容沒有印在這裡，也不會出現在任何地方。）")
+        print(f"  \"{t}\" matched {removed_by[t]} lines")
+    print(f"Removed {total_removed} lines total, report went from {len(lines)} to {len(kept)} lines.")
+    print("(The removed content is not printed here, and won't appear anywhere.)")
 
     if args.dry_run:
-        print("這次是試算，檔案沒有被改。")
+        print("This was a dry run — the file was not changed.")
         print("STATUS=dryrun")
         return 0
 
@@ -72,7 +77,7 @@ def main():
         shutil.copyfile(path, path + ".bak")
         with open(path, "w", encoding="utf-8") as f:
             f.writelines(kept)
-        # 備份檔含有剛剛刪掉的內容，留著等於沒刪，直接移除。
+        # The backup file contains what was just deleted — keeping it would defeat the purpose. Remove it.
         os.remove(path + ".bak")
 
     print("STATUS=ok")

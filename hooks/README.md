@@ -1,42 +1,42 @@
-# 三支攔截工具：兩個版本
+# Three interceptor hooks: two versions each
 
-每一支底下都有兩個資料夾：
+Each one has two folders underneath it:
 
 ```
-hooks/<工具名>/
-├── claude-code/   給 Claude Code 用
-└── codex/         給 Codex 用
+hooks/<tool-name>/
+├── claude-code/   for Claude Code
+└── codex/         for Codex
 ```
 
-**判斷邏輯兩邊一模一樣。**擋什麼、放什麼、怎麼算證據，是同一套。不一樣的只有跟平台介面有關的那幾行。
+**The logic is identical on both sides.** What gets blocked, what gets let through, how evidence gets counted — it's the same set of rules. The only difference is the handful of lines tied to each platform's interface.
 
-裝哪一個看你用哪個工具。兩個都用就兩個都裝，帳本目錄是分開的（`~/.cache/claude-guard-hooks` 與 `~/.cache/codex-guard-hooks`），不會互相干擾。
+Install whichever one matches the tool you use. If you use both, install both — the ledger directories are kept separate (`~/.cache/claude-guard-hooks` and `~/.cache/codex-guard-hooks`), so they won't interfere with each other.
 
-## 設定檔怎麼寫
+## How to configure it
 
-- Claude Code → 併進 `~/.claude/settings.json`，範例在 repo 根目錄的 `settings-example.json`
-- Codex → 併進 `~/.codex/hooks.json`，範例在 `codex-hooks-example.json`，另外 `~/.codex/config.toml` 要有 `hooks = true`
+- Claude Code → merge into `~/.claude/settings.json`; the example is `settings-example.json` at the repo root
+- Codex → merge into `~/.codex/hooks.json`; the example is `codex-hooks-example.json`, and `~/.codex/config.toml` also needs `hooks = true`
 
-## 兩邊到底差在哪
+## Where the two actually differ
 
-事件名稱是**一樣的**（`PreToolUse`、`PostToolUse`、`Stop`、`SessionStart`、`UserPromptSubmit` 這些），`matcher` ＋ `hooks` 的結構也一樣。真正的差異是下面五點，移植其他 hook 時照這張表改就對了。
+The event names are **the same** (`PreToolUse`, `PostToolUse`, `Stop`, `SessionStart`, `UserPromptSubmit`), and the `matcher` + `hooks` structure is the same too. The real differences come down to the five points below — use this table if you're porting another hook.
 
 | | Claude Code | Codex |
 |---|---|---|
-| 設定放哪 | `settings.json` 的 `hooks` 區塊 | 獨立的 `~/.codex/hooks.json`，另外 `config.toml` 要 `hooks = true` |
-| 這一輪的識別碼 | `session_id` | **`turn_id`**（寫成 `.turn_id // .session_id` 兩個都試最保險） |
-| matcher 的工具名 | `Write`／`Edit`／`MultiEdit`／`Bash`／`WebFetch` | 改檔案是 `apply_patch`，執行指令是 `exec`／`shell`／`exec_command`，抓網頁是 `web_fetch` |
-| 專案目錄 | 環境變數 `CLAUDE_PROJECT_DIR` | 沒有這個。改讀 payload 裡的 `cwd` |
-| 放行時要輸出什麼 | 安靜結束就好 | **要印一個 `{}`**，什麼都不印會被當成異常 |
-| 擋下來怎麼表達 | `exit 2` ＋ 訊息寫到 stderr | 印 `{"decision":"block","reason":"..."}` |
-| 信任機制 | 無 | hook 要先被信任才會跑，第一次啟用要確認 |
+| Where config lives | the `hooks` block in `settings.json` | a separate `~/.codex/hooks.json`, and `config.toml` needs `hooks = true` |
+| This turn's identifier | `session_id` | **`turn_id`** (safest to write `.turn_id // .session_id` and try both) |
+| Tool names in the matcher | `Write`/`Edit`/`MultiEdit`/`Bash`/`WebFetch` | editing a file is `apply_patch`, running a command is `exec`/`shell`/`exec_command`, fetching a page is `web_fetch` |
+| Project directory | env var `CLAUDE_PROJECT_DIR` | doesn't exist — read `cwd` from the payload instead |
+| What to output when allowing something | just exit quietly | **print `{}`** — printing nothing gets treated as an anomaly |
+| How to express a block | `exit 2` + a message to stderr | print `{"decision":"block","reason":"..."}` |
+| Trust mechanism | none | a hook has to be trusted before it runs; the first activation needs confirmation |
 
-另外 Codex 有 `PostCompact`，Claude Code 有 `PreCompact`、`SessionEnd`、`Notification`。兩邊各有對方沒有的事件，掛之前先確認你要的那個存不存在。
+Codex also has `PostCompact`; Claude Code has `PreCompact`, `SessionEnd`, and `Notification`. Each side has events the other doesn't — check that the one you want actually exists before you wire it up.
 
-`stop_hook_active`、`last_assistant_message`、`tool_name`、`tool_input` 這幾個欄位兩邊同名，可以直接沿用。
+`stop_hook_active`, `last_assistant_message`, `tool_name`, and `tool_input` share the same field names on both sides, so you can reuse those directly.
 
-## 想自己移植別的 hook
+## Porting another hook yourself
 
-上面那張表就是全部。核心邏輯不用動——`claim-ledger-tracker` 兩個版本不含註解各是 26 行與 32 行，多出來的六行全是「沒有 jq 就跳過」這類防禦，判斷用的那串比對式一個字都沒改。
+The table above is the whole story. The core logic doesn't need to change — `claim-ledger-tracker`, excluding comments, is 26 lines in one version and 32 in the other; the extra six lines are all defensive checks like "skip if `jq` isn't available." The comparison expression that actually does the judging hasn't changed by a single character.
 
-移植完**一定要實際觸發一次確認它真的有反應**。不要看它沒報錯就當成生效了——那正是這三支想防的事。
+**After porting, always trigger it once for real to confirm it actually fires.** Don't assume it's working just because it didn't error — that's exactly the failure mode these three tools exist to catch.

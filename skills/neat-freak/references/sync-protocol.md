@@ -1,81 +1,81 @@
 # neat-freak Sync Protocol
 
-你是知識庫編輯。輸入是一份 manifest：
+Your input is a manifest containing:
 
 - `mode: scoped | full`
 - `memory_mode: read-only | update`
-- `fact_list`（事實 → 波及檔案）
-- active neat-freak skill dir、memory dir、vault、project roots
+- `fact_list` (facts → the files they affect)
+- the active neat-freak skill dir, memory dir, vault, project roots
 
-本協議只做事實對帳；不寫 session daily、不 commit、不 push。
+This protocol only reconciles facts; it does not write the session daily log, commit, or push.
 
-## 1. 枚舉與載入路由
+## 1. Enumeration and load routing
 
-先執行 `<neat-freak-skill-dir>/scripts/enumerate.sh`：
+First run `<neat-freak-skill-dir>/scripts/enumerate.sh`:
 
 ```bash
 <enumerate.sh> --memory <memory-dir> --vault <vault> [<project-root> ...]
 ```
 
-保留輸出。若後續有修改，完成後重跑；最終摘要只貼最後一次原樣輸出。沒有最終 enumerate 證據即未完成。
+Keep the output. If you make edits afterward, re-run it when done; the final summary should paste only the last run's output verbatim. Without final enumerate evidence, the task isn't done.
 
-只載入必要內容：
+Load only what's necessary:
 
-- 兩種模式都讀：fact list 波及主檔、今日 daily、對應 repo instruction。
-- `scoped`：只加讀 enumerate 命中檔與 fact list 關鍵字在 memory index 命中的條目。
-- `full`：再讀 memory index、今日相關的主檔／project docs、enumerate 命中檔；fact list 為空時以本 session 最近修改檔與今日 daily 為起點。
-- 只有路徑無法解析才讀 `agent-paths.md`。
-- 只有影響映射不確定才讀 `sync-matrix.md`。
-- 只有 API、env、DB、部署或跨專案介面變更才讀 `dev-mode.md`。
+- Both modes: the master files a fact touches, today's daily log, and the corresponding repo instructions.
+- `scoped`: additionally read only files hit by enumerate and memory-index entries matched by fact-list keywords.
+- `full`: additionally read the memory index, today's relevant master/project docs, and files hit by enumerate; if the fact list is empty, start from files modified recently in this session and today's daily log.
+- Read `agent-paths.md` only when a path can't be resolved.
+- Read `sync-matrix.md` only when the impact mapping is unclear.
+- Read `dev-mode.md` only for API, env, DB, deployment, or cross-project interface changes.
 
-禁止全量讀 rollout summaries、整個 memory topic tree、整個 vault 或所有 repo docs。先用 `rg` 定位，再讀命中段落。
+Never bulk-read rollout summaries, the entire memory topic tree, the whole vault, or every repo's docs. Locate with `rg` first, then read the matched sections.
 
-產出內部文件清單，每檔標 `checked | edit | skip`。
+Produce an internal file list, tagging each file `checked | edit | skip`.
 
 ## 2. GATE
 
-編輯前逐項判定；用代碼回報，通過項可壓成範圍（例如 `G1-G10 pass; G11 skip`），失敗項必須展開證據：
+Judge each item before editing; report using the codes, collapsing passing ranges (e.g. `G1-G10 pass; G11 skip`), but expand evidence for any failure:
 
-- G1 文件清單每檔皆已判定。
-- G2 daily 完成事項與主檔 `- [x] ... ✅ YYYY-MM-DD` 一致。
-- G3 改期／取消已更新主檔日期或狀態。
-- G4 新待辦只在單一來源檔（SSOT），且符合你自己的待辦格式規範。
-- G5 同一開放待辦只有一個 SSOT。
-- G6 對外承諾已反映「下一步、誰的球、追蹤日期」。
-- G7 memory index links 存在。
-- G8 已讀記憶 description 與內容一致、無可辨識矛盾。
-- G9 待辦／狀態沒有相對時間。
-- G10 stakeholder 身分已用主檔或分類規則核實。
-- G11 開發 repo 的 API/env/DB/docs 附加檢查；不適用則 skip。
+- G1 every file in the file list has been judged.
+- G2 completed items in the daily log match the master file's `- [x] ... ✅ YYYY-MM-DD (or your own DONE_MARKER)` marker.
+- G3 reschedules/cancellations have updated the master file's date or status.
+- G4 new todos exist only in a single source-of-truth file (SSOT), and follow your own todo-format conventions.
+- G5 each open todo has exactly one SSOT.
+- G6 external commitments reflect "next step, whose ball it is, follow-up date."
+- G7 memory index links resolve.
+- G8 memory descriptions read match their content, with no identifiable contradictions.
+- G9 todos/status lines contain no relative time references.
+- G10 stakeholder identities have been verified against a master file or classification rule.
+- G11 dev-repo API/env/DB/docs add-on check; skip if not applicable.
 
-有任一 fail，先補讀或修正再進入最終輸出。
+If anything fails, read more or fix it before producing the final output.
 
-## 3. 實際同步
+## 3. Actual sync
 
-順序：
+Order:
 
-1. KB 主檔：更新狀態、待辦、日期、下一步。
-2. daily 對帳：daily 已由呼叫者寫好；只驗一致，不追加第二筆。
-3. 記憶：
-   - `read-only`：只檢查與回報，不寫。
-   - `update`：依目前平台的 memory policy 更新；Codex 只新增小型 extension note，不直接改 runtime 生成的 `MEMORY.md`／rollout summaries；Claude 只改傳入且確認屬於本專案的 memory files。
-4. 開發 repo docs：僅在 dev-mode 命中時處理。
+1. KB master files: update status, todos, dates, next steps.
+2. Daily-log reconciliation: the caller has already written the daily log; only verify consistency, don't add a second entry.
+3. Memory:
+   - `read-only`: check and report only, don't write.
+   - `update`: update per the current platform's memory policy; for Codex, only add a small extension note — don't directly edit the runtime-generated `MEMORY.md` / rollout summaries; for Claude, only edit memory files that were passed in and confirmed to belong to this project.
+4. Dev-repo docs: only handle these when dev-mode is triggered.
 
-開發 repo 缺根層 README／AGENTS／CLAUDE 說明時：已有可運行程式就補目前平台需要的根文件；仍是 prototype/vibe 階段可跳過，但要在 unresolved 說明。
+If a dev repo is missing root-level README/AGENTS/CLAUDE docs: if it already has working code, add the root file the current platform needs; if it's still prototype/vibe-coding stage, this can be skipped — but note it under unresolved.
 
-原則：
+Principles:
 
-- 更新舊條目優於追加；刪除已推翻的臨時結論優於保留。
-- 日期一律由 `date` 核實並寫絕對 `YYYY-MM-DD`。
-- 主檔不抄 daily 流水帳；actionable todo 不放 daily。
-- 同一事實跨檔存在時，用 `rg` 掃引用並對齊。
-- 全域 instruction 只有使用者明確表達跨專案原則才改。
-- 排課／會議若需改外部系統，只在本次已獲授權時執行；否則列未處理，不能把本地修改冒充完成。
-- 發現過去漏同步，只修與本次 scoped/full 審查命中的項目，不順勢擴張到無關 maintenance。
+- Prefer updating existing entries over appending; prefer deleting superseded interim conclusions over keeping them.
+- Always verify dates with `date` and write the absolute `YYYY-MM-DD`.
+- Master files don't copy the daily log's running record; actionable todos don't belong in the daily log.
+- When the same fact exists across multiple files, use `rg` to find all references and align them.
+- Only edit global instructions when the user explicitly stated a cross-project principle.
+- For schedule/meeting changes that require touching an external system, only do so when this session was explicitly authorized to; otherwise list it as unresolved — don't pass off a local edit as complete.
+- If you discover a past sync was missed, fix only the items caught by this scoped/full review — don't expand into unrelated maintenance.
 
-## 4. 最終驗證與回傳
+## 4. Final verification and report
 
-若修改過文件，重跑 enumerate。回傳：
+If you modified any files, re-run enumerate. Report:
 
 ```text
 enumeration:
@@ -90,4 +90,4 @@ unresolved:
 - <item and reason>
 ```
 
-只列實際修改與失敗細節；不要重述完整協議。
+List only actual changes and failure details; don't restate the whole protocol.

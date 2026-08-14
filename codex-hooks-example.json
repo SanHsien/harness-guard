@@ -1,6 +1,6 @@
 {
-  "_comment": "Codex 版。把需要的區塊併進你的 ~/.codex/hooks.json，並確認 ~/.codex/config.toml 裡有 hooks = true。已有同名事件就把 hooks 陣列的內容加進去，不要整段覆蓋。Codex 對 hook 有信任機制，第一次啟用會要你確認。註冊後重開 session 才生效。",
-  "_note_matcher": "matcher 同時寫兩邊的工具名是刻意的。Codex 改檔案叫 apply_patch、執行指令叫 exec 或 shell，但不同版本與不同設定下也可能出現 Write / Edit / Bash，寫寬一點比漏掉安全。",
+  "_comment": "Codex version. Merge the blocks you need into your ~/.codex/hooks.json, and confirm ~/.codex/config.toml has hooks = true. If the same event name already exists, add to its hooks array — don't overwrite the whole section. Codex has a trust mechanism for hooks, so the first activation will ask you to confirm. Restart the session after registering for this to take effect.",
+  "_note_matcher": "Listing tool names from both platforms in the matcher is intentional. Codex calls editing a file apply_patch and running a command exec or shell, but depending on version and configuration, Write / Edit / Bash can also show up. Casting a wider net is safer than missing one.",
 
   "hooks": {
     "PreToolUse": [

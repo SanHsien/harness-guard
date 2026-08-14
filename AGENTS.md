@@ -1,35 +1,35 @@
-# 給 Codex 的說明
+# Notes for Codex
 
-先讀同一層的 `CLAUDE.md`，那份是主要的安裝指示，裡面關於「怎麼跟不會寫程式的人講話」「裝之前先問哪三件事」「裝完要提醒重開」的部分，在這裡一樣適用。
+Read the `CLAUDE.md` file in this same folder first — that's the primary install instructions, and everything in it about "how to talk to someone who can't code," "what three things to ask before installing," and "remind them to restart when you're done" applies here too.
 
-這份檔案只補充 Codex 跟 Claude Code 不一樣的地方。
+This file only covers where Codex differs from Claude Code.
 
-## hooks 現在有 Codex 版了
+## hooks now have a Codex version
 
-`hooks/<工具名>/codex/` 底下就是。三支都有，判斷邏輯跟 Claude Code 版一模一樣，介面的部分已經改好，**直接複製到 `~/.codex/hooks/` 就能用，不用自己移植**。
+They're under `hooks/<tool-name>/codex/`. All three are there, with the exact same logic as the Claude Code version — the interface parts are already adapted, so you can **copy them straight into `~/.codex/hooks/` without porting anything yourself.**
 
-安裝步驟：
+Install steps:
 
-1. 複製 `hooks/<工具名>/codex/` 底下的腳本到 `~/.codex/hooks/`，`chmod +x`
-2. 把 repo 根目錄 `codex-hooks-example.json` 需要的區塊併進 `~/.codex/hooks.json`（已有同名事件就把 hooks 陣列的內容加進去，不要整段覆蓋）
-3. 確認 `~/.codex/config.toml` 有 `hooks = true`
-4. Codex 對 hook 有信任機制，第一次啟用要確認
-5. 重開 session
+1. Copy the scripts from `hooks/<tool-name>/codex/` into `~/.codex/hooks/`, then `chmod +x`
+2. Merge the blocks you need from the repo root's `codex-hooks-example.json` into `~/.codex/hooks.json` (if the same event name already exists, add to its hooks array — don't overwrite the whole section)
+3. Confirm `~/.codex/config.toml` has `hooks = true`
+4. Codex has a trust mechanism for hooks — the first time one runs, it needs to be confirmed
+5. Restart the session
 
-**裝完要實際觸發一次確認它真的有反應**，不要看它沒報錯就宣稱裝好了。
+**After installing, actually trigger it once and confirm it fires** — don't claim it's installed just because it didn't error out.
 
-兩邊的介面差異、以及想自己移植其他 hook 時要改什麼，見 `hooks/README.md` 的對照表。簡短版：事件名稱兩邊一樣，要改的是 `session_id` → `turn_id`、matcher 補 `apply_patch`／`exec`／`shell`、沒有 `CLAUDE_PROJECT_DIR` 改讀 payload 的 `cwd`、放行時要印 `{}`、擋下來是回 `{"decision":"block","reason":...}` 而不是 exit 2。
+For the interface differences between the two platforms, and what to change if you want to port another hook yourself, see the comparison table in `hooks/README.md`. Short version: the event names are the same on both sides — what changes is `session_id` → `turn_id`, the matcher needs `apply_patch`/`exec`/`shell` added, there's no `CLAUDE_PROJECT_DIR` so read `cwd` from the payload instead, allowing something through means printing `{}`, and blocking means returning `{"decision":"block","reason":...}` instead of `exit 2`.
 
-## skills 可以直接用
+## skills work as-is
 
-`skills/` 底下的六個資料夾都是純文字說明，沒有綁定任何平台。放進 Codex 讀得到的位置即可。
+The six folders under `skills/` are all plain-text instructions, not tied to any platform. Just put them somewhere Codex can read them.
 
-review-loop 例外一半：SKILL.md 本身通用，但它帶了一支 Python 腳本與一份 HTML 模板，整包一起複製，並把 SKILL.md 裡「指令」那段的路徑改成實際安裝位置。腳本只用標準函式庫，跟哪個助手無關。
+review-loop is a partial exception: the SKILL.md itself is generic, but it ships with a Python script and an HTML template — copy the whole thing, and update the path in SKILL.md's "commands" section to match the actual install location. The script only uses the standard library, so it doesn't care which assistant is running it.
 
-checkpoint 跟 neat-freak 裡面提到的「子代理」在 Codex 有對應的做法，設定的名稱不一樣，照你這邊的慣例調整。
+The "subagent" that checkpoint and neat-freak refer to has an equivalent concept in Codex, just under a different name — adjust to match your own conventions.
 
-## 不要假裝裝好了
+## Don't pretend it's installed
 
-這整包東西的主題就是「不要相信沒有證據的完成宣稱」。你在幫別人裝的時候更不能犯這個錯。
+The entire theme of this package is "don't trust a completion claim with no evidence behind it." You especially can't be the one to break that rule while installing it for someone.
 
-裝不了的部分講清楚裝不了，重寫過的部分講清楚你改了什麼，測過才說能動。
+Say clearly what couldn't be installed, say clearly what you rewrote, and only say something works once you've actually tested it.

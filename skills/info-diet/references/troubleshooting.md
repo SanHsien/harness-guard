@@ -1,165 +1,171 @@
-# 卡住的時候查這裡
+# Check Here When Something's Stuck
 
-> 工作坊現場用。每一條的格式都是：**現象 → 原因 → 怎麼辦（講給學員聽的話）**。
-> 講師巡場時也可以直接照著念。
-
----
-
-## A. 找不到瀏覽器
-
-### A1. `detect_browsers.sh` 印出 `STATUS=none`
-
-**原因**：這台電腦沒裝 Chromium 系的瀏覽器（Chrome／Edge／Brave／Arc／Vivaldi）。
-
-**怎麼辦**：
-
-> 「你的主力瀏覽器是 Safari 還是 Firefox？這一版還讀不到它們。
-> 你電腦上如果有裝 Chrome 但平常不用，那也沒用——沒資料就分析不出東西。
-> 這次你先看旁邊同學的結果，流程是一樣的。」
-
-**不要做的事**：不要為了有東西可跑，叫學員去裝 Chrome 再用一週。這是工作坊，不是作業。
-
-### A2. 掃到了，但每個 profile 都只有幾百 KB
-
-**原因**：兩種可能——(1) 主力在 Safari／Firefox；(2) 使用者有定期清瀏覽紀錄的習慣。
-
-**怎麼辦**：先問第二個可能。
-
-> 「你會定期清瀏覽紀錄嗎？或是常用無痕模式？」
-
-會的話直接說明：這次的結果會嚴重失真，因為看到的只是清空之後那一小段。
+> For use during the workshop. Every entry follows the format: **symptom → cause → what to do
+> (what to say to the learner).**
+> The instructor can read these directly out loud while circulating too.
 
 ---
 
-## B. 複製檔案失敗
+## A. Can't find a browser
 
-### B1. `cp` 說 `Operation not permitted`
+### A1. `detect_browsers.sh` prints `STATUS=none`
 
-**原因**：macOS 的隱私保護（TCC）擋住了終端機讀取那個資料夾。
+**Cause**: this computer doesn't have a Chromium-family browser installed (Chrome/Edge/Brave/Arc/Vivaldi).
 
-**怎麼辦**：
+**What to do**:
 
-> 「這是 Mac 的隱私保護在擋。到「系統設定 → 隱私權與安全性 → 完全取用磁碟」，
-> 把你現在用的這個終端機程式打勾，然後**把終端機完全關掉再重開**。
-> 不重開不會生效。」
+> "Is your main browser Safari or Firefox? This version can't read those yet.
+> If you have Chrome installed but don't actually use it, that won't help either — no data means nothing to analyze.
+> For now, watch what a classmate gets — the process is the same."
 
-### B2. `cp` 說 `No such file or directory`
+**Don't do this**: don't have the learner install Chrome and use it for a week just to have
+something to run. This is a workshop, not homework.
 
-**原因**：多半是路徑裡的空格沒被引號包住（`Application Support` 中間有空格）。
+### A2. It found browsers, but every profile is only a few hundred KB
 
-**怎麼辦**：叫學員**整行重新複製貼上**，不要自己手打、不要刪掉引號。
+**Cause**: two possibilities — (1) their main browser is Safari/Firefox; (2) they clear their
+browsing history regularly.
 
-### B3. 複製成功，但 `extract.py` 說 `database is locked` 或 `unreadable`
+**What to do**: ask about the second possibility first.
 
-**原因**：Chrome 正在寫入那個檔，複製到一半的狀態。
+> "Do you clear your browsing history regularly? Or use incognito mode a lot?"
 
-**怎麼辦**：
-
-> 「把 Chrome 整個關掉（不是關視窗，是完全結束程式），再複製一次。」
-
-Mac 上完全結束是 Cmd+Q，或選單列的「結束 Google Chrome」。
-
----
-
-## C. 跑出來的數字怪怪的
-
-### C1. `STATUS=empty`，說這段期間沒有紀錄
-
-**原因**：挑錯 profile（最常見），或這台電腦真的很少用瀏覽器。
-
-**怎麼辦**：回去看 `detect_browsers.sh` 的清單，換第二名那個再試一次。
-**特別注意：叫 Default 的那個很常是空殼。**
-
-### C2. 「未分類」的比例超過 40%
-
-**原因**：這個人的資訊來源大量落在內建清單之外——非英語平台、在地新聞、小眾論壇、
-公司內部系統。**這是預期行為，不是壞掉。**
-
-**怎麼辦**：把未分類清單裡前十幾個網域唸出來，一個一個問使用者那是什麼、屬於哪一類。
-這一段本身就是很好的對話素材——**使用者常常會在這時候自己發現「我怎麼會去那麼多次」**。
-
-### C3. 「看自己」是 0% 或極低，但使用者明明常滑社群
-
-**原因**：本人帳號還沒確認。腳本只認得出通知頁，認不出「這個帳號是你自己」。
-
-**怎麼辦**：看「疑似本人帳號候選」那一段，問使用者哪個是他自己的，
-然後加上 `--self <帳號>` 重跑。這一步不能省，省了核心數字就是錯的。
-
-### C4. 總造訪次數看起來高得離譜（例如一天上千次）
-
-**原因**：這是正常的。一次「造訪」是一次頁面載入，不是一次「打開來看」。
-點一個連結、按上一頁、重新整理，都各算一次。
-
-**怎麼辦**：跟學員講清楚這件事，**不要讓他以為自己一天滑了一千次手機**。
-要看的是**比例**，不是絕對數字。
-
-### C5. 有人問「那手機呢？」
-
-**原因**：好問題，而且答案是這個工具的真實限制。
-
-**怎麼辦**：誠實講。
-
-> 「這個工具只看得到這台電腦的瀏覽器。你手機上的時間它完全看不到。
-> 所以如果你主要在手機上滑，這份報告會低估你。
-> 手機的部分，iPhone 的『螢幕使用時間』跟 Android 的『數位健康』有自己的統計，
-> 可以拿來對照著看。」
+If yes, explain directly: this run's results will be badly skewed, since what's visible is only
+the short window since the last clear.
 
 ---
 
-## D. 隱私相關的當場提問
+## B. Copying the file fails
 
-### D1. 「這些資料會不會傳出去？」
+### B1. `cp` says `Operation not permitted`
 
-> 「不會。腳本在你電腦上跑，算完是寫成一個檔案存在你電腦裡，我當下看不到。
-> 我讀它之前會先問你有沒有不想給我看的，你講關鍵字、我照著刪，
-> 而我是在還沒看過的情況下刪的。
-> 沒有任何一個步驟會連網、會上傳、會寫回你的瀏覽器。
-> 而且我讀到的只有網站名稱、頁面類型跟次數——
-> 完整網址在腳本裡就被丟掉了，AI 從頭到尾看不到你去過哪一頁。」
+**Cause**: macOS's privacy protection (TCC) is blocking terminal access to that folder.
 
-### D2. 「你會看到我看了什麼嗎？」
+**What to do**:
 
-老實回答，不要含糊。**特別是帳號名這件事，不能省略不講。**
+> "This is Mac's privacy protection blocking it. Go to System Settings → Privacy & Security →
+> Full Disk Access, and enable the terminal app you're currently using, then **fully quit and
+> reopen the terminal.** It won't take effect without a restart."
 
-> 「我會看到你去過哪些**網站**、去了幾次、還有頁面的類型——
-> 例如『通知頁去了 800 次』、『某個帳號的頁面去了 100 次』，
-> **那個帳號的名字我會看到**。
-> 我不會看到你在那些網站上看了哪一篇。
-> 但網站名稱本身也可能透露事情——所以在我讀之前，
-> 你有任何不想被看到的，講關鍵字給我，我先刪掉再讀。
-> 醫療、求職、交友、法律、博弈這幾類程式已經自動隱去了，你不用特別講。」
+### B2. `cp` says `No such file or directory`
 
-**如果他接著問「那你能不能看內容判斷我看的東西好不好」**——
-那是步驟 6 的品質模式，要另外授權，話術見 `quality-review.md`。
-**不要在他問之前主動推銷這個模式。**
+**Cause**: usually a space in the path not being wrapped in quotes (`Application Support` has a space in it).
 
-### D3. 學員跑到一半反悔
+**What to do**: have the learner **paste the entire line fresh**, don't type it manually and
+don't remove the quotes.
 
-**立刻停，不要勸。**
+### B3. Copy succeeds, but `extract.py` says `database is locked` or `unreadable`
 
-> 「沒問題，那就停在這裡。你剛剛複製出來的那個檔案在 OO 路徑，
-> 你自己刪掉就好，我不會去動它。」
+**Cause**: Chrome is currently writing to that file, and the copy caught it mid-write.
 
-然後把 `rm` 指令給他**自己**執行。這一條沒有例外——一個讓人後悔的工具，
-比一個沒跑成的工具傷害大得多。
+**What to do**:
+
+> "Quit Chrome completely (not just close the window, fully quit the app), then copy it again."
+
+On Mac, fully quitting is Cmd+Q, or "Quit Google Chrome" from the menu bar.
 
 ---
 
-## E. 收尾時要做的事
+## C. The numbers coming out look off
 
-跑完之後提醒學員處理掉複製出來的檔案：
+### C1. `STATUS=empty`, says there's no history in this window
 
-> 「最後一件事：剛剛複製出來的那份瀏覽紀錄還在你電腦上，
-> 它跟你瀏覽器裡的原始資料一樣敏感。留著就是多一份風險。」
+**Cause**: wrong profile picked (most common), or this computer genuinely doesn't get much browser use.
 
-給他這行自己跑（路徑照實際情況換）：
+**What to do**: go back to `detect_browsers.sh`'s list and try the second one down.
+**Especially watch for: the one called Default is often an empty shell.**
+
+### C2. "Unclassified" share is over 40%
+
+**Cause**: this person's information sources fall heavily outside the built-in list —
+non-English platforms, local news, niche forums, internal company systems. **This is expected, not broken.**
+
+**What to do**: read out the top dozen or so unclassified domains and ask the user what each one
+is and which category it belongs to. This part is itself great conversation material —
+**users will often catch themselves right here: "Wait, why did I go there that many times?"**
+
+### C3. "Watching yourself" is 0% or very low, but the user obviously scrolls social media a lot
+
+**Cause**: their personal account hasn't been confirmed yet. The script can identify a
+notifications page, but not "this account is you."
+
+**What to do**: look at the "likely personal account candidates" section, ask the user which one
+is theirs, then rerun with `--self <handle>`. This step can't be skipped — skipping it makes the core number wrong.
+
+### C4. Total visit count looks absurdly high (e.g. thousands in a day)
+
+**Cause**: this is normal. One "visit" is one page load, not one "opened it and looked at it."
+Clicking a link, hitting back, refreshing — each counts separately.
+
+**What to do**: explain this clearly to the learner, **don't let them think they scrolled their
+phone a thousand times in a day.** What matters is the proportion, not the raw number.
+
+### C5. Someone asks "what about my phone?"
+
+**Cause**: good question, and the honest answer is a genuine limitation of this tool.
+
+**What to do**: answer honestly.
+
+> "This tool can only see this computer's browser. It has no visibility into your phone at all.
+> So if you mostly scroll on your phone, this report will understate you.
+> For the phone side, iPhone's 'Screen Time' and Android's 'Digital Wellbeing' have their own
+> stats you can look at alongside this."
+
+---
+
+## D. Privacy questions that come up in the room
+
+### D1. "Will this data get sent anywhere?"
+
+> "No. The script runs on your computer, and when it's done it writes the results to a file that
+> stays on your computer — I don't see it yet at that point. Before I read it, I'll ask if there's
+> anything you don't want me to see, you name the keywords, I delete them, and I do that without
+> having seen the content first. No step here goes online, uploads anything, or writes back to
+> your browser. And what I get to read is only the site name, page type, and count — the full URL
+> already got dropped inside the script; the AI never sees which exact page you visited."
+
+### D2. "Will you see what I looked at?"
+
+Answer honestly, don't hedge. **Especially the part about account names — that can't be left out.**
+
+> "I'll see which **sites** you visited, how many times, and the page type — for example
+> 'checked the notifications page 800 times,' 'visited some account's page 100 times,' **and I
+> will see that account's name.** I won't see which specific piece of content you looked at on
+> those sites. But even a site name alone can reveal things — so before I read it, tell me any
+> keywords you don't want seen and I'll delete them first. Categories like medical, job search,
+> dating, legal, and gambling are already auto-redacted by the program, you don't need to mention those separately."
+
+**If they follow up with "can you judge whether what I read was any good"** — that's step 6's
+quality mode, which needs separate consent; the script is in `quality-review.md`.
+**Don't pitch this mode before they ask about it.**
+
+### D3. The learner changes their mind partway through
+
+**Stop immediately, don't try to talk them back into it.**
+
+> "No problem, we'll stop here. The file you copied out earlier is at OO path — go ahead and
+> delete it yourself, I won't touch it."
+
+Then give them the `rm` command to run **themselves**. No exceptions here — a tool that leaves
+someone regretting it does far more damage than a tool that just didn't finish running.
+
+---
+
+## E. Things to do at wrap-up
+
+Once finished, remind the learner to clean up the copied-out file:
+
+> "One last thing: that browsing history you copied out earlier is still on your computer, and
+> it's just as sensitive as the original data in your browser. Leaving it there is extra risk for no reason."
+
+Give them this line to run themselves (adjust the path to match reality):
 
 ```
 rm ~/.info-diet/history.db ~/.info-diet/report.txt
 ```
 
-兩個都要刪：紀錄檔本身，還有那份報告（裡面有網站名稱與帳號名）。
+Delete both: the history file itself, and the report (it contains site names and account handles).
 
-**基準值檔（`baseline-日期.json`）留著**，下個月複驗要用。
-它裡面只有網站名稱跟數字，沒有完整網址、也沒有帳號名。
-這個差別要跟學員講清楚，不然他會全部刪掉，下個月就沒得比。
+**Keep the baseline file (`baseline-DATE.json`)**, it's needed for next month's re-check.
+It only contains site names and numbers, no full URLs, no account handles.
+Make this distinction clear to the learner, otherwise they'll delete everything and have nothing to compare against next month.

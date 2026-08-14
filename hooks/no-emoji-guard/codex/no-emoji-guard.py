@@ -2,17 +2,21 @@
 """
 codex-no-emoji-guard.py (Codex PreToolUse: Write|Edit|MultiEdit|apply_patch)
 
-擋下寫入內容中的 emoji。全域規則：對外與內部文件一律禁 emoji。
+Blocks emoji in written content. Global rule: no emoji in external or internal
+documents.
 
-判準（依 Unicode UTS #51 emoji-data.txt v17.0，2025-07-25 官方檔）：
-  1. Emoji_Presentation=Yes 的字元——預設就以彩色 emoji 呈現（例：✅ ❌ ⏳ ⏩ 🔒）
-  2. Extended_Pictographic 字元後接 VS16（U+FE0F）——被明確要求以 emoji 呈現（例：⚠️ ️）
+Criteria (per Unicode UTS #51 emoji-data.txt v17.0, official file dated 2025-07-25):
+  1. Characters with Emoji_Presentation=Yes -- rendered as colored emoji by
+     default (e.g. checkmark, X, hourglass, fast-forward, lock)
+  2. Extended_Pictographic characters followed by VS16 (U+FE0F) -- explicitly
+     requested to render as emoji (e.g. warning sign with the color marker)
 
-刻意「不」擋（這些是排版符號不是 emoji，品牌規範有用到）：
-  ✓ ✕ → ← ↑ ↓ 　© ® ™（未接 VS16 時）
+Deliberately NOT blocked (these are typographic symbols, not emoji, and are
+used in brand styling): checkmark, X mark, arrows (up/down/left/right), and
+(C) (R) (TM) when not followed by VS16
 
-來源：https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-data.txt
-更新方式：重跑該檔解析，替換下方兩張表。
+Source: https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-data.txt
+Update method: re-run the parser against that file and replace the two tables below.
 """
 import json
 import os
@@ -24,18 +28,18 @@ EXT_PICTOGRAPHIC=[(0xa9,0xa9),(0xae,0xae),(0x203c,0x203c),(0x2049,0x2049),(0x212
 
 VS16 = 0xFE0F
 
-# Obsidian Tasks plugin 功能標記（僅在待辦行 - [ ] / - [x] 上放行）
+# Obsidian Tasks plugin functional markers (only allowed on to-do lines: - [ ] / - [x])
 TASK_MARKERS = re.compile(
     "[" +
-    "\U0001F4C5"  # 到期日 due
-    "\U0001F4C6"  # 排程 scheduled
-    "\U0001F6EB"  # 開始 start
-    "\u2705"      # 完成 done
-    "\u274C"      # 取消 cancelled
-    "\u23F3"      # 進行中
-    "\U0001F501"  # 重複 recurring
-    "\u23EB\u23EC\U0001F53C\U0001F53D"  # 優先權 priority
-    "\U0001F525\u23F1\U0001F534"          # daily note 慣例符號
+    "\U0001F4C5"  # due date
+    "\U0001F4C6"  # scheduled
+    "\U0001F6EB"  # start
+    "\u2705"      # done
+    "\u274C"      # cancelled
+    "\u23F3"      # in progress
+    "\U0001F501"  # recurring
+    "\u23EB\u23EC\U0001F53C\U0001F53D"  # priority
+    "\U0001F525\u23F1\U0001F534"          # daily-note convention symbols
     "]\uFE0F?"
 )
 
@@ -51,7 +55,7 @@ def _in(cp, table):
 
 
 def find_emoji(text):
-    """回傳 [(字元, 位置)]，依上述兩條判準。"""
+    """Return [(char, position)] per the two criteria above."""
     hits = []
     n = len(text)
     for i, ch in enumerate(text):
@@ -63,8 +67,9 @@ def find_emoji(text):
     return hits
 
 
-# 想整棵子樹都不要擋（例如 Obsidian vault，那裡的符號是功能語法不是裝飾），
-# 把路徑片段加進來。例：EXEMPT_PATH_SUBSTRINGS = ["/my-notes/", "/vault/"]
+# To exempt an entire subtree (e.g. an Obsidian vault, where these symbols are
+# functional syntax rather than decoration), add the path fragment here.
+# Example: EXEMPT_PATH_SUBSTRINGS = ["/my-notes/", "/vault/"]
 EXEMPT_PATH_SUBSTRINGS = []
 
 
@@ -73,7 +78,7 @@ def _exempt_subtree(path):
 
 
 def collect(tool_input):
-    """把這次寫入的所有文字內容湊起來（各 tool 欄位不同）。"""
+    """Gather all the text content being written this call (field names vary by tool)."""
     parts = []
     for key in ("content", "new_string", "prompt", "patch", "input"):
         v = tool_input.get(key)
@@ -102,8 +107,9 @@ def main():
     exempt_path = r"(逐字稿|transcript|/_archive/|\.srt$|\.vtt$)"
 
     if tool_name in {"Bash", "exec", "shell"}:
-        # codex exec 模式把 apply_patch 當 shell 指令跑，patch 內文在 command 裡。
-        # 只掃新增行——掃整段會把「移除 emoji」的 patch 也擋下。
+        # codex exec mode runs apply_patch as a shell command, with the patch body in `command`.
+        # Only added lines are scanned -- scanning the whole diff would also block a patch that
+        # is removing emoji.
         command = tool_input.get("command") or ""
         if "apply_patch" not in command:
             sys.exit(0)
@@ -123,13 +129,14 @@ def main():
     else:
         path = tool_input.get("file_path") or tool_input.get("path") or ""
 
-        # 逐字稿、原始外部輸入原樣歸檔，不擋
+        # Transcripts and raw external input being archived as-is are not blocked
         if re.search(exempt_path, path):
             sys.exit(0)
 
-        # 整棵子樹放行（見檔頭 EXEMPT_PATH_SUBSTRINGS）。典型用途是 Obsidian vault：
-        # 那裡的到期日、完成、進行中符號是 Tasks plugin 的功能語法而非裝飾，
-        # 清掉會弄壞待辦追蹤。
+        # Exempt the whole subtree (see EXEMPT_PATH_SUBSTRINGS above). The typical
+        # use case is an Obsidian vault: due-date/completion/in-progress markers
+        # there are functional Tasks plugin syntax, not decoration, and stripping
+        # them would break to-do tracking.
         if _exempt_subtree(path):
             sys.exit(0)
 
@@ -138,7 +145,8 @@ def main():
     if not text:
         sys.exit(0)
 
-    # 任何檔案裡的 Obsidian 待辦行（- [ ] / - [x]）同樣放行上述 Tasks plugin 標記
+    # Obsidian to-do lines (- [ ] / - [x]) in any file also get the above
+    # Tasks plugin markers exempted
     text = re.sub(
         r"^(\s*[-*]\s*\[[ xX/\-]\].*)$",
         lambda m: TASK_MARKERS.sub("", m.group(1)),
@@ -156,11 +164,11 @@ def main():
             uniq.append(ch)
 
     sys.stderr.write(
-        "NO-EMOJI GUARD：這次寫入含 %d 個 emoji%s——%s\n"
-        "全域規則：文件、投影片、程式碼註解、commit message 一律禁 emoji。\n"
-        "請移除後重寫。需要狀態符號請改用排版記號（✓ ✕ → ←）或純文字（完成／待辦／注意）。\n"
-        "例外（逐字稿、外部原檔歸檔）已自動放行，本次不屬於此類。\n"
-        % (len(hits), "（去重後 %d 種）" % len(uniq) if len(uniq) != len(hits) else "", " ".join(uniq))
+        "NO-EMOJI GUARD: this write contains %d emoji%s -- %s\n"
+        "Global rule: no emoji in documents, slides, code comments, or commit messages.\n"
+        "Remove them and rewrite. For status symbols, use typographic marks (checkmark, X, arrows) or plain text (done/todo/note) instead.\n"
+        "Exemptions (transcripts, raw external files being archived) are auto-allowed and this write is not one of them.\n"
+        % (len(hits), " (%d unique after dedup)" % len(uniq) if len(uniq) != len(hits) else "", " ".join(uniq))
     )
     sys.exit(2)
 

@@ -1,337 +1,392 @@
 ---
 name: info-diet
-description: "資訊飲食盤點：讀使用者自己電腦上的瀏覽紀錄，算出注意力實際分配到哪裡——外部攝取、看自己、通訊、工作台各佔多少，只滑不點的比例，時段分佈，然後判出畫像並給一個可驗證的動作；另有需另外授權的品質模式，看實際讀過的文章標題判斷資訊品質好壞。全程本地不連網，敏感類別自動隱去，使用者可指名排除而 AI 在未讀過的情況下執行刪除。給零技術背景學員在工作坊實作時間自己跑，全程白話。Triggers：資訊飲食、information diet、盤點我的注意力、我的時間都去哪了、我是不是資訊過載、瀏覽習慣分析、注意力健檢。"
+description: "Information diet check-in: reads the user's own browsing history and works out where their attention is actually going — external intake, watching themselves, messaging, tools/workbench, how much is scroll-without-clicking, and time-of-day distribution — then names an archetype and gives one verifiable action. Fully local, no network access, sensitive categories auto-redacted, and the user can name exclusions that the AI deletes without ever having read them. There's also an opt-in quality mode that judges the actual titles of articles read. Built for zero-technical-background workshop learners to run themselves during hands-on time, explained entirely in plain language. Triggers: information diet, audit my attention, where does my time go, am I information overloaded, browsing habit analysis, attention check-up."
 ---
 
-# info-diet — 資訊飲食盤點
+# info-diet — Information Diet Check-In
 
-> 這個 skill 是給工作坊實作時間用的。使用者是零技術背景，自己在 Claude Code 裡跑。
-> 講師會巡場口頭補充，所以**每一步都要講白話**。
-> 第一次出現任何術語，先查 `references/glossary.md` 換成白話說法。
+> This skill is meant for hands-on workshop time. The user has zero technical background
+> and runs it themselves inside Claude Code.
+> The instructor will be circulating and adding commentary, so **every step needs plain language**.
+> The first time any jargon shows up, check `references/glossary.md` for the plain-language version first.
 
-## 這支工具在做什麼（開場照著講）
+## What this tool does (say this to open)
 
-> **跟使用者說：「你每天看什麼，跟你每天吃什麼，是同一種東西——都會累積，也都會影響你。差別是吃什麼你心裡有數，看什麼你沒有。**
+> **Tell the user: "What you look at every day is the same kind of thing as what you eat every day —
+> both build up over time, both affect you. The difference is you know what you're eating,
+> but you don't really know what you're looking at.**
 >
-> **這個工具會讀你自己電腦上的瀏覽紀錄，算出三件事：你的注意力實際上分配到哪裡、你是在讀東西還是在滑東西、以及你都幾點在上網。然後告訴你你屬於哪一型。**
+> **This tool reads the browsing history on your own computer and works out three things:
+> where your attention is actually going, whether you're reading things or just scrolling past them,
+> and what time of day you're online. Then it tells you which archetype you fall into.**
 >
-> **不是要你戒什麼。它是體重計，不是健身教練——它只負責給你數字，要不要動、動哪裡是你自己的事。」**
-
----
-
-## 步驟 0：講清楚要碰什麼，然後取得同意
-
-**這一步不能跳、不能簡化、不能用「我要幫你分析一下喔」帶過。**
-
-你接下來要碰的是使用者電腦裡最私密的一份檔案。瀏覽紀錄裡有一個人的健康狀況、
-求職動向、財務處境、感情狀態。**在他明確答應之前，一個字都不要讀。**
-
-照著講：
-
-> **「開始之前，我要先說清楚我要碰什麼、以及我怎麼保護它。**
->
-> **我要讀的是你 Chrome 的瀏覽紀錄——就是你去過哪些網站的完整清單。這是你電腦裡最私密的東西之一，所以有三條規則：**
->
-> **第一，全程在你自己的電腦上跑。不連網、不上傳、不寫回你的瀏覽器。**
->
-> **第二，完整網址不會進到我的視野。有一支程式會先在你電腦上把資料整理過，我看得到的是：網站名稱、頁面的類型、還有次數。舉例來說，我會看到「你在某個社群網站的通知頁去了 800 次」、「你去某個帳號的頁面去了 100 次」——那個帳號的名字我會看到。但你在那些頁面上實際看了哪一篇、內容是什麼，我看不到。**
->
-> **第三，整理好的結果會先存成一個檔案，不會直接跑到我眼前。在我讀它之前，我會先問你有沒有不想讓我看到的東西——你講關鍵字，我照著刪，而我是在還沒看過的情況下刪的。所以「你刪掉的東西我沒看過」這件事是真的，不是我答應你而已。**
->
-> **另外像醫療、求職、交友、法律、博弈這些類別，程式在整理的時候就已經自動隱去了，你不用特別交代。**
->
-> **第四，我要碰任何檔案之前都會先跟你說。等一下電腦可能會跳出視窗問你要不要允許，那就是這件事，決定權在你手上。**
->
-> **這樣可以嗎？不想跑也完全沒問題，你可以看旁邊同學的。」**
-
-**第二點的「帳號名字我會看到」不能省略。** 一個人反覆造訪的帳號可能是前任、
-競爭對手、或任何他不想被知道在關注的人。這件事一定要在他答應之前就講明白，
-不能等他看到報告才發現。
-
-**第三點是這支 skill 的設計核心，不是話術。** 在 Claude Code 裡，
-任何印在終端機上的東西當下就進了 AI 的 context——
-「先給你看過、你不要的我再刪」如果建立在「AI 先跑、跑完印出來」的流程上，
-那句話字面上就是假的。所以腳本一定要用 `--report` 把結果寫進檔案。
-
-**使用者沒有明確答應就停在這裡。** 猶豫、沉默、「應該可以吧」都不算答應——
-再問一次或直接跳過。工作坊裡有一個人覺得被冒犯，比十個人跑完更難收拾。
+> **It's not telling you to quit anything. It's a scale, not a personal trainer — it just gives you
+> the numbers. What you do with them, or whether you do anything at all, is up to you."**
 
 ---
 
-## 步驟 1：找出他實際在用的瀏覽器
+## Step 0: Say exactly what you'll touch, then get consent
+
+**This step can't be skipped, can't be shortened, can't be waved through with "let me just analyze this real quick."**
+
+You're about to touch one of the most private files on this person's computer. Browsing history
+can reveal someone's health condition, job search, financial situation, relationship status.
+**Don't read a single byte before they've explicitly said yes.**
+
+Say this:
+
+> **"Before we start, I want to be clear about exactly what I'm going to touch and how I'll protect it.**
+>
+> **What I'm going to read is your Chrome browsing history — the full list of sites you've visited.
+> This is one of the most private things on your computer, so there are three rules:**
+>
+> **First, this all runs on your own computer. No network access, no upload, nothing gets written back to your browser.**
+>
+> **Second, full URLs never enter my view. A program will process the data on your computer first.
+> What I get to see is: the site name, the type of page, and how many times you visited. For example,
+> I might see "you visited the notifications page of some social network 800 times" or "you visited
+> some account's page 100 times" — I will see that account's name. But what you actually looked at on
+> those pages, the actual content, I can't see.**
+>
+> **Third, the processed results get saved to a file first — they don't come straight to me.
+> Before I read it, I'll ask you if there's anything you don't want me to see — you name the keywords,
+> I delete those lines, and I do that deletion without having read the content first.
+> So "what you deleted, I never saw" is literally true, not just something I'm promising you.**
+>
+> **Also, categories like medical, job search, dating, legal, and gambling are already auto-redacted
+> by the program during processing — you don't need to call those out separately.**
+>
+> **Fourth, I'll tell you before I touch any file. If a permission dialog pops up asking whether to
+> allow it, that's what's happening — the decision is yours.**
+>
+> **Does that work for you? It's completely fine to skip this — you can watch what a classmate gets instead."**
+
+**The second point — "I'll see the account name" — can't be left out.** An account someone
+repeatedly visits could be an ex, a competitor, or anyone they don't want known to be watching.
+This needs to be said clearly before they agree, not discovered after they see the report.
+
+**The third point is the design core of this skill, not just talk.** In Claude Code,
+anything printed to the terminal is in the AI's context the instant it prints —
+if "you look first, I'll delete what you don't want" depends on a flow where
+"the AI runs it first, then prints the result," that promise is literally false the moment it happens.
+So the script has to use `--report` to write results to a file instead.
+
+**If the user hasn't clearly said yes, stop here.** Hesitation, silence, "I guess that's fine" —
+none of those count as consent. Ask again, or skip it. One person feeling their privacy was
+violated during a workshop is far worse to clean up than ten people finishing successfully.
+
+---
+
+## Step 1: Find out which browser they actually use
 
 ```bash
-bash <此 skill 目錄>/scripts/detect_browsers.sh
+bash <this skill's directory>/scripts/detect_browsers.sh
 ```
 
-（`<此 skill 目錄>` 用你實際載入這份 SKILL.md 的路徑。找不到時用
-`find ~ -path "*/info-diet/scripts/detect_browsers.sh" 2>/dev/null | head -1` 定位。）
+(Use the path where you actually loaded this SKILL.md from for `<this skill's directory>`.
+If you can't find it, locate it with
+`find ~ -path "*/info-diet/scripts/detect_browsers.sh" 2>/dev/null | head -1`.)
 
-這支腳本**只看檔案的大小與時間，不會打開任何紀錄**。
+This script **only checks file size and modification time — it never opens any history.**
 
-**看輸出的清單，用白話複述給使用者聽**，不要整段貼終端機輸出。例如：
+**Read the output list and describe it to the user in plain language**, don't paste the whole
+terminal output. For example:
 
-> **「掃到了，你電腦上的 Chrome 有四個帳號。看起來你主力在用的是 Profile 1 那個，有 39 MB 的紀錄，最後使用是今天。另外三個都很久沒動了。」**
+> **"Found it — your Chrome has four accounts. Looks like the one you actually use is Profile 1,
+> with 39 MB of history and last used today. The other three haven't been touched in a while."**
 
-**這裡有個坑一定要講**：叫 `Default` 的那個**不一定**是本人在用的。實測遇過
-`Default` 只有 2 MB 的空殼、真正的主力在 `Profile 1`。如果挑錯，會得出
-「你幾乎不上網」的荒謬結論。**所以要跟使用者確認一句**：
+**There's a pitfall to mention here**: the one called `Default` is **not necessarily**
+the one actually in use. In practice we've seen `Default` be a 2 MB empty shell while the real
+main profile was `Profile 1`. Picking the wrong one leads to an absurd conclusion like
+"you barely go online." **So confirm with the user**:
 
-> **「你平常上網是用哪個 Google 帳號登入的？我挑的這個對嗎？」**
+> **"Which Google account do you normally log into when you're browsing? Is the one I picked the right one?"**
 
-`STATUS=none`、或每個 profile 都只有幾百 KB → 查 `references/troubleshooting.md` 的 A 段。
-
----
-
-## 步驟 2：把紀錄複製一份出來
-
-Chrome 開著的時候那個檔案是鎖住的，要先複製一份才讀得到。
-腳本最後會印出那行 `cp` 指令。
-
-**先講一句再動手**（不要無聲無息地去碰）：
-
-> **「我現在要把那份紀錄複製一份出來——原始的不會被動到，Chrome 開著的時候它是鎖住的，所以要複製。等一下如果跳出視窗問你要不要允許，那就是這件事，你按同意就好。」**
-
-然後**你自己執行那行 `cp`**。多數人的設定會跳出一個確認視窗，
-他按一下同意就過了——這比叫他複製貼上一長串指令輕鬆得多。
-
-**被擋下來的話**（權限設定比較嚴的人會直接被拒絕，不是跳出詢問），
-改請他自己跑。在 Claude Code 裡，使用者可以在輸入框打 `!` 開頭直接執行指令：
-
-> **「你的設定比較嚴格，擋下來了。那這行麻煩你自己貼上去跑一次——在輸入框最前面加一個驚嘆號就可以執行。這樣也好，你親手按下去，就確定了我碰的到底是哪一個檔。」**
-
-複製失敗（`Operation not permitted`、`No such file`）→ `references/troubleshooting.md` 的 B 段。
+`STATUS=none`, or every profile only having a few hundred KB, → check section A of `references/troubleshooting.md`.
 
 ---
 
-## 步驟 3：第一次分析
+## Step 2: Make a copy of the history
+
+While Chrome is open that file is locked, so you need to copy it out before you can read it.
+The script prints that `cp` command as its last line.
+
+**Say something before you touch anything** (don't silently go poking at files):
+
+> **"I'm going to make a copy of that history now — the original won't be touched, it's just locked
+> while Chrome is open, so we need a copy. If a permission dialog pops up, that's this step — go ahead and allow it."**
+
+Then **you run that `cp` command yourself.** Most people's settings will pop up a confirmation
+dialog and they just click allow — that's a lot easier than having them paste a long command themselves.
+
+**If it gets blocked** (people with stricter permission settings get denied outright, no dialog at all),
+have them run it themselves instead. In Claude Code, the user can run a command directly by prefixing
+it with `!` in the input box:
+
+> **"Your settings are stricter, it got blocked. Could you paste that line yourself and run it —
+> just add an exclamation mark at the very front of the input box. This is actually better anyway —
+> you pressing enter yourself confirms exactly which file I'm touching."**
+
+Copy failure (`Operation not permitted`, `No such file`) → section B of `references/troubleshooting.md`.
+
+---
+
+## Step 3: First analysis pass
 
 ```bash
-python3 <此 skill 目錄>/scripts/extract.py \
+python3 <this skill's directory>/scripts/extract.py \
   --db ~/.info-diet/history.db \
   --days 30 \
   --report ~/.info-diet/report.txt \
   --out ~/.info-diet/baseline-$(date +%Y-%m-%d).json
 ```
 
-**`--report` 不可省略。** 加了它，報告會寫進檔案，終端機只印一行狀態——
-也就是**你（Claude）此刻還沒看到任何內容**。這正是步驟 0 第三點的承諾兌現的地方。
+**`--report` cannot be omitted.** With it, the report gets written to a file and the terminal
+only prints one status line — meaning **you (Claude) haven't seen any content yet at this point.**
+This is exactly where the promise from step 0's third point gets kept.
 
-這支程式在使用者電腦上把資料聚合掉：**完整網址讀進記憶體、用完就丟，
-寫出去的只有網域、路徑型態（ID 換成 `:id`，但帳號名保留）、次數、時段。**
+This program aggregates the data on the user's own computer: **full URLs are read into memory
+and discarded once used; what's written out is only the domain, path shape (IDs replaced with
+`:id`, but handles kept), counts, and time of day.**
 
-搜尋關鍵字**預設不輸出**——那是全部資料裡最能還原一個人處境的東西。
-除非使用者主動說想看，才加 `--with-search`，而且要再確認一次。
+Search keywords are **not output by default** — of all the raw data, that's the single most
+revealing thing about someone's life situation. Only add `--with-search` if the user explicitly
+asks to see it, and confirm again before doing so.
 
 ---
 
-## 步驟 4：他指揮你刪，你在沒看過的情況下刪，然後才讀
+## Step 4: They tell you what to delete, you delete it without looking, then you read
 
-**順序不能反。這一步反過來，步驟 0 的承諾就變成謊話。**
+**The order can't be reversed. Reverse it, and step 0's promise becomes a lie.**
 
-**第一件：問他要拿掉什麼，然後你替他刪——但你不能看。**
+**First thing: ask what they want removed, then you delete it — without looking.**
 
-**不要叫他自己開檔案編輯。** 零技術背景的人不一定有辦法開檔、找行、存檔，
-十個人同時卡在這一步，課就毀了。正確做法是**他出一張嘴，你動手**。
+**Don't have them open the file editor themselves.** Someone with zero technical background may
+not be able to open a file, find a line, and save it — if ten people all get stuck on this step,
+the class is derailed. The right approach is **they say it out loud, you do the deleting.**
 
-> **「報告存好了，一百多行，我還沒看。**
+> **"The report's saved, over a hundred lines, I haven't looked at it yet.**
 >
-> **在我看之前：有沒有哪些網站、或哪一類的東西，你不想讓我看到？**
+> **Before I look: is there anything — any site, or any category of thing — you don't want me to see?**
 >
-> **你直接跟我說關鍵字就好，例如「跟醫院有關的」「某某網站」「求職相關的」。我會照你講的把那些行刪掉——**而我是在還沒看過內容的情況下刪的**，所以刪掉的東西我從頭到尾不會知道是什麼。**
+> **Just tell me keywords, like "anything hospital-related," "this one site," "job-search stuff."
+> I'll delete those lines exactly as you say — and I'll be doing it without having seen the content,
+> so I will never know what got deleted.**
 >
-> **另外，有些類別（醫療、求職、交友、法律、博弈這些）程式在產生報告的時候就已經自動隱去了，你不用特別講。」**
+> **Also, some categories (medical, job search, dating, legal, gambling) are already auto-redacted
+> when the report gets generated — you don't need to mention those."**
 
-他說了什麼就跑什麼：
+Run whatever they say to run:
 
 ```bash
-python3 <此 skill 目錄>/scripts/redact.py \
+python3 <this skill's directory>/scripts/redact.py \
   --report ~/.info-diet/report.txt \
-  --terms "他講的關鍵字,用逗號隔開"
+  --terms "their keywords, comma separated"
 ```
 
-這支腳本**只回報刪了幾行，不會印出刪掉的內容**——所以你執行它不算看過。
+This script **only reports how many lines were removed, never what was in them** — so running it doesn't count as you having seen it.
 
-他說「沒有」就跳過這步。
+If they say "nothing," skip this step.
 
-**第二件：刪完了，你才第一次 Read 那個報告檔。**
+**Second thing: once deletion is done, that's the first time you Read the report file.**
 
-不要為了省一輪對話先偷看。整個承諾就靠這個順序成立。
+Don't peek early just to save a round of conversation. The entire promise rests on this order.
 
-**第三件：確認哪個帳號是他自己的。**
+**Third thing: confirm which account is actually theirs.**
 
-報告裡有「疑似本人帳號候選」。**一定要問，不要自己認定**——
-有人會反覆看某個對手或偶像的頁面，次數一樣會很高。
-（如果他把那幾行刪掉了，就是不想談，**不要追問**，直接跳過這步，
-在解讀時說明「看自己」這個數字會低估。）
+The report has a "likely personal account candidates" section. **Always ask, don't assume** —
+someone might repeatedly view a rival's or a celebrity's page and get just as many visits.
+(If they already deleted those lines, that means they don't want to discuss it —
+**don't push**, just skip this step and note when interpreting results that the
+"watching yourself" number will be understated.)
 
-> **「你的 Threads 帳號是 @xxx 嗎？」**
+> **"Is your Threads handle @xxx?"**
 
-確認後**務必重跑一次**加上 `--self`：
+Once confirmed, **make sure to rerun** with `--self`:
 
 ```bash
-python3 <此 skill 目錄>/scripts/extract.py \
+python3 <this skill's directory>/scripts/extract.py \
   --db ~/.info-diet/history.db --days 30 \
-  --self "threads.com:@他的帳號,youtube.com:@他的頻道" \
+  --self "threads.com:@their_handle,youtube.com:@their_channel" \
   --report ~/.info-diet/report.txt \
   --out ~/.info-diet/baseline-$(date +%Y-%m-%d).json
 ```
 
-帳號寫成 `平台:@帳號` 比只寫 `@帳號` 準——同一個名字在別的平台上可能是別人。
+Writing it as `platform:@handle` is more accurate than just `@handle` — the same name could be
+someone else on a different platform.
 
-**重跑會覆蓋報告檔，所以剛才刪掉的東西會回來。**
-把他剛才講的那些關鍵字用 `--exclude` 一起帶進去，
-產生報告的當下就不會有那些內容，不必再刪一次：
+**Rerunning overwrites the report file, so whatever was just deleted comes back.**
+Pass the keywords they just gave you into `--exclude` at the same time, so the report never
+contains that content in the first place — you won't need to delete it again:
 
 ```bash
-  --exclude "他剛才講的關鍵字,用逗號隔開"
+  --exclude "the keywords they just gave you, comma separated"
 ```
 
-**這一步不能省。** 不加 `--self`，「看自己」那個數字會嚴重低估——
-實測差距超過 4 個百分點，而那正好是這支工具最核心的數字。
+**This step can't be skipped.** Without `--self`, the "watching yourself" number will be badly
+understated — in practice, the gap has exceeded 4 percentage points, and that's precisely the
+single most core number this tool produces.
 
 ---
 
-## 步驟 5：判「未分類」
+## Step 5: Sort out "unclassified"
 
-輸出裡會有一段「未分類」的網域。**這是預期行為，不是壞掉**——
-在地新聞、非英語平台、小眾論壇、公司內部系統，內建清單不可能涵蓋。
+The output will include an "unclassified" section of domains. **This is expected, not broken** —
+local news, non-English platforms, niche forums, and internal company systems can never be fully
+covered by a built-in list.
 
-照 `references/patterns.md` 的判準，把前十幾個唸出來問使用者那是什麼。
+Following the criteria in `references/patterns.md`, read out the top dozen or so and ask the
+user what each one is.
 
-**這一段本身就是最好的對話素材。** 使用者常常會在唸到某個網域的時候
-自己愣住：「我怎麼會去那麼多次？」——那句話比你講任何分析都有力。
+**This part is itself the best conversation material.** Users will often catch themselves
+mid-sentence when hearing a domain read out loud: "Wait, why did I go there that many times?" —
+that one sentence does more work than any analysis you could give.
 
 ---
 
-## 步驟 6：問他要不要開品質模式（選配，要另外授權）
+## Step 6: Ask if they want quality mode (optional, needs a separate go-ahead)
 
-**這一步是選配的，但一定要問。** 到目前為止算出來的都是「注意力去了哪裡」，
-判斷不出「他吃進去的東西好不好」——一篇認真的深度報導跟一篇讓他生氣的標題，
-在數字上長得一模一樣。這正是這支工具跟原始概念差最遠的地方。
+**This step is optional, but must always be asked.** Everything computed so far measures
+"where attention went" — it can't tell "whether what they took in was any good." A serious
+in-depth report and an infuriating headline look identical in the numbers. This is exactly
+where this tool differs most from the original concept it's based on.
 
-補這一塊的方法是看**他實際點開讀過的文章標題**（瀏覽器本來就存了，不用連網抓）。
+The way to fill that gap is to look at **the titles of articles they actually clicked into and
+read** (the browser already stores these — no network fetch needed).
 
-**但這要另外授權。** 前面同意過基本分析，不等於同意這一段——
-標題透露的東西比網站名稱多很多。話術與判準全部在
-`references/quality-review.md`，照那份走。
+**But this needs separate consent.** Agreeing to the basic analysis earlier does not mean they've
+agreed to this — titles reveal a lot more than site names do. The full script and criteria are in
+`references/quality-review.md`; follow that.
 
-答應了才重跑並加 `--with-titles`：
+Only after they agree, rerun with `--with-titles`:
 
 ```bash
-python3 <此 skill 目錄>/scripts/extract.py \
+python3 <this skill's directory>/scripts/extract.py \
   --db ~/.info-diet/history.db --days 30 \
-  --self "<確認過的帳號>" --exclude "<他先前講的關鍵字>" \
+  --self "<confirmed handle>" --exclude "<their earlier keywords>" \
   --with-titles \
   --report ~/.info-diet/report.txt
 ```
 
-**重跑之後一樣要先問一次「有沒有要拿掉的」再讀**，因為這次多了標題，
-可能出現他前面沒想到要排除的東西。
+**After rerunning, ask again "anything you want removed" before reading**, because titles are
+new this time and there might be something they hadn't thought to exclude before.
 
-不答應就直接跳過，前面的分析一樣完整——**不要勸，也不要暗示他不做就是分析不完整**。
-
----
-
-## 步驟 7：判型並解讀
-
-照 `references/archetypes.md` 判出**一個**主型，然後解讀。
-
-**解讀的三條規則：**
-
-1. **先講數字，再講意思。**「你有 802 次是在看通知，平均一天 27 次」
-   比「你有點過度關注他人回饋」有用一百倍。
-2. **一個人只給一個型。** 給兩個以上就失焦了。
-3. **乾淨型一定要誠實給。** 一個不管誰跑都說「你有問題」的工具，
-   跑三次就會被看破是算命的。真的健康就說健康。
-
-**有人說「我是不是資訊過載」的時候，借原作那句話回他**（這是現場最好用的一句）：
-
-> **「照這個概念的原作者說法，問題其實不是『過載』。資訊多不是你的錯，就像世界上食物很多不會害你變胖——是你有沒有在挑。所以我們不看你看了多少，看你的注意力分配到哪裡去了。」**
-
-最後**挑一個動作**，只給一個，而且必須是下個月重跑時能用數字驗證的。
-
-- 可以：「通知頁一天三次」「凌晨十二點後不開瀏覽器」
-- 不行：「多讀有深度的內容」「減少社群使用」（驗證不了，等於沒給）
-
-**不要建議封鎖網站或裝阻擋軟體。** 那會把這支工具從體重計變成管教工具，
-性質完全不同，而且使用者沒有授權你做那件事。
+If they decline, skip it entirely — the earlier analysis stands complete as-is.
+**Don't push, and don't imply that skipping it makes the analysis incomplete.**
 
 ---
 
-## 步驟 8：收尾
+## Step 7: Name the archetype and interpret it
 
-**一定要提醒使用者處理掉複製出來的紀錄檔。**
+Following `references/archetypes.md`, determine **one** primary archetype, then interpret it.
 
-> **「最後一件事：剛剛複製出來的那份瀏覽紀錄還在你電腦上，它跟你瀏覽器裡的原始資料一樣敏感。留著就是多一份風險。」**
+**Three rules for interpretation:**
 
-把指令給他**自己**跑：
+1. **Lead with the number, then give the meaning.** "You had 802 visits to the notifications page,
+   averaging 27 a day" is a hundred times more useful than "you're a bit too focused on others' feedback."
+2. **Give only one archetype per person.** Giving two or more loses focus.
+3. **The clean archetype must be given honestly when it applies.** A tool that finds "you have a
+   problem" no matter who runs it gets found out as a fortune-teller by the third run. If it's
+   genuinely healthy, say it's healthy.
+
+**When someone asks "am I information-overloaded"**, borrow the original author's line
+(this works great in the room):
+
+> **"According to the person who came up with this concept, the problem isn't actually 'overload.'
+> Having a lot of information available isn't your fault — just like there being a lot of food in
+> the world doesn't make you gain weight; what matters is whether you're choosing. So instead of
+> looking at how much you consumed, we look at where your attention actually went."**
+
+Finally, **pick one action**, only one, and it has to be something verifiable by numbers on a rerun next month.
+
+- Good: "check the notifications page three times a day," "no browsing after midnight"
+- Not good: "read more substantive content," "use social media less" (unverifiable, might as well not give one)
+
+**Don't suggest blocking sites or installing blocking software.** That turns this tool from a
+scale into a disciplinary tool — a completely different thing, and the user hasn't authorized that.
+
+---
+
+## Step 8: Wrap up
+
+**Always remind the user to clean up the copied-out history file.**
+
+> **"One last thing: that browsing history you copied out earlier is still on your computer,
+> and it's just as sensitive as the original data in your browser. Leaving it there is extra risk for no reason."**
+
+Give them the command to run **themselves**:
 
 ```
 rm ~/.info-diet/history.db ~/.info-diet/report.txt
 ```
 
-報告檔（`report.txt`）也一併刪掉，它裡面有網站名稱與帳號名。
+The report file (`report.txt`) should be deleted too — it contains site names and account handles.
 
-**基準值檔（`baseline-日期.json`）要留著**，下個月複驗要用。
-它裡面只有網站名稱跟數字，沒有完整網址，也沒有帳號名。
-跟他講清楚這個差別，不然他會連基準值一起刪掉，下個月就沒得比。
+**Keep the baseline file (`baseline-DATE.json`)**, it's needed for next month's re-check.
+It only contains site names and numbers, no full URLs, no account handles.
+Make this distinction clear, otherwise they'll delete the baseline too and have nothing to compare against next month.
 
 ---
 
-## 複驗模式（使用者說「我上次跑過了」）
+## Re-check mode (when the user says "I already ran this before")
 
-不要重跑一次完整流程。第一次的價值來自「第一次看到自己的數字」，
-第二次的價值只剩「有沒有動」。
+Don't rerun the entire flow from scratch. The value of the first check-in comes from
+"seeing your own numbers for the first time"; the value of every check-in after that is
+only "did anything move."
 
-重新走步驟 1 到 3 產生新的 baseline，然後：
+Walk through steps 1 to 3 again to produce a new baseline, then:
 
 ```bash
-python3 <此 skill 目錄>/scripts/compare.py \
-  --old ~/.info-diet/baseline-<上次日期>.json \
-  --new ~/.info-diet/baseline-<這次日期>.json
+python3 <this skill's directory>/scripts/compare.py \
+  --old ~/.info-diet/baseline-<previous date>.json \
+  --new ~/.info-diet/baseline-<this date>.json
 ```
 
-五行數字，講完就結束。**沒動就是沒改，不要幫使用者找理由。**
+Five lines of numbers, and that's it. **If nothing moved, say nothing moved — don't invent excuses for the user.**
 
 ---
 
-## 安全邊界（全流程適用）
+## Security boundaries (apply throughout the entire flow)
 
-- **唯讀。** 這支 skill 從頭到尾不寫入使用者的任何既有檔案。
-  它只產生兩個新檔：報告 `report.txt` 與基準值 `baseline-日期.json`。
-- **不要去讀 baseline JSON 本體。** 它在使用者過目之前就寫出，裡面有前 30 個網域名——
-  使用者從報告刪掉的網域，仍然留在那份 JSON 裡。
-  它的用途只有一個：下個月餵給 `compare.py` 算差值。
-  要看內容一律看使用者過目過的 `report.txt`。
-- **不連網。** 任何步驟都不需要網路。使用者問起就明確說沒有。
-- **不看內容。** 只看網域與路徑型態。使用者去了哪個網站是分析範圍，
-  他在那裡看了什麼不是。
-- **不解讀人生。** 看到求職網站、醫療網站、法律諮詢、感情相關就當沒看到，
-  除非使用者自己提起。這支工具的授權範圍是「注意力分佈」，僅此而已。
-- **使用者喊停就停。** 不勸、不問原因、不做最後說服。
-  然後把刪除指令給他自己跑。
-- **只能跑在使用者自己的電腦上。** 有人拿別人的瀏覽紀錄來跑，
-  不管理由是什麼都拒絕。
+- **Read-only.** This skill never writes to any of the user's existing files, start to finish.
+  It only ever produces two new files: the report `report.txt` and the baseline `baseline-DATE.json`.
+- **Never read the baseline JSON directly.** It gets written before the user has reviewed it,
+  and contains the top 30 domain names — even domains the user removed from the report are
+  still in that JSON. Its only purpose is to be fed into `compare.py` next month to compute
+  the difference. Always look at the user-reviewed `report.txt` for content.
+- **No network access.** No step in this flow ever needs the internet. Say so clearly if asked.
+- **No content reading.** Only domains and path shapes are examined. Which site someone visited
+  is in scope; what they looked at there is not.
+- **Don't interpret someone's life.** Job-search sites, medical sites, legal consultations,
+  relationship-related content — treat as unseen unless the user brings it up themselves.
+  This tool's authorized scope is "attention distribution," and nothing beyond that.
+- **When the user says stop, stop.** No persuading, no asking why, no final pitch.
+  Then hand them the deletion command to run themselves.
+- **Only run this on the user's own computer.** If someone brings in someone else's browsing
+  history to run this on, decline, no matter the stated reason.
 
-## 已知限制（被問到要誠實講）
+## Known limitations (be honest when asked)
 
-- **基本模式量得到注意力的「分佈」，量不到資訊的「品質」。**
-  Clay Johnson 那本書的核心主張是**選擇來源**——他明確反對「資訊過載」這個框架，
-  說問題不是量太大，是你沒在挑；他還說事後靠批判思考過濾是「知識上的暴食催吐」，
-  正確的做法是攝取之前就挑好。
-  基本模式不看內容，所以**分不出深度報導跟同溫層取暖**——兩者在數字上一模一樣。
-  **這個缺口由步驟 6 的品質模式補**，但那要使用者另外授權；他不授權就是補不了，
-  這時要照實講，不要假裝數字能回答品質問題。
-- **品質模式對社群平台幾乎無效。**
-  它靠的是網頁標題，而 X／Threads／Instagram 的標題只有「某某某 (@handle)」，
-  看不出那則內容講了什麼。社群的品質要改看「他讀的是誰」，判準見
-  `references/quality-review.md`。
-- **看不到手機。** 主力在手機上滑的人，這份報告會嚴重低估他。
-- **只支援 Chromium 系**（Chrome／Edge／Brave／Arc／Vivaldi）。
-  Safari 與 Firefox 的資料格式不同，這一版讀不到。
-- **清紀錄或常用無痕模式的人**，結果會失真。
-- **「造訪次數」不等於「看了幾次」。** 點連結、按上一頁、重新整理都各算一次。
-  要看的是比例，不是絕對數字。
-- **停留時間拿不到。** Chrome 有記一個時間欄位，但它把「分頁開著沒在看」
-  也算進去，實測加總遠超過一天 24 小時，所以這支工具完全不用它。
+- **Basic mode measures the "distribution" of attention, not the "quality" of information.**
+  The core argument of Clay Johnson's book is **choosing your sources** — he explicitly argues
+  against the "information overload" framework, saying the problem isn't too much quantity, it's
+  a lack of selection; he also calls after-the-fact critical-thinking filtering "intellectual
+  bulimia" — the right move is to choose well before consuming. Basic mode doesn't look at
+  content, so **it can't distinguish in-depth reporting from echo-chamber comfort food** — the
+  two look identical in the numbers. **Step 6's quality mode fills this gap**, but it requires
+  separate user consent; without it, the gap stays unfilled, and that should be stated honestly
+  rather than pretending the numbers can answer a quality question.
+- **Quality mode is nearly useless on social platforms.**
+  It relies on page titles, and on X/Threads/Instagram the title is just "Someone (@handle)" —
+  it can't tell you what the content actually said. For social platforms, quality has to be
+  judged instead by "who they're reading" — criteria in `references/quality-review.md`.
+- **Can't see the phone.** For someone who mostly scrolls on their phone, this report will
+  badly understate their attention usage.
+- **Chromium-family browsers only** (Chrome/Edge/Brave/Arc/Vivaldi). Safari and Firefox use
+  different data formats that this version can't read.
+- **Anyone who clears history regularly or uses incognito mode heavily** will get skewed results.
+- **"Visit count" doesn't mean "number of times looked at."** Clicking a link, hitting back,
+  refreshing — each counts as a separate visit. Look at proportions, not absolute numbers.
+- **Time-on-page isn't available.** Chrome does record a duration field, but it counts a tab
+  sitting open unattended too — in practice the totals come out to way more than 24 hours a
+  day, so this tool never uses it at all.

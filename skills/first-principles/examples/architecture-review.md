@@ -124,10 +124,10 @@ If we had proceeded with microservices without this analysis:
 
 This example followed the standard first principles template:
 
-1. ✅ Problem stated in outcomes, not solutions
-2. ✅ All assumptions explicitly listed and challenged
-3. ✅ Each assumption investigated with data
-4. ✅ Ground truths established from investigation
-5. ✅ Solution built from reasoning chain
-6. ✅ Trade-offs acknowledged
-7. ✅ Revisit triggers defined
+1. ✓ Problem stated in outcomes, not solutions
+2. ✓ All assumptions explicitly listed and challenged
+3. ✓ Each assumption investigated with data
+4. ✓ Ground truths established from investigation
+5. ✓ Solution built from reasoning chain
+6. ✓ Trade-offs acknowledged
+7. ✓ Revisit triggers defined

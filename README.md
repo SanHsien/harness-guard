@@ -1,145 +1,176 @@
-# 三個讓 AI 守規矩的小工具，加上七套現成的工作流程
+> English | [中文版](README.zh-TW.md)
 
-> **2026-08-09 更新**：三個攔截工具現在都有 Claude Code 版與 Codex 版，判斷邏輯相同。工作流程新增 review-loop，共六套。
-> **2026-08-12 更新**：新增 info-diet（算你的注意力實際跑到哪去了），共七套。
+# Three small tools that keep AI honest, nine ready-made skills, and a starter rules file
 
-你有沒有遇過這種事：你明明告訴 AI「每次改完程式碼都要先跑測試」，它前三次乖乖照做，第四次就忘了，而且忘記的時候完全不會講。
+> **Updated 2026-08-09**: Both interceptor hooks now ship in a Claude Code version and a Codex version, with the same underlying logic. Added the review-loop skill, bringing the total to six.
+> **Updated 2026-08-12**: Added info-diet (works out where your attention is actually going), bringing the total to seven.
+> **Updated 2026-08-14**: Added claude-md-template — a starter CLAUDE.md written to match the official guidance for the fifth-generation models, plus three optional rules files.
 
-這就是我做這些東西的原因。
+Has this ever happened to you: you tell an AI "always run the tests before you say you're done," it does exactly that for the first three times, then forgets on the fourth — and doesn't tell you it forgot.
 
-問題出在「規則只是一段文字」。你把規則寫下來，AI 讀了、也懂了，但它沒有義務照做。聊天內容一長，那段文字就被沖淡了。它不是故意騙你，是真的沒放在心上。
+That's why I built these.
 
-這裡的做法是：**不要拜託它，直接擋住它。** 把「希望它做到的事」變成電腦會自動執行的檢查，它沒做到就過不去。
+The problem is that a rule is just a piece of text. You write it down, the AI reads it, the AI understands it — but it's under no obligation to actually follow it. The longer the conversation gets, the more that text gets diluted. It's not lying to you on purpose. It genuinely isn't top of mind anymore.
 
----
-
-## 不會寫程式也能裝
-
-不用自己動手。把這個網頁的網址複製起來，貼給 Claude Code 或 Codex，跟它說：
-
-> 幫我把這個裝起來，我不會寫程式，你一步一步來，每步告訴我在做什麼。
-
-這個資料夾裡有一份寫給 AI 看的說明書（就是那個叫 `CLAUDE.md` 的檔案），它會照著上面的步驟問你需求、幫你裝、幫你改設定，並且用你聽得懂的話講。你只要回答它的問題就好。
-
-它會先問你三件事，大概是「你平常用電腦做什麼」「有沒有遇過 AI 說做好了但其實沒做」「介不介意 AI 在文件裡放表情符號」。照實回答就好，答錯也不會怎樣，之後隨時能加裝或移除。
-
-**唯一要記得的一件事**：裝完之後要把 Claude Code 整個關掉再重開，新裝的東西才會生效。
+The approach here is: **don't ask it nicely — block it.** Turn "the thing I want it to do" into a check the computer enforces automatically. If it doesn't do the thing, it doesn't get to move on.
 
 ---
 
-## 名詞先解釋幾個
+## You don't need to know how to code to install this
 
-**Claude Code**：可以直接在電腦上幫你寫程式、改檔案的 AI 助手。這整包東西是給它用的。
+You don't have to do any of this by hand. Copy this page's URL, paste it to Claude Code or Codex, and say:
 
-**hook（掛鉤）**：可以想成門口的警衛。你可以規定「AI 每次要動手寫檔案之前，先讓警衛檢查一下」，警衛說不行就真的不行。這不是提醒，是攔截。
+> Help me install this. I don't know how to code, so walk me through it one step at a time and tell me what you're doing at each step.
 
-**skill（技能）**：一份寫好的做事步驟。你叫它的名字，AI 就照那套步驟做，不用你每次重講一遍。
+This folder includes an instruction manual written for AI (the file called `CLAUDE.md`). It will follow those instructions to ask you what you need, install things, adjust settings, and explain everything in plain language. All you have to do is answer its questions.
 
-**lint**：自動幫你挑出小毛病的檢查工具。名字來自洗衣機的濾網，專門把衣服上的棉絮挑出來。程式碼裡也有這種東西：多打的空格、宣告了卻沒用到的變數、命名沒照統一寫法。這些不一定會讓程式壞掉，但會讓程式碼變髒、難讀。lint 工具就是跑一次然後列給你看「第 12 行多了空格、第 40 行這個變數沒人用」。
+It'll start by asking you three things — roughly: "what do you mainly use your computer for," "has an AI ever told you something was done when it wasn't," and "do you mind if AI puts emoji in your documents." Just answer honestly — there's no wrong answer, and you can always add or remove pieces later.
 
----
-
-## 三個攔截工具
-
-**兩個版本都有。**每一支底下分成 `claude-code/` 跟 `codex/` 兩個資料夾，判斷邏輯一模一樣，差別只在跟平台介面有關的那幾行。用哪個工具就裝哪個版本，兩個都用就兩個都裝，帳本是分開的不會打架。
-
-兩邊到底差在哪、想自己移植別的 hook 要改什麼，見 [`hooks/README.md`](hooks/README.md) 那張對照表。
-
-
-### claim-guard：抓它嘴上說有、實際沒做
-
-這個是我自己最常用的。
-
-情況是這樣：AI 跟你說「我測試過了，沒問題」。但它根本沒跑過測試。它不是在騙你，是它「覺得」應該沒問題，然後用一模一樣的語氣講出來了。這句話對它來說成本太低，低到你分辨不出真假。
-
-所以這個工具做兩件事。
-
-一支腳本在旁邊默默記帳，記下這次對話裡它到底跑過哪些檢查、搜尋過哪些東西。像行車紀錄器，一直錄，不出聲。
-
-另一支在它想結束對話的時候跳出來對帳。你說「測試通過」？帳本裡要有跑測試的紀錄。你說「找不到這個功能」？帳本裡要有搜尋的紀錄。對不上就擋下來，不准結束。
-
-兩支要一起裝，少一支就完全失效。
-
-它不會亂擋。資料讀不到或格式不對，一律放行。只有在「它明確講了、但完全零紀錄」的時候才攔。全程是本機的小程式在跑，不會多花你一毛錢。
-
-### no-emoji-guard：把表情符號擋在門外
-
-如果你跟我一樣受不了 AI 在正式文件裡亂放笑臉跟打勾符號，這個給你。
-
-它不是我憑感覺列的黑名單，是照 Unicode 官方定義判斷的（Unicode 就是全世界統一規定「哪個編號對應哪個字」的那套標準）。官方說哪些是表情符號，它就擋哪些。
-
-有幾個長得很像但其實不是的，像打勾的 `✓`、打叉的 `✕`、箭頭 `→`，這些是排版符號，刻意不擋。
-
-如果你有整個資料夾想跳過檢查，改檔案開頭那行設定就好。我自己的筆記軟體裡有些符號是有功能的，被清掉待辦事項會壞掉，所以我把那個資料夾整個放行。
-
-做不到的地方先講：如果表情符號是用網頁的特殊寫法藏起來的，它看不出來。
-
-### lint-gate：檢查沒過就不准收工
-
-最單純的一個。你指定一個檢查指令，它就在 AI 想結束的時候跑一次，有錯就把錯誤丟回去要它修完再走。
-
-不限於程式碼檢查。你指定什麼指令它就跑什麼，可以是拼字檢查，也可以是你自己寫的「文件格式有沒有寫錯」的小程式。我自己是拿它跑筆記的格式檢查。
-
-改兩個設定就能套到任何專案。
-
-程式碼裡有一段判斷千萬不要刪。沒有那段的話，遇到修不好的錯誤，AI 會陷入「想結束、被擋、再想結束、又被擋」的無限迴圈，整個卡死。這是自己寫這類工具最容易踩的坑，我留了註解說明。
+**The one thing to remember**: after installing, fully quit and restart Claude Code. The new pieces won't take effect until you do.
 
 ---
 
-## 七套工作流程
+## A few terms, explained
 
-**explain**：叫它 `/explain`，它就把剛才那段話用高中生聽得懂的方式重講一次。不准中英夾雜，不准用術語。看不懂 AI 在講什麼的時候用這個。
+**Claude Code**: an AI assistant that can write code and edit files directly on your computer. This whole package is built for it.
 
-**polite**：幫你把訊息的語氣改掉。兩種模式，一種是溫暖同理（用在客服回覆、壞消息、婉拒），一種是正式商務（用在對外信件、提案、催款）。裡面有一條規則我特別加的：不准幫對方編造處境。像「我知道你最近應該很忙」這種話，對方沒說過就不要替他說，讀起來會像情緒勒索。
+**hook**: think of it as a guard standing at the door. You can set a rule like "before the AI touches a file, have the guard check first" — and if the guard says no, it's really no. This isn't a reminder. It's a block.
 
-**first-principles**：從根本重新想一遍，而不是照著別人的做法抄。核心的一句話是：在想「怎麼做」之前，先問「這件事該不該做」。裡面附了一個盤點未知的流程，適合用在需求還很模糊、或你根本不熟這個領域的時候。
+**skill**: a pre-written set of steps for doing something. You say its name, and the AI follows those exact steps, so you don't have to re-explain yourself every time.
 
-**checkpoint**：一次把收工該做的事做完。寫工作日誌、挑要存檔的檔案、上傳、回頭確認真的傳上去了。重點在「一次」，分兩次做同一件事會被記兩遍。
-
-**neat-freak**：對帳用的。不是對格式，是對事實。哪個案子進度到哪、哪份合約簽了、哪筆錢收了、哪個待辦其實早就做完了。它會先跑一支腳本把現況機械式地數一遍，數出來的不能造假，再拿這個結果去改檔案。而不是讓 AI 憑印象說一句「我同步好了」。
-
-**review-loop**：請 AI 寫一份長東西（企劃、規格、報告），你看完給意見、它改出第二版，你再看再改出第三版——改到第四版你發現某一段不見了。你不記得說過要刪，它也沒說它刪了。
-
-這個是防這件事的。做法是給文件每一段一個永久代號，然後讓電腦去算：上一版有十段、這一版只找得到九段，就擋下來，並告訴你消失的是哪一段。你說「這段通過」的那一刻內容會被鎖住，之後被改到也擋。它還會把文件變成一個網頁，每段旁邊一個格子讓你寫意見、選「通過／改／問／討論」，填完一鍵複製貼回去給 AI。不想打字就用講的，錄音轉成逐字稿貼回去一樣。
-
-裡面附了回歸測試，用一份虛構的籌備規格重現三種真實出過的錯，跑 `bash skills/review-loop/examples/regression/run-test.sh` 可以自己驗。
-
-**info-diet**：算你的注意力實際上跑到哪裡去了。它讀你自己電腦上的瀏覽紀錄，分成四類——你從外面吸收資訊、你在看自己（通知、自己的貼文、自己的後台數據）、跟人對話、還有在做事。多數人以為自己的問題是資訊太多，實際跑出來常常是另一回事：時間不是花在看世界，是花在看世界怎麼看自己。
-
-它只在你自己的電腦上跑，不連網、不上傳。整理好的結果會先存成檔案，AI 當下看不到；它會先問你有沒有不想給它看的，你講關鍵字、它照著刪，**而它是在還沒看過的情況下刪的**。醫療、求職、交友、法律、博弈這幾類，程式在整理的時候就直接隱去了。想更進一步讓它看你讀過的文章標題、判斷資訊品質的話，那要你再單獨授權一次。
-
-限制寫在裡面沒藏：看不到手機、只支援 Chrome 這一家族的瀏覽器、判斷不了社群貼文的品質（那邊的標題只有帳號名）。
-
-前三個直接可用。checkpoint、neat-freak 要照你自己的檔案擺法調整過才會準，裡面的對照表是範本，左邊換成你工作上會發生的事，右邊換成你自己的資料夾名稱。照抄我的沒有意義，我的資料夾長得跟你不一樣。
-
-review-loop 跟前面五個不太一樣：它要你先把文件改成帶代號的格式才會動。多一道手續，但也只有這樣才擋得住東西無聲消失。第一次用建議拿附的範例試一輪再上真的文件。
+**lint**: a tool that automatically catches small problems for you. The name comes from a washing machine's lint filter — the thing that catches the fuzz off your clothes. Code has an equivalent: extra whitespace, variables that got declared but never used, names that don't follow the project's convention. None of that will necessarily break the program, but it makes the code messier and harder to read. A lint tool runs once and hands you a list: "line 12 has trailing whitespace, line 40 declares a variable nobody uses."
 
 ---
 
-## 授權
+## Three interceptor hooks
 
-MIT，意思是你可以隨便拿去用、拿去改、拿去賣，不用付錢也不用問我。
+**Both platforms are covered.** Each tool has a `claude-code/` folder and a `codex/` folder underneath it, and the logic inside is identical — the only difference is the handful of lines tied to each platform's interface. Install whichever one matches the tool you use; if you use both, install both. The ledgers are kept separate, so they won't collide.
 
-裡面有幾樣是改寫自別人的作品，原作者跟出處寫在 `NOTICE` 那個檔案裡。你要轉發或再利用的話，把那份檔案一起留著就好，這是 MIT 唯一真正要求的事。
+For exactly where the two versions differ, and what to change if you want to port another hook yourself, see the comparison table in [`hooks/README.md`](hooks/README.md).
+
+
+### claim-guard: catches the gap between what it says it did and what it actually did
+
+This is the one I use the most myself.
+
+Here's the situation: the AI tells you "I tested it, it works fine." But it never ran a test. It's not lying to you — it just "feels like" things should be fine, and says so in exactly the same tone it would use if it actually knew. That sentence costs it nothing to say, which is exactly why you can't tell true from false by the tone alone.
+
+So this tool does two things.
+
+One script quietly keeps the books in the background, logging which checks it actually ran and what it actually searched for during the conversation. Think of it as a dashcam — always recording, never saying a word.
+
+The other script steps in right when the AI is about to end the conversation and reconciles the record against what it's claiming. Said "tests passed"? There'd better be a test run in the ledger. Said "couldn't find this feature"? There'd better be a search in the ledger. If the two don't match, it gets blocked — no wrapping up.
+
+Both scripts have to be installed together. Install just one, and the whole thing silently stops working.
+
+It won't block things at random. If the data can't be read or is malformed, it lets things through by default. It only steps in when the AI made a specific claim with zero record behind it. The whole thing runs as a small local program — it won't cost you a cent.
+
+### no-emoji-guard: keeps emoji out the door
+
+If you can't stand it when AI sprinkles smiley faces and checkmarks through a formal document, this one's for you.
+
+It isn't a blocklist I threw together by feel — it's based on the official Unicode definition (Unicode is the standard the whole world agreed on for "which number maps to which character"). Whatever the official spec calls an emoji, this blocks.
+
+A few things look similar but aren't: the checkmark `✓`, the cross `✕`, the arrow `→`. Those are typographic symbols, and they're deliberately left alone.
+
+If you've got a whole folder you want to exempt, there's a setting at the top of the file for that. In my own notes app, some of these symbols do real work — deleting them would break my to-do tracking — so I whitelisted that entire folder.
+
+One honest limitation up front: if an emoji is hidden inside a web page using some special encoding trick, this won't catch it.
+
+### lint-gate: no check, no sign-off
+
+The simplest of the three. You give it a check command, and it runs that command whenever the AI tries to wrap up. If the check fails, it hands the errors back and makes the AI fix them before it's allowed to finish.
+
+It's not limited to code checks. Whatever command you point it at is what it runs — a spelling checker, or a script you wrote yourself to check whether a document's formatting is correct. I personally use it to check my notes' formatting.
+
+Two settings, and you can drop it into any project.
+
+There's a piece of logic in the code you should never delete. Without it, if the AI hits an error it can't fix, it gets stuck in a loop — try to finish, get blocked, try to finish again, get blocked again — forever. That's the single easiest trap to fall into if you build a tool like this yourself, so I left a comment explaining it.
 
 ---
 
-## 提醒一件事
+## Nine skills
 
-裝之前，讓 AI 把每支腳本讀給你聽，或至少讓它講一遍每支在做什麼。
+**explain**: call `/explain` and it retells whatever was just said in terms a high schooler could follow. No jargon, no slipping into another language mid-explanation. Use it when you can't follow what the AI is saying.
 
-這些東西會攔截 AI 的動作，影響你之後所有的工作。這句話對這個資料夾成立，對你在網路上看到的任何一包腳本都成立。不要因為看起來很方便就直接裝。
+**polite**: rewrites the tone of a message for you. Two modes — one warm and empathetic (for customer replies, breaking bad news, turning someone down), and one formal-business (for outbound emails, proposals, chasing payment). There's one rule in here I added on purpose: never invent the other person's circumstances for them. Something like "I know you've probably been really busy lately" — if they never said that, don't put it in their mouth. It reads as manipulative.
+
+**first-principles**: rethink something from the ground up instead of copying how someone else did it. The core question, before you ever ask "how should I do this," is "should this even be done at all." It comes with a process for mapping out your unknowns, which works well when the requirements are still fuzzy or you're new to the whole area.
+
+**checkpoint**: finishes everything that needs doing at the end of a session, in one pass — writing the work log, choosing what to save, uploading it, and then double-checking it actually made it up there. The point is doing it in one pass; doing the same thing twice logs it twice.
+
+**neat-freak**: does the reconciliation. Not formatting — facts. Which project is at what stage, which contract got signed, which payment came in, which to-do actually got finished a while ago. It first runs a script that mechanically counts up the current state — numbers that can't be faked — and only then edits files based on that count. Instead of letting the AI say "all synced up" from memory.
+
+**review-loop**: you ask AI to write something long — a proposal, a spec, a report. You read it, give feedback, it produces a second draft. You read that, give more feedback, it produces a third. By the fourth draft, you notice a section is just gone. You never asked for it to be cut. It never said it cut it.
+
+This is what stops that. Every section of the document gets a permanent ID, and the computer does the counting: ten sections in the last version, only nine findable in this one — it flags it and tells you exactly which one vanished. The moment you say "this section's approved," its content gets locked, and any further edit to it gets blocked too. It also turns the document into a web page with a comment box next to each section, where you pick "approve / revise / question / discuss," fill it in, and copy the whole thing back to the AI in one click. Don't feel like typing — talk it out, transcribe the recording, and paste that back instead.
+
+It ships with a regression suite: a fictional planning spec that reproduces three real bugs this tool has actually hit in the past. Run `bash skills/review-loop/examples/regression/run-test.sh` to verify it yourself.
+
+**info-diet**: works out where your attention is actually going. It reads the browsing history on your own computer and sorts it into four buckets — information you're taking in from outside, you looking at yourself (notifications, your own posts, your own dashboards), talking to people, and getting things done. Most people assume their problem is too much information; what actually turns up is usually something else — the time isn't going toward looking at the world, it's going toward watching how the world is looking at you.
+
+It only runs on your own computer — no network access, nothing uploaded. The organized results get saved to a file first, and the AI doesn't see them yet; it asks you if there's anything you'd rather it not see, you give it keywords, and it deletes based on those keywords — **while it still hasn't looked at the file**. Medical, job-hunting, dating, legal, and gambling categories get hidden automatically during the sorting step, no exceptions needed. If you want to go a step further and have it look at the titles of articles you actually read to judge information quality, that needs a separate, explicit authorization from you.
+
+The limitations are stated plainly, not hidden: it can't see your phone, it only supports browsers in the Chrome family, and it can't judge the quality of social media posts (all it gets there is an account name as the title).
+
+The first three are ready to use as-is. checkpoint and neat-freak need to be adjusted to match how you actually organize your own files before the numbers mean anything. The comparison table inside is a template — swap the left column for the things that actually happen in your work, and the right column for your own folder names. Copying mine won't help you; my folders don't look like yours.
+
+review-loop is a bit different from the others: it only works once you've reformatted a document into its tagged format. That's an extra step, but it's the only way to actually catch content disappearing without a trace. The first time you use it, try it on the included example before you run it on a real document.
+
+**asd-ste100**: a Simplified Technical English rewrite. Use it for English text that's going to be read directly by a machine, or by another AI, where a misread has a real cost — tool descriptions, error messages, instructions passed between agents. The core move is stripping out ambiguous words and multi-clause sentences.
+
+**iso-24495**: an ISO 24495-1 plain-language rewrite, with dedicated techniques for both English and Traditional Chinese. Use it for reports, letters, documentation — text where the goal is for the intended reader to understand it in one pass and know what to do next.
 
 ---
 
-## 這裡只有這些
+## How this kit differs from other repos
 
-上面這些可以單獨拿去用，互相之間沒有依賴。
+There are plenty of Claude Code hook collections and starter kits on GitHub. Before deciding whether this one is for you, here's an honest comparison:
 
-但「什麼事情該做成攔截工具、什麼該留在規則檔、什麼該做成工作流程」，這個判斷本身是另一回事。我把那套判斷方法跟這幾年踩過的坑整理成一份付費資料包：
+**It's written for people who don't code.** Nearly every kit out there assumes you're a developer — the docs talk about test suites, CI, and architecture decision records. This one assumes nothing: you paste a URL, the AI walks you through the install in plain language, and every concept (hook, skill, lint) gets explained in one paragraph before it's used.
+
+**It goes after a failure nobody else names.** Existing tools protect tests from being deleted, or audit the work after the fact. claim-guard targets something different: the AI saying "I tested it, it works" *when it never ran anything*. A ledger records what actually happened; a reconciliation gate blocks the wrap-up when the claims and the record don't match — in real time, not in a post-mortem.
+
+**It covers all three layers in one place.** Enforcement (hooks), workflows (skills), and a lean rules-file template written to the current generation of models' official guidance. Most kits give you one of the three and stop there.
+
+**It's bilingual by design.** Docs in English and Traditional Chinese, and the hooks catch claims in both languages out of the box — because the trigger patterns were built from real usage in both.
+
+---
+
+## A starter rules file (claude-md-template)
+
+Earlier I said "a rule is just a piece of text, and the AI has no obligation to follow it" — that doesn't mean a rules file is useless. It means the file needs to be **short, and correct**. `claude-md-template/` is a starter CLAUDE.md written to match the official guidance for the newest generation of models: just three sections (your background, a small number of hard gates each backed by a reason, and reasoning context that lets it generalize on its own), plus three optional rules files for verification, delegation, and risk.
+
+Every line in it had to pass the same test to earn its place: "if you deleted this line, would the AI get something wrong? If not, delete it." Use that same test when you add your own rules later. For how to install it and why it's this short, see [`claude-md-template/README.md`](claude-md-template/README.md).
+
+The rules file handles "suggestions"; this repo's hooks handle "enforcement." They're meant to work together, not as an either-or choice.
+
+---
+
+## License
+
+MIT — meaning you can take it, use it, modify it, and sell it, freely, without paying me or asking permission.
+
+A few pieces here are adapted from other people's work; the original authors and sources are listed in the `NOTICE` file. If you redistribute or reuse this, keep that file attached — it's the one thing MIT actually requires of you.
+
+---
+
+## One thing to keep in mind
+
+Before you install any of this, have the AI read each script out loud to you, or at minimum have it explain what each one does.
+
+These tools intercept what the AI is allowed to do, and that affects everything you work on afterward. That's true of this folder, and it's true of any package of scripts you find anywhere online. Don't install something just because it looks convenient.
+
+---
+
+## That's everything here
+
+Everything above can be used on its own — none of it depends on anything else.
+
+But the judgment call of "what should become an interceptor hook, what belongs in a rules file, and what should become a skill" — that's a separate thing entirely. I've written up that decision method, along with the mistakes I've made along the way, into a paid resource pack:
 
 <https://www.agentcrew.cc/products/harness-asset-pack>
 
-其他課程跟工具在 <https://www.agentcrew.cc>。
+Other courses and tools live at <https://www.agentcrew.cc>.
 
-免費的這些不會過期，也不會哪天被我拿掉改成付費。放心用。
+The free stuff here won't expire, and it won't ever get pulled and turned into a paid product later. Use it freely.

@@ -33,14 +33,14 @@ fi
 verify_triggers='verified|confirmed|all passing|tests? pass|build passes|all green|works now|working now|deployed and verified|驗證通過|測試通過|驗證無誤|實測通過|實測有效|全數通過|建置通過|跑通|已驗證|確認無誤'
 if printf '%s' "$last_message" | grep -iqE "$verify_triggers" && [ ! -s "$verify_ledger" ]; then
   cleanup
-  jq -n '{decision:"block",reason:"CLAIM-EVIDENCE GUARD：回覆宣稱已驗證或測試通過，但本 turn 沒有驗證類指令紀錄。請先實際驗證；無法自動驗證時，明確標為尚未驗證。"}'
+  jq -n '{decision:"block",reason:"CLAIM-EVIDENCE GUARD: The reply claims verification or tests passed, but no verification-type command was recorded this turn. Verify it for real first; if it genuinely cannot be verified automatically, mark it explicitly as not yet verified."}'
   exit 0
 fi
 
 negative_triggers="doesn't exist|does not exist|not found|no such|couldn't find|cannot find|can't find|nothing matching|no evidence|there is no|不存在|找不到|沒有找到|查無|沒有任何(相關|紀錄|檔案)|從未出現"
 if printf '%s' "$last_message" | grep -iqE "$negative_triggers" && [ ! -s "$search_ledger" ]; then
   cleanup
-  jq -n '{decision:"block",reason:"CLAIM-EVIDENCE GUARD：回覆斷言某物不存在或找不到，但本 turn 沒有搜尋動作紀錄。請先全量搜尋再下負向斷言。"}'
+  jq -n '{decision:"block",reason:"CLAIM-EVIDENCE GUARD: The reply asserts something does not exist or cannot be found, but no search action was recorded this turn. Search exhaustively first before making a negative assertion."}'
   exit 0
 fi
 

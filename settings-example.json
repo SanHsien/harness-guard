@@ -1,5 +1,5 @@
 {
-  "_comment": "把需要的區塊併進你的 ~/.claude/settings.json 的 hooks 物件。已有同名事件就把 hooks 陣列的內容加進去，不要整段覆蓋。註冊後重開 session 才生效。",
+  "_comment": "Merge the blocks you need into your ~/.claude/settings.json hooks object. If the same event name already exists, add to its hooks array — don't overwrite the whole section. Restart the session after registering for this to take effect.",
 
   "hooks": {
     "PreToolUse": [
@@ -38,7 +38,7 @@
             "type": "command",
             "command": "LINT_CMD='npm run lint' FAIL_PATTERN='[1-9][0-9]* error' ~/.claude/hooks/lint-gate.sh",
             "timeout": 30,
-            "statusMessage": "收工前檢查中..."
+            "statusMessage": "Running end-of-session checks..."
           }
         ]
       }

@@ -1,46 +1,75 @@
-# 錄音審查：兩條保命規則
+# Recorded review: two rules that keep it from breaking
 
-這個 skill **不提供轉錄工具**，也不在乎你用哪一套（本機模型、雲端 API、線上服務、或你已經自己轉好了）。
+This skill **doesn't provide a transcription tool**, and doesn't care which one
+you use -- local model, cloud API, an online service, or a transcript you
+already made yourself.
 
-但下面兩條跟工具無關。兩條都是實際踩過的，不是常識。
+But the two rules below apply regardless of tooling. Both come from having
+actually hit them, not from general common sense.
 
-## 一、轉錄前先確認音檔真的有聲音
+## 1. Before transcribing, confirm the audio actually has sound in it
 
-多模態模型拿到一個沒有聲音的檔案時，**不會說「這是空的」，它會編出一整份看起來完全正常的逐字稿**——有講者標記、有時間戳、有連貫的內容，全部是假的。
+Give a multimodal model a silent file and **it won't say "this is empty" -- it
+will fabricate an entire transcript that looks completely normal**: speaker
+labels, timestamps, coherent content, all of it invented.
 
-在提示詞裡加「如果是空檔就回報無語音、不要編造」**擋不住**。實測加了之後，模型第二次照樣編，只是編出不同的內容。
+Adding "if the file is silent, report no speech, don't make anything up" to
+the prompt **doesn't stop this**. Tested it -- the model confabulates again on
+the second attempt, just with different fabricated content.
 
-所以要在送進模型之前，用程式量一次音量：
+So measure the volume programmatically before feeding it to the model:
 
 ```bash
 ffmpeg -i input.m4a -vn -af volumedetect -f null /dev/null 2>&1 | grep mean_volume
 ```
 
-`mean_volume` 大概落在 -40 dB 以上就是有東西。接近 -90 dB 等於靜音，**直接停下來問使用者**，不要送進去轉錄。
+`mean_volume` above roughly -40 dB means there's something there. Close to
+-90 dB is effectively silence -- **stop and ask the user**, don't send it for
+transcription.
 
-怎麼認出已經被編造的逐字稿：**通篇沒有任何專有名詞**。沒有人名、地名、產品名、具體數字。真人講一小時的審查意見，不可能一個專有名詞都沒有。
+How to spot a transcript that's already been fabricated: **no proper nouns
+anywhere in it.** No names, no places, no product names, no specific
+numbers. A real hour of review feedback from a real person can't possibly
+contain zero proper nouns.
 
-## 二、超過十分鐘就切段並行
+## 2. Past ten minutes, split it and run the segments in parallel
 
-整段長音檔丟進去，模型會在中途放棄，然後把剩下的內容變成摘要交差——而且它不會告訴你它放棄了。你拿到的逐字稿看起來完整，其實後半段是概述。
+Feed in one long audio file and the model will give up partway through, then
+turn the rest into a summary to fill the gap -- and it won't tell you it gave
+up. What you get back looks like a complete transcript; the back half is
+actually a paraphrase.
 
-切成五分鐘一段並行處理：
+Split into five-minute chunks and process them in parallel:
 
 ```bash
 ffmpeg -v error -i input.m4a -vn -ac 1 -ar 16000 -b:a 48k \
   -f segment -segment_time 300 out%02d.m4a
 ```
 
-轉完**每一段都要驗尾端時間戳**：最後一句的時間應該接近該段的長度。五分鐘的段落只轉到 2:30 就是中途放棄，那一段重跑。
+After transcribing, **check the timestamp at the end of every segment**: the
+last line's timestamp should be close to that segment's actual length. A
+five-minute segment that only transcribes up to 2:30 gave up partway --
+rerun that one.
 
-實際比例：兩份長度分別為 24 分鐘與 17 分鐘的錄音，切成 9 段，**其中 2 段第一次就失敗**，重跑才拿到完整內容。不驗就會靜靜少掉一大塊意見。
+Real numbers: two recordings, 24 minutes and 17 minutes long, split into 9
+segments total -- **2 of them failed on the first pass**, and only came out
+complete after a rerun. Skip the check and you'll silently lose a big chunk
+of feedback.
 
-合併時記得把每段的時間戳換算成整段的全域時間，不然引用起來對不上。
+When merging, remember to convert each segment's timestamps into the whole
+recording's global timeline, or citations won't line up.
 
-## 三、專有名詞一律當成待確認
+## 3. Treat every proper noun as unconfirmed
 
-就算轉錄成功，人名、產品名、專案代號還是會被聽錯，而且錯得很像真的（同音字）。
+Even a successful transcription still mishears names, product names, and
+project codenames -- and it mishears them in ways that sound plausible
+(homophones).
 
-處理方式：**逐字稿原樣歸檔，不要改**。另外在檔案末尾附一張補正表，記「音檔聽起來是什麼 / 實際是什麼 / 依據」。這樣原始紀錄保持誠實，引用時又不會用錯名字。
+How to handle it: **file the transcript exactly as transcribed, don't edit
+it.** Then attach a correction table at the end of the file: "what the audio
+sounds like / what it actually is / how you know." That keeps the raw
+record honest while still citing the right names elsewhere.
 
-判斷依據要寫出來——是查到某個檔案、還是問過本人。不要憑上下文猜然後當成確定的。
+Write down how you know -- found it in a specific file, or confirmed with
+the person. Don't guess from context and then treat the guess as settled
+fact.

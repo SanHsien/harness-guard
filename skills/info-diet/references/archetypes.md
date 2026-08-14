@@ -1,113 +1,125 @@
-# 五種畫像：怎麼判、怎麼講
+# Five Archetypes: How to Judge Them, How to Present Them
 
-> **門檻的可信度先講清楚。**
-> 這份門檻是用「一個真實樣本 + 常識」訂出來的初版，不是統計出來的。
-> 每跑完一場工作坊，把當場的數字分佈記下來回頭校正這份檔案。
-> 在校正之前，**判型只當談話的起點，不要當結論丟給學員**。
+> **Say the reliability of these thresholds up front.**
+> These thresholds were set from one real sample plus common sense — this is a first draft, not
+> something derived statistically.
+> After every workshop, record the distribution of numbers observed and use it to recalibrate this file.
+> Until it's been recalibrated, **treat the archetype as a conversation starter, not a conclusion to hand to a learner.**
 
-判型用的是 `extract.py` 輸出的四個數字：
+Archetype judging uses the four numbers `extract.py` outputs:
 
-- `self%` — 看自己佔全部造訪的比例
-- `consume%` — 外部攝取佔比
-- `feed%` — 在社群與影音平台上，停在推薦流／首頁的比例
-- `night%` — 凌晨 00-05 時佔比
+- `self%` — share of all visits spent watching yourself
+- `consume%` — share spent on external intake
+- `feed%` — on social and video platforms, the share spent stuck in the recommended feed/homepage
+- `night%` — share of visits between 00:00 and 05:00
 
-依序比對，**命中第一個就停**（一個人只給一個主型，給兩個以上就失焦了）。
-
----
-
-## 1. 回饋迴圈型
-
-**判準**：`self% >= 8`
-
-**這是最常見、也最少人自己意識到的一型。** 時間不是花在看世界，是花在看世界怎麼看自己——通知頁、自己的貼文、自己的頻道後台。
-
-**怎麼講**（要點名數字，不要抽象）：
-
-> 「你在 OO 平台上總共 N 次，其中 M 次是在看通知跟自己的貼文，佔了 X%。
-> 換句話說，你平均一天點開 K 次通知頁。
-> 這件事的重點不是浪費時間——是它跟『吸收資訊』完全無關，
-> 但在你的感覺裡，它跟滑社群是同一件事。」
-
-**要小心的地方**：對靠內容維生的人（創作者、講師、經營品牌的），看數據是工作。
-**不要把它講成缺點**，要問一句：「這裡面有多少是工作上真的要看的，多少是忍不住？」
-分不出來的話，用頻率當代理：**一天看兩三次是工作，一天二十次是迴圈。**
+Check them in order, **stop at the first match** (give one person only one primary archetype —
+giving two or more loses focus).
 
 ---
 
-## 2. 夜行型
+## 1. Feedback Loop Type
 
-**判準**：`night% >= 5`
+**Threshold**: `self% >= 8`
 
-凌晨 00-05 時的造訪佔比偏高。這一型的傷害不在資訊本身，在睡眠。
+**This is the most common type, and the one people are least aware of themselves.** Time isn't
+spent looking at the world, it's spent watching the world look back at them — the notifications
+page, their own posts, their own channel's back-end dashboard.
 
-**怎麼講**：
+**How to present it** (cite the actual number, don't go abstract):
 
-> 「你有 X% 的上網發生在凌晨零點到五點。
-> 資訊飲食裡這一項的優先度高過『你看了什麼』——
-> 因為它同時扣掉你隔天的判斷力。」
+> "You had N total visits on OO platform, and M of those were checking notifications and your own
+> posts — that's X%. Put another way, you're opening the notifications page K times a day on average.
+> The issue here isn't wasted time — it's that this has nothing to do with 'absorbing information,'
+> but it feels, to you, like the same thing as scrolling social media."
 
-**要小心的地方**：時差、輪班、跨國工作的人會誤判。**先問「你是不是常態在這個時間工作」**，
-是的話這一型不成立，跳過去看下一型。
-
----
-
-## 3. 廣度過載型
-
-**判準**：`consume% >= 30` 且 `feed% >= 50`
-
-外部攝取量大，而且大部分停在推薦流層——一直在滑，很少點進去讀完一篇。
-這是典型的「吃很多但沒有營養」：資訊確實進來了，但沒有一樣留得住。
-
-**怎麼講**：
-
-> 「你的外部攝取有 X%，這個量不算小。但其中 Y% 停在首頁跟推薦流，
-> 真的點進去讀完的只有 Z%。
-> 意思是你大部分時間不是在讀東西，是在等下一個標題。」
+**Watch out for**: for someone who makes a living from content (creators, instructors, people
+running a brand), checking data is their job. **Don't frame it as a flaw** — instead ask: "How
+much of this is actually work you need to check, and how much is you not being able to help
+yourself?" If they can't tell the difference, use frequency as a proxy: **two or three checks a
+day is work; twenty a day is a loop.**
 
 ---
 
-## 4. 單一深井型
+## 2. Night Owl Type
 
-**判準**：最大單一消費型網域 `>= 全部外部攝取的 60%`
+**Threshold**: `night% >= 5`
 
-所有外部資訊幾乎來自同一個地方。**這一型不必然是壞事**——如果那個來源本身品質高
-（例如專業論壇），集中反而是效率。壞的是使用者自己沒察覺這件事。
+An elevated share of visits happen between midnight and 5 AM. The damage here isn't about the
+information itself, it's about sleep.
 
-**怎麼講**：
+**How to present it**:
 
-> 「你的外部資訊有 X% 來自同一個地方。
-> 這不一定是問題，要看那個地方餵你的東西好不好。
-> 但你要知道：你對世界的理解，現在有 X% 是這一個來源決定的。」
+> "X% of your time online happened between midnight and 5 AM. This item takes priority over
+> 'what you looked at' in an information diet — because it's simultaneously cutting into your
+> judgment the next day."
 
----
-
-## 5. 乾淨型
-
-**判準**：以上都沒命中。
-
-**這一型一定要誠實給。**
-
-一個到處都是「你有問題」的工具，跑三次就會被看破是算命的。
-真的乾淨就說乾淨，然後把時間拿去講「那你想優化的是什麼」。
-
-**怎麼講**：
-
-> 「說實話，你的數字很健康：X、Y、Z 都在正常範圍。
-> 這個工具在你身上找不到明顯的問題。
-> 如果你還是覺得哪裡不對勁，那問題可能不在瀏覽器裡——
-> 手機上的時間、或者不是『看什麼』而是『做什麼』的問題。」
+**Watch out for**: people with jet lag, shift work, or cross-timezone jobs will get misjudged
+here. **Ask first: "Is this time slot a regular part of your work schedule?"** If so, this
+archetype doesn't apply — skip to the next one.
 
 ---
 
-## 講完之後：一定要接一個具體動作
+## 3. Broad Overload Type
 
-判型只是開場。真正有價值的是**從使用者自己的數字裡，挑一件明天就能做的事**。
+**Threshold**: `consume% >= 30` AND `feed% >= 50`
 
-規則：
+External intake volume is high, and most of it stays at the feed layer — endless scrolling,
+rarely clicking through to finish reading anything. This is the classic "eating a lot but
+absorbing no nutrition": information is coming in, but none of it sticks.
 
-- **只給一個動作**，不給清單。清單等於沒給。
-- **動作要能被數字驗證**，例如「通知頁一天三次」可以下個月重跑比對；
-  「多讀好內容」不行。
-- **不要建議封鎖或戒斷。** 這支工具是體重計，不是健身教練。
-  體重計講數字就好，開處方是使用者自己的事。
+**How to present it**:
+
+> "Your external intake is X% — that's not a small share. But Y% of that stays on the homepage
+> and recommended feed, and only Z% actually gets clicked into and read. That means most of your
+> time isn't spent reading things, it's spent waiting for the next headline."
+
+---
+
+## 4. Single Deep Well Type
+
+**Threshold**: the single largest consumption-type domain is `>= 60% of all external intake`
+
+Almost all external information comes from one place. **This isn't necessarily a bad thing** —
+if that one source is genuinely high quality (say, a professional forum), concentration can
+actually be efficient. What's bad is the user not being aware of it.
+
+**How to present it**:
+
+> "X% of your outside information comes from a single source. That's not automatically a
+> problem — it depends on whether that source is feeding you good things. But you should know:
+> right now, X% of your understanding of the world is decided by this one source."
+
+---
+
+## 5. Clean Type
+
+**Threshold**: none of the above matched.
+
+**This one must be given honestly when it applies.**
+
+A tool that always finds "you have a problem" no matter who runs it gets exposed as fortune-telling
+by the third run. If it's genuinely clean, say it's clean, and spend the time instead on
+"what would you like to optimize, if anything."
+
+**How to present it**:
+
+> "Honestly, your numbers look healthy: X, Y, and Z are all in the normal range. This tool didn't
+> find any clear issue in your data. If something still feels off, the problem might not be in
+> your browser at all — maybe it's time on your phone, or maybe it's not about 'what you're
+> looking at' but 'what you're doing.'"
+
+---
+
+## After the archetype: always follow with one concrete action
+
+Naming the archetype is just the opener. The real value is **picking one thing from the user's
+own numbers that they can start doing tomorrow.**
+
+Rules:
+
+- **Give only one action**, never a list. A list is the same as giving nothing.
+- **The action has to be verifiable by numbers** — e.g. "check the notifications page three times
+  a day" can be checked against a rerun next month; "read better content" can't.
+- **Don't suggest blocking or quitting.** This tool is a scale, not a personal trainer.
+  A scale reports numbers; prescribing treatment is the user's own business.

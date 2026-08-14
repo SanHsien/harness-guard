@@ -2,27 +2,36 @@
 """
 no-emoji-guard.py
 
-AI 要寫檔案之前，先檢查內容裡有沒有表情符號，有就擋下來不讓它寫。
+Before the AI writes a file, this checks the content for emoji, and blocks
+the write if any are found.
 
-怎麼判斷哪些算表情符號？不是我自己列一張清單，是照 Unicode 官方的定義。
-Unicode 就是全世界統一規定「哪個編號代表哪個字」的那套標準，表情符號也在裡面。
-官方檔案說是的就是，說不是的就不是，沒有我個人的判斷。
+How does it decide what counts as emoji? Not from a list I made up myself --
+from the official Unicode definition. Unicode is the standard that defines,
+worldwide, "which code point represents which character," and emoji are part
+of that. Whatever the official data says is or isn't emoji is what counts --
+no personal judgment involved.
 
-兩種情況會擋：
-  一、本來就長成彩色表情符號的字（像打勾的綠底白勾、紅色叉叉、沙漏、鎖頭）
-  二、本來是黑白符號，但後面被特別加了一個「請顯示成彩色」的隱形標記
+Two cases get blocked:
+  1. Characters that are inherently rendered as colored emoji (like the green
+     checkmark, red X, hourglass, lock)
+  2. Characters that are normally plain black-and-white symbols, but have an
+     invisible marker attached telling the renderer "show this in color"
 
-刻意不擋的（這些是排版符號，不是表情符號）：
-  ✓ ✕ → ← ↑ ↓ 　以及沒有被加隱形標記的 © ® ™
+Deliberately NOT blocked (these are typographic symbols, not emoji):
+  checkmark, X mark, arrows (up/down/left/right), and (C) (R) (TM) when not
+  followed by the invisible color marker
 
-字元表出處：https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-data.txt
-（依 v17.0，2025-07-25 版本產生）
-要更新的話：重新解析上面那個官方檔案，把下面兩張表整個換掉。
+Character table source: https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-data.txt
+(generated from v17.0, dated 2025-07-25)
+To update: re-parse the official file above and replace both tables below
+wholesale.
 
-已知限制：本 hook 只掃 Write/Edit/MultiEdit 當下要寫入的原始字元，掃不到 HTML numeric
-entity（例如某個 emoji 的十進位碼點寫成 `&#12xxxx;` 這種格式）。人工稽核既有 HTML 檔案
-的 emoji 合規性時，要先 `html.unescape()` 再比對下方兩張表的 Unicode range，否則字元級
-regex 會漏掉。
+Known limitation: this hook only scans the raw characters being written by
+Write/Edit/MultiEdit at the moment of the call -- it does not catch HTML
+numeric entities (e.g. an emoji's decimal code point written as `&#12xxxx;`).
+When manually auditing an existing HTML file for emoji compliance, run
+`html.unescape()` first, then compare against the Unicode ranges in the two
+tables below -- otherwise the character-level regex will miss them.
 """
 import json
 import re
@@ -33,25 +42,27 @@ EXT_PICTOGRAPHIC=[(0xa9,0xa9),(0xae,0xae),(0x203c,0x203c),(0x2049,0x2049),(0x212
 
 VS16 = 0xFE0F
 
-# Obsidian Tasks plugin 功能標記（僅在待辦行 - [ ] / - [x] 上放行）
-# ── 設定 ───────────────────────────────────────────────────────────────
-# 路徑含以下任一子字串時整檔放行。典型用途是 Obsidian vault：那裡的到期日與
-# 完成標記是 Tasks plugin 的功能語法，被清掉會弄壞待辦追蹤。
-# 例：EXEMPT_PATH_SUBSTRINGS = ["/my-notes/", "/vault/"]
+# Obsidian Tasks plugin functional markers (only allowed on to-do lines: - [ ] / - [x])
+# -- Configuration ----------------------------------------------------------
+# If the path contains any of these substrings, the whole file is exempted.
+# The typical use case is an Obsidian vault: due dates and completion markers
+# there are functional syntax for the Tasks plugin, and stripping them would
+# break to-do tracking.
+# Example: EXEMPT_PATH_SUBSTRINGS = ["/my-notes/", "/vault/"]
 EXEMPT_PATH_SUBSTRINGS = []
-# ───────────────────────────────────────────────────────────────────────
+# ----------------------------------------------------------------------------
 
 TASK_MARKERS = re.compile(
     "[" +
-    "\U0001F4C5"  # 到期日 due
-    "\U0001F4C6"  # 排程 scheduled
-    "\U0001F6EB"  # 開始 start
-    "\u2705"      # 完成 done
-    "\u274C"      # 取消 cancelled
-    "\u23F3"      # 進行中
-    "\U0001F501"  # 重複 recurring
-    "\u23EB\u23EC\U0001F53C\U0001F53D"  # 優先權 priority
-    "\U0001F525\u23F1\U0001F534"          # daily note 慣例符號
+    "\U0001F4C5"  # due date
+    "\U0001F4C6"  # scheduled
+    "\U0001F6EB"  # start
+    "\u2705"      # done
+    "\u274C"      # cancelled
+    "\u23F3"      # in progress
+    "\U0001F501"  # recurring
+    "\u23EB\u23EC\U0001F53C\U0001F53D"  # priority
+    "\U0001F525\u23F1\U0001F534"          # daily-note convention symbols
     "]\uFE0F?"
 )
 
@@ -67,7 +78,7 @@ def _in(cp, table):
 
 
 def find_emoji(text):
-    """回傳 [(字元, 位置)]，依上述兩條判準。"""
+    """Return [(char, position)] per the two criteria above."""
     hits = []
     n = len(text)
     for i, ch in enumerate(text):
@@ -80,7 +91,7 @@ def find_emoji(text):
 
 
 def collect(tool_input):
-    """把這次寫入的所有文字內容湊起來（各 tool 欄位不同）。"""
+    """Gather all the text content being written this call (field names vary by tool)."""
     parts = []
     for key in ("content", "new_string", "prompt"):
         v = tool_input.get(key)
@@ -101,12 +112,14 @@ def main():
     tool_input = payload.get("tool_input") or {}
     path = tool_input.get("file_path") or ""
 
-    # 逐字稿、原始外部輸入原樣歸檔，不擋
+    # Transcripts and raw external input being archived as-is are not blocked
     if re.search(r"(逐字稿|transcript|/_archive/|\.srt$|\.vtt$)", path):
         sys.exit(0)
 
-    # 整棵子樹放行（見檔頭 EXEMPT_PATH_SUBSTRINGS）。典型用途是 Obsidian vault：
-    # 那裡的到期日/完成標記是 Tasks plugin 的功能語法而非裝飾，清掉會弄壞待辦追蹤。
+    # Exempt the whole subtree (see EXEMPT_PATH_SUBSTRINGS at the top of the file).
+    # The typical use case is an Obsidian vault: due-date/completion markers
+    # there are functional Tasks plugin syntax, not decoration, and stripping
+    # them would break to-do tracking.
     if any(s and s in path for s in EXEMPT_PATH_SUBSTRINGS):
         sys.exit(0)
 
@@ -114,7 +127,8 @@ def main():
     if not text:
         sys.exit(0)
 
-    # 任何檔案裡的 Obsidian 待辦行（- [ ] / - [x]）同樣放行上述 Tasks plugin 標記
+    # Obsidian to-do lines (- [ ] / - [x]) in any file also get the above
+    # Tasks plugin markers exempted
     text = re.sub(
         r"^(\s*[-*]\s*\[[ xX/\-]\].*)$",
         lambda m: TASK_MARKERS.sub("", m.group(1)),
@@ -132,11 +146,11 @@ def main():
             uniq.append(ch)
 
     sys.stderr.write(
-        "NO-EMOJI GUARD：這次寫入含 %d 個 emoji%s——%s\n"
-        "全域規則：文件、投影片、程式碼註解、commit message 一律禁 emoji。\n"
-        "請移除後重寫。需要狀態符號請改用排版記號（✓ ✕ → ←）或純文字（完成／待辦／注意）。\n"
-        "例外（逐字稿、外部原檔歸檔）已自動放行，本次不屬於此類。\n"
-        % (len(hits), "（去重後 %d 種）" % len(uniq) if len(uniq) != len(hits) else "", " ".join(uniq))
+        "NO-EMOJI GUARD: this write contains %d emoji%s -- %s\n"
+        "Global rule: no emoji in documents, slides, code comments, or commit messages.\n"
+        "Remove them and rewrite. For status symbols, use typographic marks (checkmark, X, arrows) or plain text (done/todo/note) instead.\n"
+        "Exemptions (transcripts, raw external files being archived) are auto-allowed and this write is not one of them.\n"
+        % (len(hits), " (%d unique after dedup)" % len(uniq) if len(uniq) != len(hits) else "", " ".join(uniq))
     )
     sys.exit(2)
 

@@ -1,27 +1,32 @@
 #!/usr/bin/env bash
-# detect_browsers.sh — 找出使用者實際在用的瀏覽器 profile
+# detect_browsers.sh — find the browser profile the user actually uses
 #
-# 重要：這支腳本「只看檔案的大小與修改時間」，不會打開、不會讀取任何一筆瀏覽紀錄。
-# 它的唯一產出是一張候選清單，外加一行複製指令。
+# Important: this script "only" looks at file size and modification time —
+# it never opens or reads a single history entry.
+# Its only output is a candidate list plus one copy command.
 #
-# 為什麼不直接讀？兩個原因：
-#   1. Chrome 執行中會鎖住 History 檔，直接讀會拿到不完整或鎖死的資料。
-#   2. 讀瀏覽紀錄會碰到權限守衛。多數設定是跳出詢問（使用者按同意即可），
-#      但嚴格設定（例如 auto 模式的分類器）會直接硬擋、連問都不問——
-#      實測遇過。所以流程要能兩邊都走：先由 AI 執行複製，被擋就改請使用者自己跑。
+# Why not just read it directly? Two reasons:
+#   1. Chrome locks the History file while it's running; reading it directly
+#      would get incomplete or locked data.
+#   2. Reading browsing history runs into a permission guard. Most setups
+#      just pop a confirmation dialog (the user clicks allow and it's fine),
+#      but a strict setup (e.g. an auto-mode classifier) will hard-block it
+#      without even asking — this has happened in practice. So the flow has
+#      to handle both: the AI runs the copy first, and if that gets blocked,
+#      ask the user to run it themselves instead.
 #
-# 用法：bash detect_browsers.sh [輸出目錄]
-#   輸出目錄預設 ~/.info-diet/
+# Usage: bash detect_browsers.sh [output dir]
+#   output dir defaults to ~/.info-diet/
 
 set -uo pipefail
 
 OUTDIR="${1:-$HOME/.info-diet}"
 
-echo "=== 正在尋找瀏覽器（只看檔案大小與時間，不讀內容）==="
+echo "=== Looking for browsers (file size and time only, no content read) ==="
 echo
 
-# Chromium 家族：schema 完全相同，一套解析程式全部吃得下
-# 格式：顯示名稱|使用者資料根目錄
+# Chromium family: identical schema, one parser handles all of them
+# Format: display name|user data root
 CHROMIUM_ROOTS=(
   "Chrome|$HOME/Library/Application Support/Google/Chrome"
   "Chrome Beta|$HOME/Library/Application Support/Google/Chrome Beta"
@@ -44,10 +49,10 @@ for entry in "${CHROMIUM_ROOTS[@]}"; do
   name="${entry%%|*}"
   root="${entry#*|}"
   [ -d "$root" ] || continue
-  # Chromium 的 profile 一定是 root 底下第一層的資料夾，裡面有一個叫 History 的檔
+  # A Chromium profile is always a first-level folder under root, containing a file called History
   while IFS= read -r -d '' hist; do
     prof="$(basename "$(dirname "$hist")")"
-    # 用 stat 取「位元組大小」與「修改時間 epoch」，macOS 與 Linux 語法不同
+    # Get byte size and mtime epoch with stat; macOS and Linux use different syntax
     if stat -f '%z %m' "$hist" >/dev/null 2>&1; then
       read -r bytes mtime <<<"$(stat -f '%z %m' "$hist")"      # macOS / BSD
     else
@@ -58,18 +63,21 @@ for entry in "${CHROMIUM_ROOTS[@]}"; do
 done
 
 if [ ! -s "$TMP_LIST" ]; then
-  echo "找不到任何 Chromium 系瀏覽器（Chrome / Edge / Brave / Arc / Vivaldi）的紀錄檔。"
+  echo "No Chromium-family browser history found (Chrome / Edge / Brave / Arc / Vivaldi)."
   echo
   echo "STATUS=none"
   exit 0
 fi
 
-# 排序決定我們推薦哪一個，所以判準要挑對：
-#   - 只看時間：今天不小心點開過的空殼 profile 會排到第一，蓋掉真正的主力。
-#   - 只看大小：幾年前用很兇、現在早就不用的舊 profile 會排到第一。
-# 所以用「近 45 天內有動過」當及格線，及格的裡面再比大小；
-# 全部都沒動過時才退回純比大小。
-# 踩過的坑：Default 常常是空殼，真正在用的是 Profile 1 之類的，絕不能寫死 Default。
+# The sort order decides which one we recommend, so the criteria matter:
+#   - Sorting by time alone: a profile someone accidentally opened today
+#     would jump to the top and bury the real main profile.
+#   - Sorting by size alone: an old profile that was heavily used years ago
+#     but abandoned since would jump to the top.
+# So "touched within the last 45 days" is the qualifying bar; among those
+# that qualify, sort by size; only fall back to pure size when none qualify.
+# A lesson learned the hard way: "Default" is often an empty shell, and the
+# one actually in use is something like "Profile 1" — never hardcode Default.
 NOW_EPOCH="$(date +%s)"
 RECENT_CUTOFF=$((NOW_EPOCH - 45 * 86400))
 
@@ -78,9 +86,9 @@ awk -F'\t' -v cut="$RECENT_CUTOFF" '{ print (($1 >= cut) ? 1 : 0) "\t" $0 }' "$T
   | cut -f2- >"$TMP_LIST.sorted"
 mv "$TMP_LIST.sorted" "$TMP_LIST"
 
-echo "找到這些瀏覽器帳號（profile），最可能是主力的排在前面："
+echo "Found these browser profiles, most likely main one listed first:"
 echo
-printf '   %-16s %-12s %10s   %s\n' "瀏覽器" "帳號" "資料量" "最後使用"
+printf '   %-16s %-12s %10s   %s\n' "Browser" "Profile" "Size" "Last used"
 printf '   %s\n' "--------------------------------------------------------------------"
 
 i=0
@@ -88,7 +96,7 @@ BEST_PATH=""
 BEST_DESC=""
 while IFS=$'\t' read -r mtime bytes name prof path; do
   i=$((i + 1))
-  # 人看得懂的大小
+  # human-readable size
   if [ "$bytes" -ge 1048576 ]; then
     human="$((bytes / 1048576)) MB"
   else
@@ -109,30 +117,30 @@ while IFS=$'\t' read -r mtime bytes name prof path; do
 done <"$TMP_LIST"
 
 echo
-echo "箭頭指的是最近才在用、資料也最多的那個，通常就是本人的主力帳號。"
-echo "（注意：叫 Default 的不一定是在用的那個，很多人的主力其實是 Profile 1。）"
+echo "The arrow points to the most recently used, most data-rich profile — usually that's the main one."
+echo "(Note: one called \"Default\" isn't necessarily the one in use — for a lot of people the main one is actually \"Profile 1\".)"
 echo
 
-# 其他瀏覽器：這版不支援，但要明講，不能讓使用者以為掃過了
+# Other browsers: not supported in this version, but must be stated clearly so the user doesn't assume they were scanned
 OTHERS=""
 [ -f "$HOME/Library/Safari/History.db" ] && OTHERS="${OTHERS}Safari "
 if find "$HOME/Library/Application Support/Firefox/Profiles" -maxdepth 2 -name places.sqlite -print -quit 2>/dev/null | grep -q . ; then
   OTHERS="${OTHERS}Firefox "
 fi
 if [ -n "$OTHERS" ]; then
-  echo "另外偵測到：$OTHERS"
-  echo "這一版還不支援它們（資料格式不一樣，Safari 另外還需要「完全取用磁碟」權限）。"
-  echo "如果上面那些 Chromium 系的資料量看起來太少，代表主力可能在這裡，那這次的結果會失真。"
+  echo "Also detected: $OTHERS"
+  echo "This version doesn't support them yet (different data format; Safari also needs Full Disk Access)."
+  echo "If the Chromium-family data above looks too small, the main usage may be here instead, and this run's results would be skewed."
   echo
 fi
 
 mkdir -p "$OUTDIR"
-echo "=== 下一步：把紀錄複製一份出來（Chrome 開著時原檔是鎖住的）==="
+echo "=== Next: copy the history out (the original is locked while Chrome is running) ==="
 echo
 echo "cp \"$BEST_PATH\" \"$OUTDIR/history.db\""
 echo
-echo "先跟使用者說一聲再執行。多數人會跳出確認視窗，按同意即可。"
-echo "若被權限設定直接擋下，改請使用者在輸入框用 ! 開頭自己跑這行。"
+echo "Tell the user before running this. Most people will just see a confirmation dialog and can click allow."
+echo "If it gets blocked outright by permission settings, ask the user to run this line themselves, prefixed with !."
 echo
 
 echo "BEST_PATH=$BEST_PATH"

@@ -1,49 +1,49 @@
 ---
 name: neat-freak
-description: "Deep fact reconciliation for KB masters, project docs, and authorized memory. Use for /neat-freak, 完整對帳, 知識同步, 文檔同步, 記憶清理. With checkpoint, enable full mode instead of a second run."
+description: "Deep fact reconciliation for KB masters, project docs, and authorized memory. Use for /neat-freak, full reconciliation, knowledge sync, doc sync, memory cleanup. With checkpoint, enable full mode instead of a second run."
 ---
 
-# 潔癖 — 事實對帳引擎
+# Neat Freak — the fact-reconciliation engine
 
-本 skill 對帳「事實」：客戶狀態、合約版本、排期、款項、待辦與開發文件。它不負責寫 daily，也不負責 git commit / push。
+This skill reconciles "facts": client status, contract versions, schedules, payments, todos, and dev docs. It does not write the daily log, and it does not git commit / push.
 
-## 與 checkpoint 組合時
+## When combined with checkpoint
 
-若同一使用者指令同時包含 `checkpoint`：
+If the same user instruction names `checkpoint` too:
 
-1. 不另建 plan、不另做 Fact Detection、不另派 subagent。
-2. 告知 checkpoint manifest 使用 `mode: full`、`memory_mode: update`。
-3. 由 checkpoint 的唯一 closure worker 讀本 skill 的 `references/sync-protocol.md`。
+1. Don't build a second plan, don't run Fact Detection separately, don't spawn a separate subagent.
+2. Tell checkpoint's manifest to use `mode: full`, `memory_mode: update`.
+3. Let checkpoint's single closure worker read this skill's `references/sync-protocol.md`.
 
-這樣 daily、對帳、stage、push、驗收各只發生一次。
+That way the daily log, reconciliation, staging, push, and verification each happen exactly once.
 
-## 單獨執行時
+## When run standalone
 
 ### 1. Fact Detection
 
-主線回顧本次對話一次，產出 `fact_list`（事實 → 波及檔案），並解析 active skill dir、memory dir、vault、project roots。映射不確定才讀 `references/sync-matrix.md`。
+The main thread reviews the whole conversation once, producing a `fact_list` (facts → the files they affect), and resolves the active skill dir, memory dir, vault, and project roots. Only read `references/sync-matrix.md` when the mapping is unclear.
 
-即使 fact list 為空，明確點名 neat-freak 仍代表 `mode: full`；但要靠 enumerate 結果與最近相關檔案做 progressive disclosure，不全量載入 vault 或 rollout summaries。
+Even with an empty fact list, explicitly naming neat-freak still means `mode: full` — but rely on the enumerate results and recently-relevant files for progressive disclosure; don't load the whole vault or rollout summaries.
 
-### 2. 一次 fresh-context 執行
+### 2. One fresh-context run
 
-用一個不承接主線長對話的 bounded subagent；Codex 明確設 `fork_turns: "none"`，Claude Code 使用 `model: sonnet` 的 fresh general-purpose Agent/Task。prompt 只帶：
+Use a bounded subagent that doesn't inherit the main thread's long conversation; Codex should explicitly set `fork_turns: "none"`, Claude Code should use a fresh general-purpose Agent/Task with `model: sonnet`. The prompt carries only:
 
 - `mode: full`
 - `memory_mode: update`
-- 完整 fact list
-- active neat-freak skill dir、memory dir、vault、project roots
+- the full fact list
+- the active neat-freak skill dir, memory dir, vault, project roots
 
-第一句要求完整讀取 `references/sync-protocol.md` 並照做。不得寫 daily、commit 或 push。沒有可用 subagent 時主線自己執行。
+The first instruction must tell it to read `references/sync-protocol.md` in full and follow it. It must not write the daily log, commit, or push. If no subagent is available, the main thread executes it directly.
 
-### 3. 驗收
+### 3. Verification
 
-主線抽讀 1–2 個宣稱修改過的檔案，確認 enumerate 最終輸出與 GATE 結果，補掉能安全處理的失敗，最後只回報同步證據、變更與未處理項目。
+The main thread spot-reads 1–2 of the files claimed to have been changed, confirms the enumerate final output and the GATE result, patches any failures that can be safely fixed, and finally reports only the sync evidence, the changes made, and anything left unresolved.
 
-## 邊界
+## Boundaries
 
-- 寫日誌：那是流水帳，不是對帳，交給你的日誌流程。
-- `/checkpoint`：完整收尾的唯一入口，本 skill 是它的其中一段。
-- 定期維護（格式檢查、歸檔、索引重建）：另外排，不要塞進這裡。
+- Writing the daily log: that's a running record, not reconciliation — leave it to your logging process.
+- `/checkpoint`: the single entry point for full closure; this skill is one segment of it.
+- Periodic maintenance (format checks, archiving, index rebuilds): schedule separately, don't fold it in here.
 
-沒有 enumerate 最終輸出，就沒有完成 neat-freak。
+Without a final enumerate output, neat-freak isn't done.

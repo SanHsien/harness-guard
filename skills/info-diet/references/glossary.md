@@ -1,42 +1,44 @@
-# 白話對照表
+# Plain-Language Glossary
 
-> 學員是零技術背景。這份表列的每一個詞，**第一次出現時都要換成右邊的說法**。
-> 沒把握就用右邊的，不要用左邊的。
+> The learner has zero technical background. Every term in this list should be swapped for the
+> plain-language version **the first time it comes up.**
+> When in doubt, use the plain-language version, not the jargon.
 
-## 電腦相關
+## Computer-related
 
-| 不要說 | 要說 |
+| Don't say | Say instead |
 |---|---|
-| profile | 瀏覽器帳號（一台電腦上可以有好幾個，各自記各自的紀錄） |
-| SQLite / 資料庫 | 一個檔案，瀏覽器拿它記你去過哪些網站 |
-| schema | 資料的排法。不同瀏覽器排法不一樣，所以程式要各寫一套 |
-| 執行腳本 / run script | 跑一段小程式 |
-| terminal | 這個黑黑的輸入框 |
-| 路徑 / path | 檔案在電腦裡的位置 |
-| transition type | 這一次是怎麼進到這個頁面的（自己點的？重新整理？） |
-| iframe / subframe | 網頁裡面又嵌了另一個網頁（通常是廣告），不是你點的 |
-| 網域 / domain | 網站名稱，例如 youtube.com |
-| URL / 網址 | 完整的網頁地址，包含後面那一長串 |
-| baseline | 這次的數字。留著，下次拿來比 |
-| TCC / 完全取用磁碟 | Mac 的隱私保護設定，要手動打勾才准程式讀某些資料夾 |
-| JSON | 一種存數字的檔案格式，人也看得懂 |
+| profile | browser account (one computer can have several, each keeping its own separate history) |
+| SQLite / database | a file the browser uses to record which sites you've visited |
+| schema | how the data is laid out. Different browsers lay it out differently, so the program needs a separate reader for each |
+| run a script | run a small program |
+| terminal | this black input box |
+| path | where a file lives on your computer |
+| transition type | how you ended up on this page (did you click it yourself? refresh?) |
+| iframe / subframe | a webpage embedded inside another webpage (usually an ad), not something you clicked |
+| domain | the site's name, e.g. youtube.com |
+| URL / web address | the full web address, including that long string after the site name |
+| baseline | this run's numbers. Keep it, so you can compare next time |
+| TCC / Full Disk Access | a Mac privacy setting — some folders need this manually enabled before a program can read them |
+| JSON | a file format for storing numbers, readable by humans too |
 
-## 這支工具的概念
+## Concepts specific to this tool
 
-| 不要說 | 要說 |
+| Don't say | Say instead |
 |---|---|
-| information diet | 資訊飲食。你每天看什麼，跟你每天吃什麼是同一種東西 |
-| 攝取 / consumption | 你看進去的東西 |
-| 留存 / retention | 看完之後真的留下來、用得到的東西 |
-| feed | 首頁那個一直往下滑會一直有新東西的地方 |
-| 回饋迴圈 | 發完東西之後一直回去看有沒有人按讚的那個循環 |
-| 自我監看 | 看自己的貼文、通知、數據 |
-| archetype / 畫像 | 型。你屬於哪一型 |
-| 行為指標 | 會隨你的行為改變的數字，不是你的個性 |
+| information diet | your information diet. What you look at every day is the same kind of thing as what you eat every day |
+| consumption | what you're taking in |
+| retention | what actually sticks and gets used, after you've finished reading |
+| feed | the place on the homepage that keeps showing new things the more you scroll |
+| feedback loop | the cycle of posting something, then repeatedly going back to check for likes |
+| self-monitoring | checking your own posts, notifications, and stats |
+| archetype | your type. Which type you fall into |
+| behavioral metric | a number that changes with your behavior — it's not your personality |
 
-## 講話的原則
+## Rules for how to talk
 
-- **先講數字，再講意思。**「你有 802 次是在看通知」比「你有點過度關注回饋」有用一百倍。
-- **不要用比喻堆比喻。** 資訊飲食本身已經是一個比喻，夠了。
-- **不要說「你應該」。** 說「這個數字的意思是」，然後停下來讓使用者自己接。
-- **任何一個數字，如果你自己講不出它為什麼重要，就不要唸出來。**
+- **Lead with the number, then explain what it means.** "You checked notifications 802 times" is
+  a hundred times more useful than "you're a bit too focused on feedback."
+- **Don't stack metaphor on metaphor.** "Information diet" is already one metaphor — that's enough.
+- **Don't say "you should."** Say "what this number means is," then stop and let the user draw their own conclusion.
+- **If you can't explain why a number matters, don't read it out loud.**

@@ -1,50 +1,50 @@
-# 開發 repo 附加流程（條件載入）
+# Dev-repo add-on process (conditionally loaded)
 
-**載入條件**：本次會話碰了有 API / 環境變數 / 資料庫 / 套件發佈的 repo（如 PDT-learning）。純文檔會話（多數情況）不載入本檔。
+**Load condition**: this session touched a repo with an API / environment variables / database / package release (e.g. PDT-learning). Docs-only sessions (the common case) don't need this file.
 
-## 代碼層變更 → 文檔層變更
+## Code-level changes → doc-level changes
 
-| 本次對話發生的事 | 要改的文件（按受眾） |
+| What happened in this conversation | Files to update (by audience) |
 |---|---|
-| 新增 API / 路由 | 專案根 markdown 路由清單 · `docs/integration-guide.md` API 速查表 · `docs/architecture.md` Routes 小節 |
-| 新增 / 改名 環境變數 | 專案根 markdown 環境變數表 · `docs/operator-runbook.md` 環境變數章節 · `docs/integration-guide.md`（如果下游要配） |
-| 新增資料庫表 / 欄位 | 專案根 markdown 資料庫表 · `docs/architecture.md` Data Model |
-| 新增 / 改動 使用者流程 | 專案根 markdown 使用者流程 · README 相關命令列範例 · `docs/handoff.md` What Exists Today |
-| 新增大特性（跨多文件） | 以上全部 + `docs/architecture.md` 新增章節 + `docs/handoff.md` 已完成清單 |
-| 新增術語 / 改命名 | `docs/integration-guide.md` 術語表（如果有）+ 全域搜尋舊術語替換 |
-| 部署參數 / 基礎設施變化 | `docs/operator-runbook.md` · 專案根 markdown 部署章節 |
-| 下游專案接入方式變化 | 下游專案的 `docs/<integration>.md` · 上游專案的 `integration-guide.md` |
+| New API / route added | project-root markdown route list · `docs/integration-guide.md` API quick-reference · `docs/architecture.md` Routes section |
+| Environment variable added / renamed | project-root markdown env-var table · `docs/operator-runbook.md` env-var section · `docs/integration-guide.md` (if downstream needs to configure it) |
+| Database table / column added | project-root markdown database tables · `docs/architecture.md` Data Model |
+| User flow added / changed | project-root markdown user flows · README command-line examples · `docs/handoff.md` What Exists Today |
+| Major feature added (spans multiple files) | all of the above + new section in `docs/architecture.md` + updated completed list in `docs/handoff.md` |
+| New terminology / renamed concept | glossary in `docs/integration-guide.md` (if present) + project-wide search-and-replace of the old term |
+| Deployment parameters / infra change | `docs/operator-runbook.md` · project-root markdown deployment section |
+| Downstream project's integration method changed | downstream project's `docs/<integration>.md` · upstream project's `integration-guide.md` |
 
-## 開發專案 GATE 附加清單
+## Dev-project GATE add-on checklist
 
-SKILL.md 第二步 GATE 的開發專案專屬條目：
+Dev-project-specific items for step 2 GATE in SKILL.md:
 
-- [ ] 新增 API 路由：**在 integration-guide 和 architecture 都出現了**
-- [ ] 新增環境變數：**在 runbook 和專案根 markdown 都出現了**
-- [ ] 新增資料庫表：**在 architecture 的 Data Model 和專案根 markdown 都出現了**
-- [ ] README 的安裝 / 運行步驟跟代碼一致
-- [ ] CLAUDE.md / AGENTS.md 提到的路徑 / 命令 / 工具 / 環境變數在代碼中真實存在
+- [ ] New API route: **appears in both integration-guide and architecture**
+- [ ] New environment variable: **appears in both the runbook and the project-root markdown**
+- [ ] New database table: **appears in both architecture's Data Model and the project-root markdown**
+- [ ] README's install / run steps match the code
+- [ ] Paths / commands / tools / environment variables mentioned in CLAUDE.md / AGENTS.md actually exist in the code
 
-## 跨專案影響檢查（開發版）
+## Cross-project impact check (dev version)
 
-最容易漏改的場景：
+The scenarios most likely to get missed:
 
-- **上游 API 變了 → 下游 SDK 文檔**：協議變化必須兩邊對齊
-- **共享子域 / 路由 / 環境變數改了 → 所有 consumer 專案的 setup 文檔**
-- **認證中台變更 → 所有接入應用的 integration guide**
-- **公共元件 / 基礎設施升級 → 各專案 operator-runbook 提及版本號的地方**
+- **Upstream API changed → downstream SDK docs**: protocol changes must be aligned on both sides
+- **Shared subdomain / route / environment variable changed → setup docs of every consumer project**
+- **Auth middleware changed → integration guide of every consuming app**
+- **Shared component / infra upgraded → any operator-runbook that mentions a version number**
 
-判斷方法：這次改的東西有沒有 SDK、子域、共享配置、跨行程協議？有就要在所有依賴專案裡搜一遍提到這件事的文檔。
+How to judge: does this change touch an SDK, a subdomain, shared config, or a cross-process protocol? If so, search every dependent project for docs that mention it.
 
-## 文檔結構通用約定
+## General doc-structure convention
 
-新增一個能力（API、flow、特性）的標準動作是**四處都補**：
+The standard move when adding a capability (an API, a flow, a feature) is to **touch all four places**:
 
-1. **integration-guide / 外部視角文檔**：怎麼用（curl / SDK 範例 / 錯誤碼表）
-2. **architecture**：怎麼運作（資料流、狀態機、設計取捨）
-3. **runbook**：怎麼運維（冒煙命令、故障排查、環境變數）
-4. **handoff / CHANGELOG**：已完成
+1. **integration-guide / external-facing docs**: how to use it (curl / SDK examples / error-code table)
+2. **architecture**: how it works (data flow, state machine, design tradeoffs)
+3. **runbook**: how to operate it (smoke-test commands, troubleshooting, environment variables)
+4. **handoff / CHANGELOG**: what's done
 
-API 速查表、環境變數表、術語表是高頻查詢的結構化資訊，**必須保持「所見即最新」**。
+API quick-reference tables, env-var tables, and glossaries are high-frequency lookups — they **must stay current at all times**.
 
-> 注意：許多 repo 已有自己的機械閘門（`validate_docs.py`、`spec_lint.py`、PostToolUse hooks）。有閘門的 repo 以閘門輸出為準，本表當補充 checklist 用。
+> Note: many repos already have their own mechanical gates (`validate_docs.py`, `spec_lint.py`, PostToolUse hooks). Where a gate exists, defer to its output; treat this table as a supplementary checklist.

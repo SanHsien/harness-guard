@@ -1,106 +1,123 @@
-# 品質模式：判斷他吃進去的是不是好東西
+# Quality Mode: Judging Whether What They're Taking In Is Any Good
 
-> 只有使用者**另外授權**之後才會走到這裡。基本模式不看內容。
-> 這一段是這支工具最接近原作的地方——Clay Johnson 的主張本來就是
-> 「問題不是量，是你有沒有在挑」，而基本模式量得到量、量不到挑。
-
----
-
-## 先弄清楚：授權的到底是什麼
-
-授權之前，照這樣講，不要含糊：
-
-> **「前面那些數字告訴你注意力去了哪裡，但它判斷不出你看的東西好不好——一篇認真的深度報導跟一篇讓你生氣的標題，在數字上長得一模一樣。**
->
-> **如果你要，我可以再進一步：看你實際點開讀過的那些文章標題，然後跟你討論你吃進去的東西品質怎麼樣。**
->
-> **但這一步我要另外問你一次，因為標題透露的東西比網站名稱多很多——網站名稱只知道你去了某個新聞網，標題會知道你在關心什麼具體的事。**
->
-> **要不要做這一段都可以。不做的話，前面的分析一樣完整。」**
-
-**沒有明確答應就不要開。** 前面同意過基本分析，不等於同意這一段。
+> Only reached after the user gives **separate consent**. Basic mode doesn't look at content.
+> This section is the part of the tool closest to the original source material — Clay Johnson's
+> whole argument was that "the problem isn't quantity, it's whether you're selecting well," and
+> basic mode can measure quantity but not selection.
 
 ---
 
-## 這個模式看得到什麼、看不到什麼
+## First, be clear about exactly what's being authorized
 
-**看得到**：他點進去讀過的**文章標題**（只收「外部攝取」而且點進單篇的，
-停在推薦流的不收）。
+Before getting consent, say this plainly, don't hand-wave it:
 
-**看不到**：文章內文。這支工具不連網、不抓網頁，只用瀏覽器自己存下來的標題。
+> **"The numbers so far tell you where your attention went, but they can't tell you whether what
+> you looked at was any good — a serious in-depth report and a headline designed to make you
+> angry look identical in the numbers.**
+>
+> **If you want, I can go one step further: look at the actual titles of articles you clicked into
+> and read, then talk with you about the quality of what you're taking in.**
+>
+> **But I need to ask you separately for this one, because a title reveals a lot more than a site
+> name does — a site name only tells you they went to some news site, a title tells you what
+> specific thing they were paying attention to.**
+>
+> **Whether you do this part or not is entirely up to you. If you skip it, everything before this
+> point stands complete as-is."**
 
-**一個必須知道的限制**：**社群平台的標題幾乎沒有判斷價值。**
-X 的標題長這樣：「某某某 (@handle) / X」；Threads、Instagram 也類似。
-標題只告訴你他看了誰，不告訴你那則內容說了什麼。
+**Don't open this without a clear yes.** Agreeing to the basic analysis earlier does not mean
+agreeing to this part too.
 
-所以品質判斷要分兩種來源處理：
+---
 
-| 來源類型 | 標題有沒有用 | 改看什麼 |
+## What this mode can and can't see
+
+**Can see**: the **article titles** of pages they clicked into and read (only collects "external
+intake" visits that click into a single item — feed-layer visits aren't collected).
+
+**Can't see**: article body text. This tool doesn't go online or fetch pages — it only uses
+titles the browser has already stored.
+
+**One limitation you have to know about**: **titles on social platforms carry almost no
+judgment value.** An X title looks like "Someone (@handle) / X"; Threads and Instagram are
+similar. The title only tells you who they were looking at, not what that content said.
+
+So quality judgment needs two different approaches depending on the source:
+
+| Source type | Is the title useful | Look at instead |
 |---|---|---|
-| 新聞、部落格、電子報、論壇 | 有用，直接讀標題 | 標題本身 |
-| 社群平台（X／Threads／IG） | 沒用 | **改看「他讀的是誰」** |
+| News, blogs, newsletters, forums | Useful, read the title directly | the title itself |
+| Social platforms (X/Threads/IG) | Not useful | **look at "who they're reading" instead** |
 
 ---
 
-## 判準一：文章型來源看標題
+## Criterion 1: article-type sources — read the titles
 
-從標題群裡看這幾件事，**每一項都要能指到具體的標題才能講**：
+Look for these patterns across the set of titles. **Every point must be traceable to a specific title to be worth saying:**
 
-**1. 情緒濃度。** 標題裡有多少是憤怒、恐懼、震驚、對立？
-一個人的閱讀清單如果十篇有八篇在讓他生氣，那不是資訊，是情緒供應。
+**1. Emotional intensity.** How many titles are anger, fear, shock, or conflict?
+If eight out of ten titles in someone's reading list are designed to make them angry,
+that's not information, that's an emotion supply.
 
-Johnson 的原話值得引：媒體業發現「肯定比資訊好賣」——
-人們想看的是「證明我是對的」，不是「告訴我不知道的事」。
+Worth quoting Johnson directly here: the media industry discovered that "affirmation sells
+better than information" — what people want is "proof that I was right," not "something I didn't know."
 
-**2. 釣魚程度。** 「震驚」「你不知道的」「一定要看」「懶人包」這種結構佔多少。
+**2. Clickbait level.** How much of it is structured like "shocking," "what you didn't know,"
+"you have to see this," "roundup"?
 
-**3. 主題廣度。** 全部集中在同一個題目，還是散得很開？
-兩種都可能有問題：太集中是同溫層，太散是沒有主線。**不要預設哪個是對的**，
-問他一句：「你想要的是哪一種？」
+**3. Topic breadth.** Is everything clustered around the same subject, or spread wide?
+Both extremes can be a problem: too concentrated is an echo chamber, too scattered has no
+throughline. **Don't assume which one is correct** — just ask them: "Which one is what you actually want?"
 
-**4. 需要花時間的東西有多少。** 有沒有那種明顯要坐下來讀二十分鐘的？
-一篇都沒有的話，那是一個發現——他的資訊攝取全部是碎片。
-
----
-
-## 判準二：社群來源看「他讀的是誰」
-
-標題沒用，但報告裡有帳號名，那本身就是品質訊號：
-
-- **他讀的是他自己挑的人，還是演算法推的？**
-  同一個帳號反覆出現多次 = 他主動追；一堆各出現一次的陌生帳號 = 演算法在餵他。
-  這正好對應 Johnson 說的「攝取前就要挑好」——主動追是挑，被餵不是。
-- **停在推薦流的比例**（前面基本模式已經算出來了）配這一項一起看：
-  推薦流比例高＋帳號都很分散 = 他的社群攝取幾乎完全由演算法決定。
+**4. How much of it takes real time.** Is there anything that clearly needs twenty focused
+minutes to read? If there's nothing like that at all, that's a finding in itself — their
+information intake is entirely fragmented.
 
 ---
 
-## 講的時候的規矩
+## Criterion 2: social sources — look at "who they're reading"
 
-**1. 不做道德評價。** 看到娛樂、八卦、追劇，標好類別就結束。
-問題從來不是娛樂，是**把娛樂誤認成學習**。這句話可以直接講給學員聽。
+Titles aren't useful, but the report has account names, and that itself is a quality signal:
 
-**2. 不替他決定什麼叫好。** 你的工作是把模式指出來，讓他自己說那是不是他要的。
-講法用「你的閱讀清單裡有 X 篇是……，這是你想要的比例嗎？」
-不要用「你應該多讀一點……」。
-
-**3. 政治立場一律不評。** 看到政治相關的標題，只做兩件事：
-統計立場的**多樣性**（都來自同一邊嗎），不評論那個立場本身。
-這是原作真正在意的事——他在意的是同溫層，不是你站哪邊。
-
-**4. 看到私密的東西就當沒看到。** 即使使用者授權了，授權的範圍是
-「判斷資訊品質」，不是「解讀你的人生」。健康、感情、財務困難、
-求職動向這類標題，就算漏網進來了也不要提。
-
-**5. 樣本太少就直說。** 如果他點進單篇的次數本來就很少，
-標題湊不出判斷，就講「你的資料裡沒有足夠的單篇閱讀可以判斷品質——
-而這件事本身就是答案：你幾乎只滑不讀」。
+- **Are they reading accounts they chose, or accounts the algorithm pushed at them?**
+  The same account showing up repeatedly = they're actively following it; a bunch of
+  one-off strangers = the algorithm is feeding them. This maps directly to Johnson's point about
+  "choosing before you consume" — actively following is choosing, being fed is not.
+- **Pair this with the scroll-without-clicking ratio** (already computed in basic mode):
+  a high feed-layer ratio plus scattered accounts = their social intake is almost entirely
+  algorithm-determined.
 
 ---
 
-## 收尾
+## Rules for how to talk about this
 
-品質模式的產出**不進基準值檔**，也不列入下個月的複驗指標。
+**1. No moral judgment.** Entertainment, gossip, binge-watching — label the category and move
+on. The problem was never entertainment — it's **mistaking entertainment for learning.** You can
+say this directly to the learner.
 
-理由：品質是判斷，不是量測。把它變成一個要追蹤的數字，
-它就會變成另一個「越高越好」的分數——那正是這支工具一開始就決定不做的事。
+**2. Don't decide what "good" means for them.** Your job is to point out the pattern and let
+them say whether it's what they want. Phrase it as "your reading list has X articles that are
+..., is that the ratio you want?" — not "you should read more ..."
+
+**3. Never evaluate political stance.** For political-leaning titles, do exactly two things:
+report the **diversity** of viewpoints (are they all from one side), and don't comment on the
+stance itself. This is what the original author actually cared about — echo chambers, not which side someone's on.
+
+**4. Treat anything private as unseen.** Even with consent, the authorization covers
+"judging information quality," not "interpreting someone's life." Health, relationships,
+financial hardship, job-search-related titles — even if some slip through, don't bring them up.
+
+**5. If the sample's too small, say so.** If they have very few single-article clicks to begin
+with, titles won't be enough to judge — say "there isn't enough single-article reading in your
+data to judge quality — and that absence is itself the answer: you're almost entirely
+scrolling, not reading."
+
+---
+
+## Wrap-up
+
+Quality mode's output **doesn't go into the baseline file**, and isn't part of next month's re-check metrics.
+
+Reason: quality is a judgment call, not a measurement. Turning it into a number to track would
+turn it into just another "higher is better" score — exactly the thing this tool decided from
+the start not to do.

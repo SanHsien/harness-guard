@@ -1,6 +1,6 @@
 ---
 name: first-principles
-description: "第一性原理思考：系統性拆解問題至基本事實，從底層重新推導，避免類比推理陷阱；附未知盤點四象限模式（需求模糊、不熟領域先盤 unknowns）。Triggers: 第一性原理, first principles, 從根本想, 為什麼要這樣做, 盲區, 未知盤點。"
+description: "First principles thinking: systematically decompose a problem down to fundamental facts and reason back up from there, avoiding the trap of reasoning by analogy; includes an unknowns-inventory four-quadrant mode (for ambiguous requirements or unfamiliar domains, inventory unknowns first). Triggers: first principles, first principles rethink, reason from the ground up, why should this be done this way, blind spots, unknowns inventory."
 version: 0.3.0
 ---
 
@@ -20,13 +20,13 @@ Customized from awesome-skills/first-principles-skill — added Phase 0 (Delete 
 - Designing new systems without cargo-culting existing patterns
 - Questioning whether a requirement or step should exist at all
 
-> **Explore-unknowns 模式（2026-07-19 併入原 explore-unknowns skill）**：需求模糊或領域不熟、要先盤點「已知的未知／未知的未知」四象限時，改讀 [references/explore-unknowns/guide.md](references/explore-unknowns/guide.md)（其 references/ 在同目錄）。盤完 unknowns 再回本檔做拆解。
+> **Explore-unknowns mode (merged from the former explore-unknowns skill on 2026-07-19)**: When the requirement is ambiguous or the domain is unfamiliar and you need to inventory the "known unknowns / unknown unknowns" four quadrants first, read [references/explore-unknowns/guide.md](references/explore-unknowns/guide.md) instead (its own references/ live in the same directory). Come back to this file for the decomposition once the unknowns are mapped.
 
 ## Core Process
 
 ### Phase 0: Question the Requirement Itself (Delete First)
 
-**起手式**：分析「怎麼解」之前，先問這個需求／步驟／功能該不該存在。能刪就刪，不要去優化一個根本不該存在的東西；刪掉之後真的壞了，再加回來。
+**Opening move**: before analyzing *how* to solve something, ask whether this requirement/step/feature should exist at all. If it can be deleted, delete it — don't optimize something that shouldn't exist in the first place. If deleting it actually breaks something, add it back.
 
 Before analyzing *how* to solve a problem, ask whether it should be solved at all.
 

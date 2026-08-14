@@ -1,79 +1,83 @@
-# 分類規則：五個桶子怎麼分
+# Classification Rules: How the Five Buckets Get Sorted
 
-腳本會先自動猜一輪，猜不出來的丟進「未分類」。這份檔案是給你（Claude）
-在跟使用者一起判「未分類」那些網域時用的判準。
+The script takes a first automatic pass, and anything it can't figure out falls into
+"unclassified." This file is the criteria for you (Claude) to use when working through
+"unclassified" domains together with the user.
 
 ---
 
-## 五個桶子的定義
+## Definitions of the five buckets
 
-| 桶子 | 定義 | 判斷問題 |
+| Bucket | Definition | The question to ask |
 |---|---|---|
-| **外部攝取** | 從世界拿東西進來 | 「他在這裡是為了知道別人在想什麼／發生什麼事嗎？」 |
-| **看自己** | 看世界怎麼看他 | 「他在這裡看的是自己的內容、數據或別人對他的反應嗎？」 |
-| **通訊對話** | 一對一或群組往來 | 「這裡有特定的對話對象嗎？」 |
-| **工具與工作台** | 拿來做事的 | 「他在這裡是在產出東西、查東西、或處理事務嗎？」 |
-| **未分類** | 判不出來 | 上面四個都不明顯 |
+| **External intake** | Bringing something in from the outside world | "Are they here to find out what other people think, or what's happening?" |
+| **Watching yourself** | Watching how the world sees them | "Are they looking at their own content, their own stats, or reactions to themselves here?" |
+| **Messaging** | One-on-one or group back-and-forth | "Is there a specific person or group they're talking to here?" |
+| **Tools & workbench** | Used to get things done | "Are they producing something, looking something up, or handling a task here?" |
+| **Unclassified** | Can't tell | None of the above four is obvious |
 
 ---
 
-## 判「未分類」時的判準（依序問）
+## Criteria for judging "unclassified" (ask in this order)
 
-**1. 這個網域是搜尋引擎、雲端硬碟、後台、銀行、購物、訂票嗎？**
-→ 工具與工作台。這類的共通點是「有明確的事務目的，做完就走」。
+**1. Is this domain a search engine, cloud drive, admin dashboard, bank, shopping, or booking site?**
+→ Tools & workbench. What these have in common: "a clear task, done, and they leave."
 
-**2. 是新聞網站、論壇、影音平台、社群嗎？**
-→ 外部攝取。**在地新聞與非英語平台最常落在未分類，這是內建清單的必然缺口，
-不要因為沒見過就跳過。**
+**2. Is it a news site, forum, video platform, or social network?**
+→ External intake. **Local news and non-English platforms most commonly land in unclassified —
+this is an inevitable gap in the built-in list, don't skip it just because you haven't seen it before.**
 
-**3. 是使用者自己的網站、自己的服務後台、自己公司的系統嗎？**
-→ 看路徑型態：看數據、看留言、看訂單狀態 → 看自己；實際在編輯內容 → 工具與工作台。
+**3. Is it the user's own site, their own service's back end, their own company's system?**
+→ Look at the path shape: checking stats, comments, order status → watching yourself;
+actually editing content → tools & workbench.
 
-**4. 判不出來就直接問使用者。**
-問法要短：「`xxx.com` 你去了 N 次，那是什麼？」
-**不要自己猜一個然後照著往下講**——猜錯會讓整份報告失去可信度，
-而且使用者通常一秒就能回答。
+**4. If you still can't tell, just ask the user.**
+Keep it short: "You went to `xxx.com` N times — what is that?"
+**Don't guess and then keep going as if your guess is fact** — a wrong guess tanks the credibility
+of the whole report, and the user can usually answer in one second anyway.
 
 ---
 
-## 同一個網域會橫跨多個桶子（重要）
+## The same domain can span multiple buckets (important)
 
-**這是這支工具最容易做錯的地方，而且做錯會直接埋掉核心發現。**
+**This is the easiest place to get this tool wrong, and getting it wrong here buries the core finding.**
 
-腳本已經改成「按每一次造訪」分類，不是按網域。但你在跟使用者解讀時，
-也要保持同樣的顆粒度。例如：
+The script has already been rewritten to classify "per visit," not per domain. Keep that same
+granularity when interpreting results with the user. For example:
 
-| 網域 | 路徑 | 桶子 |
+| Domain | Path | Bucket |
 |---|---|---|
-| threads.com | `/activity` | 看自己 |
-| threads.com | `/@自己的帳號/post` | 看自己 |
-| threads.com | `/`（首頁動態） | 外部攝取 |
-| threads.com | `/@別人/post` | 外部攝取 |
-| threads.com | `/messages` | 通訊對話 |
-| youtube.com | `/watch` | 外部攝取 |
-| youtube.com | `/@自己的頻道` | 看自己 |
-| studio.youtube.com | 任何路徑 | 看自己 |
+| threads.com | `/activity` | watching yourself |
+| threads.com | `/@own-handle/post` | watching yourself |
+| threads.com | `/` (home feed) | external intake |
+| threads.com | `/@someone-else/post` | external intake |
+| threads.com | `/messages` | messaging |
+| youtube.com | `/watch` | external intake |
+| youtube.com | `/@own-channel` | watching yourself |
+| studio.youtube.com | any path | watching yourself |
 
-輸出裡標了「(混)」的網域，就是這種情況。**解讀時一定要把它拆開講**，
-只講「你在 Threads 花了 2324 次」是沒有資訊量的。
-
----
-
-## 認出「本人帳號」
-
-腳本會列出候選：某個帳號在同平台上的造訪次數遠高於其他帳號時，就是候選。
-
-**一定要跟使用者確認，不要自己認定。** 有人會反覆看某個偶像或對手的頁面，
-次數一樣會很高，認錯會很尷尬。
-
-確認之後**務必重跑一次**加上 `--self <帳號>`。不重跑的話，
-「看自己」那個數字會嚴重低估——實測差距可以到 4 個百分點以上。
+Domains marked "(mixed)" in the output are exactly this situation. **Always break it apart when
+interpreting it** — just saying "you spent 2,324 visits on Threads" carries no real information.
 
 ---
 
-## 「只滑不點」怎麼算
+## Identifying the "personal account"
 
-停在這些路徑 = 還在推薦流層，沒有點進任何具體內容：
+The script lists candidates: an account with a visit count far higher than any other on the same
+platform.
+
+**Always confirm with the user, don't assume.** Someone might repeatedly look at a celebrity's or
+rival's page and rack up just as many visits — guessing wrong here is embarrassing.
+
+Once confirmed, **make sure to rerun** with `--self <handle>`. Without rerunning,
+the "watching yourself" number will be badly understated — in practice, the gap can exceed
+4 percentage points.
+
+---
+
+## How "scroll-without-clicking" is computed
+
+Staying on any of these paths = still in the feed layer, hasn't clicked into any specific content:
 
 ```
 /  /home  /explore  /feed  /foryou  /browse  /trending
@@ -81,18 +85,21 @@
 /search  /search_result  /results  /hot  /new  /all
 ```
 
-這個比例只在「外部攝取」與「看自己」兩類上計算。
-工具與工作台不適用——沒有人會說 Gmail 的收件匣是「只滑不點」。
+This ratio is only computed for the "external intake" and "watching yourself" categories.
+It doesn't apply to tools & workbench — nobody would call staying on Gmail's inbox "scrolling without clicking."
 
-**搜尋結果頁算 feed 層**，因為停在搜尋結果沒點進去，跟停在推薦流是同一件事。
+**Search result pages count as the feed layer**, since staying on search results without
+clicking through is the same behavior as staying on a recommended feed.
 
 ---
 
-## 不要做的判斷
+## Judgments to avoid making
 
-- **不要從網域推測使用者的處境。** 看到求職網站、醫療網站、法律諮詢就當沒看到，
-  除非使用者自己提。這支工具的授權範圍是「分析注意力分佈」，不是「解讀人生」。
-- **不要對娛樂類下價值判斷。** 娛樂就是娛樂，標好類別就夠了。
-  問題從來不是娛樂，是把娛樂誤認成學習。
-- **不要因為某個網域「聽起來沒營養」就建議砍掉。** 先問它在使用者生活裡是什麼。
-  住在國外的人看當地新聞、有嗜好的人看嗜好論壇，都不需要理由。
+- **Don't infer someone's life situation from a domain.** Job-search sites, medical sites,
+  legal consultations — treat as unseen, unless the user brings it up themselves. This tool's
+  authorized scope is "analyzing attention distribution," not "interpreting someone's life."
+- **Don't pass value judgment on entertainment.** Entertainment is entertainment, just label the
+  category and move on. The problem was never entertainment itself — it's mistaking entertainment for learning.
+- **Don't suggest cutting a domain just because it "sounds unproductive."** Ask first what role
+  it plays in the user's life. Someone living abroad reading local news, someone with a hobby
+  reading a hobby forum — neither needs a justification.

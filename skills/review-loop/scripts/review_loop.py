@@ -1,46 +1,57 @@
 #!/usr/bin/env python3
-"""review_loop —— 讓「人審查 AI 寫的長文件」這件事不會在改版之間走樣。
+"""review_loop -- keeps "a human reviewing a long AI-written document" from
+drifting between revisions.
 
-只用 Python 標準函式庫，不需要安裝任何東西。
+Pure standard library, nothing to install.
 
-它在做的事只有一件：讓「實際發生的變更」與「被人看見的變更」數量相等。
-飄移的定義就是這兩個數字對不起來——有東西改了、甚至整段不見了，
-而審查的人從頭到尾不知道。
+It does exactly one thing: make the number of changes that actually happened
+equal the number of changes the reviewer actually saw. Drift is defined as
+those two numbers not matching -- something changed, or an entire section
+vanished, and the reviewer never knew.
 
-三個指令：
+Three commands:
 
-  render <doc.md>    把文件渲染成可審查的網頁（每段一個評論格），並記錄這一版的狀態
-  check <doc.md>     出版前的閘門。覆蓋率、核可竄改、隱式繼承、重複數字，有問題就非零退出
-  apply <doc.md> <feedback.txt>   吃審查回饋，更新每段狀態，印出待辦清單
+  render <doc.md>    Render the document into a reviewable web page (one
+                      comment box per block) and record this version's state
+  check <doc.md>      Pre-publish gate. Exits non-zero on coverage gaps,
+                      tampered approvals, implicit inheritance, or
+                      duplicated numbers
+  apply <doc.md> <feedback.txt>   Consume review feedback, update each
+                      block's status, print the to-do list
 
-文件格式：在 markdown 裡用一行註解標出每一段的永久代號。
+Document format: mark each block with a one-line comment holding its
+permanent id.
 
     <!-- @block intro -->
-    ## 這份文件是什麼
-    內文……
+    ## What this document is
+    body...
 
     <!-- @block timeline -->
-    ## 時間軸
-    內文……
+    ## Timeline
+    body...
 
-代號（intro、timeline）出生時取一次，之後**永遠不能改**。
-標題可以改、順序可以換、內文可以重寫，代號跟著那塊內容走。
-顯示的編號是渲染時自動生成的，不要手寫。
+Ids (intro, timeline) are assigned once at birth and **never change after
+that**. Headings can change, order can change, the body can be rewritten
+entirely -- the id follows that block of content.
+The displayed numbering is generated at render time; never hand-write it.
 
-要拿掉一段時，不要直接刪掉——那樣它會從審查流程裡整個消失，
-不是被否決，是從來沒進過任何人的視野。改成留一行：
+To remove a block, don't just delete it -- that would make it vanish from
+the review flow entirely, not rejected, just never seen by anyone. Leave one
+line instead:
 
-    <!-- @block old-section removed: 併進 timeline 了，這段的判斷已不適用 -->
+    <!-- @block old-section removed: folded into timeline, this call no longer applies -->
 
-狀態不用手寫，全部由這支腳本算出來（比對內容雜湊）：
+Status is never hand-written; this script computes all of it (by comparing
+content hashes):
 
-  new        這一版才出現
-  edited     內容跟上一版不一樣
-  unchanged  內容跟上一版一模一樣
-  approved   審查的人核可過，且核可之後沒有再動過
-  removed    顯式移除，渲染成灰色仍留在文件裡
+  new        appeared for the first time in this version
+  edited     content differs from the previous version
+  unchanged  content is byte-for-byte identical to the previous version
+  approved   the reviewer approved it, and it hasn't been touched since
+  removed    explicitly removed; rendered greyed-out but still in the document
 
-狀態記在 <doc>.review-state.json，那個檔是**產物不是原稿**，不要手動編輯。
+State lives in <doc>.review-state.json. That file is an **artifact, not a
+source document** -- don't hand-edit it.
 """
 
 import argparse
@@ -57,38 +68,39 @@ BLOCK_RE = re.compile(
     r"(?:[ \t]+removed[ \t]*:[ \t]*(.*?))?[ \t]*-->[ \t]*$"
 )
 
-# 隱式繼承：一段內容如果要靠「參照別段」才看得懂，改版時那個參照會爛掉，
-# 而且被參照的那段一旦歸檔，這段就殘廢了。每一段都要能單獨看懂。
+# Implicit inheritance: a block that only makes sense by pointing at another
+# block will rot the moment that reference does -- and once the referenced
+# version is archived, the "final" copy is crippled. Every block has to
+# stand on its own.
 INHERIT_PATTERNS = [
-    (r"同\s*v\d", "同 vN"),
-    (r"同上一?版", "同上一版"),
-    (r"同前[一]?[節段版]", "同前節"),
-    (r"見前[一]?[節段]", "見前節"),
-    (r"可跳過", "可跳過"),
-    (r"[（(]?同上[）)]?", "同上"),
+    (r"same as v\d", "same as vN"),
+    (r"same as (?:the )?previous version", "same as previous version"),
+    (r"see (?:the )?previous section", "see previous section"),
+    (r"can be skipped", "can be skipped"),
     (r"unchanged from v\d", "unchanged from vN"),
     (r"same as (?:above|previous)", "same as above"),
 ]
 
 NUMBER_RE = re.compile(
-    r"(?:NT\$|US\$|\$|USD|TWD)\s?[\d,]+(?:\.\d+)?"       # 金額
-    r"|\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b"                  # 帶千分位
-    r"|\b\d+\s*(?:分鐘|小時|人|天|週|個月|%)"              # 帶單位
+    r"(?:NT\$|US\$|\$|USD|TWD)\s?[\d,]+(?:\.\d+)?"          # currency amounts
+    r"|\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b"                     # comma-grouped
+    r"|\b\d+\s*(?:minutes?|hours?|people|days?|weeks?|months?|%)"  # unit-bearing
 )
 
 STATUS_ORDER = ["new", "edited", "unchanged", "approved", "removed"]
 STATUS_LABEL = {
-    "new": "新增",
-    "edited": "已改",
-    "unchanged": "未動",
-    "approved": "已核可",
-    "removed": "已移除",
+    "new": "New",
+    "edited": "Edited",
+    "unchanged": "Unchanged",
+    "approved": "Approved",
+    "removed": "Removed",
 }
 
-DEFAULT_MIN_COVERAGE = 1.0  # 上一版的區塊必須 100% 在這一版有下落（在或顯式移除）
+DEFAULT_MIN_COVERAGE = 1.0  # every block from the previous version must have
+                             # a known fate (present, or explicitly removed)
 
 
-# ---------------------------------------------------------------- 解析
+# ---------------------------------------------------------------- parsing
 
 def sha(text):
     return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()[:16]
@@ -106,7 +118,7 @@ def first_heading(body):
 
 
 def parse(path):
-    """讀 markdown，切成區塊。回傳 (preamble, [block,...])。"""
+    """Read the markdown, split it into blocks. Returns (preamble, [block,...])."""
     with open(path, encoding="utf-8") as f:
         lines = f.read().splitlines()
 
@@ -118,8 +130,8 @@ def parse(path):
             continue
         bid, removed_reason = m.group(1), m.group(2)
         if bid in seen:
-            sys.exit(f"錯誤：區塊代號重複 '{bid}'（第 {seen[bid]} 行與第 {lineno} 行）。"
-                     f"\n代號是身分，必須唯一。")
+            sys.exit(f"Error: duplicate block id '{bid}' (line {seen[bid]} and line {lineno})."
+                     f"\nAn id is an identity -- it must be unique.")
         seen[bid] = lineno
         cur = {"id": bid, "lineno": lineno, "lines": [],
                "removed_reason": (removed_reason or "").strip() or None}
@@ -128,7 +140,7 @@ def parse(path):
     for b in blocks:
         b["body"] = "\n".join(b["lines"]).strip()
         b["hash"] = sha(b["body"])
-        b["title"] = b["removed_reason"] and f"（已移除）{b['id']}" or first_heading(b["body"])
+        b["title"] = b["removed_reason"] and f"(Removed) {b['id']}" or first_heading(b["body"])
     return "\n".join(preamble).strip(), blocks
 
 
@@ -151,10 +163,10 @@ def save_state(doc, st):
         f.write("\n")
 
 
-# ---------------------------------------------------------------- 狀態計算
+# ---------------------------------------------------------------- status computation
 
 def compute(blocks, st, bump=False):
-    """比對雜湊算出每個區塊這一版的狀態。bump=True 時把新狀態寫回 state。"""
+    """Diff hashes to work out each block's status for this version. bump=True writes the new state back."""
     prev = st.get("blocks", {})
     version = st.get("current_version", 0) + (1 if bump else 0)
     version = max(version, 1)
@@ -167,7 +179,7 @@ def compute(blocks, st, bump=False):
         elif rec is None:
             status = "new"
         elif rec.get("status") == "removed":
-            status = "new"            # 移除之後又加回來，當新的看
+            status = "new"            # removed then brought back -- treat as new
         elif rec.get("hash") != b["hash"]:
             status = "edited"
         elif rec.get("approved_hash") == b["hash"]:
@@ -190,7 +202,8 @@ def compute(blocks, st, bump=False):
             if b["removed_reason"]:
                 rec["removed_reason"] = b["removed_reason"]
             newblocks[b["id"]] = rec
-        # 上一版有、這一版整個消失的，強制留下墓碑，不讓它靜靜不見
+        # a block that existed last version and is entirely gone this version
+        # gets a forced tombstone, so it can't quietly disappear
         for bid, rec in prev.items():
             if bid not in newblocks:
                 rec = dict(rec)
@@ -202,13 +215,16 @@ def compute(blocks, st, bump=False):
     return version, out
 
 
-# ---------------------------------------------------------------- 檢查
+# ---------------------------------------------------------------- checks
 
 def coverage(prev_blocks, cur_ids):
-    """上一版的區塊，有多少在這一版找得到下落（還在，或顯式標了移除）。
+    """Of the previous version's blocks, how many have a known fate in this
+    version (still present, or explicitly marked removed).
 
-    這是整支腳本最重要的一個數字。用 agent 去「找有沒有漏東西」永遠不可靠，
-    改成算一個有分母的比率，少一段就是比率掉下來，不需要有人「注意到」。
+    This is the single most important number in the script. Sending an agent
+    to "look for anything missing" is never reliable; turning it into a
+    ratio with a denominator means a missing block always shows up as the
+    ratio dropping, with no human "noticing" required.
     """
     live = [bid for bid, rec in prev_blocks.items() if rec.get("status") != "vanished"]
     if not live:
@@ -225,72 +241,72 @@ def check(doc, min_cov=DEFAULT_MIN_COVERAGE, strict_numbers=False):
     cur_ids = {b["id"] for b in blocks}
     errors, warns = [], []
 
-    # 一、覆蓋率：上一版的東西不准無聲消失
+    # 1. coverage: nothing from the previous version disappears silently
     cov, missing, matched, total = coverage(st.get("blocks", {}), cur_ids)
     if total:
-        line = f"覆蓋率 {cov:.3f}（{matched}/{total}，門檻 {min_cov}）"
+        line = f"coverage {cov:.3f} ({matched}/{total}, threshold {min_cov})"
         if cov < min_cov:
-            errors.append(f"{line}\n     上一版有、這一版找不到的區塊：{'、'.join(missing)}"
-                          f"\n     要拿掉請留一行 <!-- @block <id> removed: 理由 -->，不要直接刪。")
+            errors.append(f"{line}\n     Blocks present last version but missing now: {', '.join(missing)}"
+                          f"\n     To remove one, leave a line <!-- @block <id> removed: reason -->. Don't just delete it.")
         else:
             print(f"  ok   {line}")
 
-    # 二、核可過的區塊被改了卻沒說
+    # 2. an approved block got changed without anyone saying so
     tampered = [b for b in blocks
                 if b["approved_hash"] and b["hash"] != b["approved_hash"]
                 and b["status"] != "removed"]
     if tampered:
-        errors.append("核可過的區塊被改動：" + "、".join(b["id"] for b in tampered) +
-                      "\n     核可＝那一刻的內容被凍結。要改就要重新送審，不能默默改掉。")
+        errors.append("Approved blocks changed after approval: " + ", ".join(b["id"] for b in tampered) +
+                      "\n     Approval freezes the content at that moment. Changing it means resubmitting for review, not silently editing it.")
     else:
         napp = sum(1 for b in blocks if b["status"] == "approved")
-        print(f"  ok   核可區塊 {napp} 個，內容與核可當下一致")
+        print(f"  ok   {napp} approved block(s), content still matches what was approved")
 
-    # 三、隱式繼承：每一段都要能單獨看懂
+    # 3. implicit inheritance: every block has to stand on its own
     hits = []
     for b in blocks:
         for pat, label in INHERIT_PATTERNS:
-            if re.search(pat, b["body"]):
-                hits.append(f"{b['id']}（{label}）")
+            if re.search(pat, b["body"], re.IGNORECASE):
+                hits.append(f"{b['id']} ({label})")
                 break
     if hits:
-        errors.append("出現指向其他版本或其他段落的寫法：" + "、".join(hits) +
-                      "\n     這類參照在改版或歸檔之後會爛掉。每一段都要自己講完整。")
+        errors.append("Wording that points to another version or section (implicit inheritance): " + ", ".join(hits) +
+                      "\n     This kind of reference rots after a revision or archiving. Every block has to say the whole thing itself.")
     else:
-        print("  ok   沒有隱式繼承的寫法")
+        print("  ok   no implicit-inheritance wording found")
 
-    # 四、同一個數字寫在兩個地方（會各自漂成兩套說法）
+    # 4. the same number written in two places (they'll drift into two stories)
     where = {}
     for b in blocks:
         if b["status"] == "removed":
             continue
         for n in set(NUMBER_RE.findall(b["body"])):
             where.setdefault(n.strip(), set()).add(b["id"])
-        # 忽略純敘述性的小數字，只看有單位或幣別的
+        # ignore plain narrative digits, only track ones with a unit or currency
     dupes = {n: ids for n, ids in where.items() if len(ids) > 1}
     if dupes:
-        msg = "同一個數字出現在多個區塊（兩邊會各自漂）：\n" + "\n".join(
-            f"     {n} → {'、'.join(sorted(ids))}" for n, ids in sorted(dupes.items())[:12])
+        msg = "The same number shows up in more than one block (they'll drift apart):\n" + "\n".join(
+            f"     {n} -> {', '.join(sorted(ids))}" for n, ids in sorted(dupes.items())[:12])
         (errors if strict_numbers else warns).append(msg)
     else:
-        print("  ok   沒有重複出現的數字")
+        print("  ok   no number appears in more than one block")
 
     print()
     for w in warns:
-        print(f"  注意 {w}")
+        print(f"  NOTE {w}")
     for e in errors:
-        print(f"  失敗 {e}")
+        print(f"  FAIL {e}")
     if errors:
-        print(f"\n沒過。{len(errors)} 項要處理。")
+        print(f"\nFailed. {len(errors)} issue(s) to fix.")
         return 1
-    print("通過。" + ("（有注意事項，不擋出版）" if warns else ""))
+    print("Passed." + (" (notes above, not blocking release)" if warns else ""))
     return 0
 
 
-# ---------------------------------------------------------------- 渲染
+# ---------------------------------------------------------------- rendering
 
 def md_lite(text):
-    """把區塊內文轉成夠用的 HTML。刻意不做完整 markdown——這是審查頁不是出版品。"""
+    """Turn a block's body into just-enough HTML. Deliberately not full markdown -- this is a review page, not a publication."""
     out, in_ul, in_code = [], False, False
     for raw in text.splitlines():
         line = raw.rstrip()
@@ -341,7 +357,7 @@ def render(doc, out_path=None, title=None):
 
     here = os.path.dirname(os.path.abspath(__file__))
     tpl_path = os.path.join(here, "..", "assets", "template.html")
-    if not os.path.exists(tpl_path):                       # 腳本被單獨搬走時的退路
+    if not os.path.exists(tpl_path):                       # fallback if the script gets moved on its own
         tpl_path = os.path.join(here, "template.html")
     with open(tpl_path, encoding="utf-8") as f:
         tpl = f.read()
@@ -359,17 +375,17 @@ def render(doc, out_path=None, title=None):
             '<code class="bid">{id}</code></div>'
             '{rm}<div class="body">{body}</div>'
             '<div class="cmt"><div class="intent">'
-            '<label><input type="radio" name="i-{id}" value="通過">通過</label>'
-            '<label><input type="radio" name="i-{id}" value="改">改</label>'
-            '<label><input type="radio" name="i-{id}" value="問">問</label>'
-            '<label><input type="radio" name="i-{id}" value="討論">討論</label>'
+            '<label><input type="radio" name="i-{id}" value="Approve">Approve</label>'
+            '<label><input type="radio" name="i-{id}" value="Revise">Revise</label>'
+            '<label><input type="radio" name="i-{id}" value="Question">Question</label>'
+            '<label><input type="radio" name="i-{id}" value="Discuss">Discuss</label>'
             '</div><textarea data-for="{id}" rows="2" '
-            'placeholder="這一段的意見（不填就等於沒意見）"></textarea></div>'
+            'placeholder="Your comment on this block (blank = no comment)"></textarea></div>'
             '</section>'.format(
                 id=html.escape(b["id"]), st=b["status"], i=i,
                 title=html.escape(b["title"] or b["id"]),
                 lab=STATUS_LABEL[b["status"]],
-                rm=('<p class="rmwhy">移除理由：%s</p>' % html.escape(b["removed_reason"]))
+                rm=('<p class="rmwhy">Removal reason: %s</p>' % html.escape(b["removed_reason"]))
                    if b["removed_reason"] else "",
                 body=md_lite(b["body"]) if not b["removed_reason"] else ""))
 
@@ -377,8 +393,8 @@ def render(doc, out_path=None, title=None):
               .replace("{{TITLE}}", html.escape(title or os.path.basename(doc)))
               .replace("{{VERSION}}", str(version))
               .replace("{{PREAMBLE}}", md_lite(preamble) if preamble else "")
-              .replace("{{COVERAGE}}", f"{cov:.1%}" if total else "—")
-              .replace("{{COVDETAIL}}", f"{matched}/{total}" if total else "第一版")
+              .replace("{{COVERAGE}}", f"{cov:.1%}" if total else "--")
+              .replace("{{COVDETAIL}}", f"{matched}/{total}" if total else "first version")
               .replace("{{CHANGED}}", str(changed))
               .replace("{{TOTAL}}", str(len(blocks)))
               .replace("{{CNEW}}", str(counts["new"]))
@@ -392,18 +408,18 @@ def render(doc, out_path=None, title=None):
         f.write(filled)
     save_state(doc, st)
 
-    print(f"第 {version} 版審查頁：{out_path}")
-    print(f"  區塊 {len(blocks)}｜新增 {counts['new']}　已改 {counts['edited']}　"
-          f"未動 {counts['unchanged'] + counts['approved']}　已移除 {counts['removed']}")
+    print(f"Review page v{version}: {out_path}")
+    print(f"  Blocks {len(blocks)} | New {counts['new']}  Edited {counts['edited']}  "
+          f"Unchanged {counts['unchanged'] + counts['approved']}  Removed {counts['removed']}")
     if total:
-        print(f"  覆蓋率 {cov:.1%}（{matched}/{total}）" +
-              ("" if not missing else f"　無下落：{'、'.join(missing)}"))
+        print(f"  Coverage {cov:.1%} ({matched}/{total})" +
+              ("" if not missing else f"  Missing: {', '.join(missing)}"))
     return 0
 
 
-# ---------------------------------------------------------------- 回饋
+# ---------------------------------------------------------------- feedback
 
-FB_RE = re.compile(r"^\s*\[([A-Za-z0-9][A-Za-z0-9_-]*)\]\s*(通過|改|問|討論)\s*(?:[—\-–:：]\s*(.*))?$")
+FB_RE = re.compile(r"^\s*\[([A-Za-z0-9][A-Za-z0-9_-]*)\]\s*(Approve|Revise|Question|Discuss)\s*(?:[—\-–:]\s*(.*))?$")
 
 
 def apply_fb(doc, fb_path):
@@ -427,11 +443,11 @@ def apply_fb(doc, fb_path):
         items.append({"id": bid, "intent": intent, "note": note})
 
     if not items:
-        sys.exit("回饋檔裡沒有解析到任何一行。格式是：[區塊代號] 通過|改|問|討論 — 意見")
+        sys.exit("No feedback lines could be parsed. Format: [block-id] Approve|Revise|Question|Discuss -- note")
 
     for it in items:
         rec = st["blocks"].setdefault(it["id"], {})
-        if it["intent"] == "通過":
+        if it["intent"] == "Approve":
             rec["approved_hash"] = byid[it["id"]]["hash"]
             rec["approved_at_version"] = st.get("current_version")
             rec["status"] = "approved"
@@ -440,22 +456,22 @@ def apply_fb(doc, fb_path):
             rec["last_note"] = it["note"]
     save_state(doc, st)
 
-    todo = [i for i in items if i["intent"] != "通過"]
-    passed = [i for i in items if i["intent"] == "通過"]
+    todo = [i for i in items if i["intent"] != "Approve"]
+    passed = [i for i in items if i["intent"] == "Approve"]
 
-    print(f"收到 {len(items)} 條回饋。通過 {len(passed)}，要處理 {len(todo)}。")
+    print(f"Received {len(items)} feedback item(s). Approved {len(passed)}, to handle {len(todo)}.")
     if unknown:
-        print(f"注意：代號不存在，已略過 → {'、'.join(unknown)}")
+        print(f"Note: unknown block id(s), skipped -> {', '.join(unknown)}")
     if passed:
-        print(f"\n已凍結（之後改動會被 check 擋下）：{'、'.join(i['id'] for i in passed)}")
+        print(f"\nFrozen (later edits will be blocked by check): {', '.join(i['id'] for i in passed)}")
     if todo:
-        print("\n待辦：")
+        print("\nTo do:")
         for i in todo:
-            print(f"  [{i['id']}] {i['intent']}　{i['note'] or '（沒寫理由，先去問清楚再動手）'}")
+            print(f"  [{i['id']}] {i['intent']}  {i['note'] or '(no note -- go ask before touching it)'}")
     silent = [b["id"] for b in blocks
               if b["status"] in ("new", "edited") and b["id"] not in {i["id"] for i in items}]
     if silent:
-        print(f"\n這些區塊這一版改過、但沒有收到任何回饋，別當作默認通過：{'、'.join(silent)}")
+        print(f"\nThese blocks changed this version but got no feedback at all -- don't treat that as approval: {', '.join(silent)}")
     return 0
 
 
@@ -463,30 +479,30 @@ def apply_fb(doc, fb_path):
 
 def main():
     ap = argparse.ArgumentParser(
-        description="讓長文件的多輪審查不會在改版之間走樣",
+        description="Keep a long document's multi-round review from drifting between revisions",
         formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    r = sub.add_parser("render", help="渲染審查頁，並記錄這一版")
+    r = sub.add_parser("render", help="Render the review page and record this version")
     r.add_argument("doc"); r.add_argument("-o", "--out"); r.add_argument("-t", "--title")
 
-    c = sub.add_parser("check", help="出版前閘門，有問題就非零退出")
+    c = sub.add_parser("check", help="Pre-publish gate; exits non-zero on problems")
     c.add_argument("doc")
     c.add_argument("--min-coverage", type=float, default=DEFAULT_MIN_COVERAGE)
     c.add_argument("--strict-numbers", action="store_true",
-                   help="把「同一個數字出現在多個區塊」也當成失敗")
+                   help="Also fail (instead of just warn) when the same number appears in multiple blocks")
 
-    a = sub.add_parser("apply", help="吃審查回饋，更新狀態並印待辦")
+    a = sub.add_parser("apply", help="Consume review feedback, update state, print the to-do list")
     a.add_argument("doc"); a.add_argument("feedback")
 
     args = ap.parse_args()
     if not os.path.exists(args.doc):
-        sys.exit(f"找不到檔案：{args.doc}")
+        sys.exit(f"File not found: {args.doc}")
 
     if args.cmd == "render":
         return render(args.doc, args.out, args.title)
     if args.cmd == "check":
-        print(f"檢查 {args.doc}")
+        print(f"Checking {args.doc}")
         return check(args.doc, args.min_coverage, args.strict_numbers)
     if args.cmd == "apply":
         return apply_fb(args.doc, args.feedback)

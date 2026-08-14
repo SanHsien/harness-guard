@@ -1,73 +1,73 @@
 ---
 name: polite
-description: "語氣改寫雙模式：A 溫暖同理（客服回覆、壞消息、道歉、安撫、婉拒；太冷、太生硬、軟一點）；B 正式商務（對外 email、提案、公告、跟催信；太隨便、太衝、正式一點、商務語氣、官方一點）。"
+description: "Two-mode tone rewriting: A Warm & Empathetic (customer service replies, delivering bad news, apologies, reassurance, declining a request; too cold, too blunt, soften it up); B Formal Business (outward-facing emails, proposals, announcements, follow-up/reminder emails; too casual, too abrasive, more formal, business tone, more official)."
 allowed-tools:
   - Read
   - Edit
 metadata:
-  source: 翻譯改編自 hardikpthv/agent-skills（MIT）的 empathetic-tone-basic 與 professional-tone-basic，兩者合併為單一 skill。詳見 repo 根目錄 NOTICE。
+  source: Adapted and translated from hardikpthv/agent-skills (MIT)'s empathetic-tone-basic and professional-tone-basic, merged into a single skill. See NOTICE at the repo root.
 ---
 
-# Polite：語氣改寫（溫暖同理 / 正式商務）
+# Polite: Tone Rewriting (Warm & Empathetic / Formal Business)
 
-先判斷模式再改寫。兩模式共同鐵則：**不要幫對方預設處境或編理由**（例如猜對方「最近應該很忙」才沒回覆）——對方沒說過的處境不主動提，只針對事實/請求本身處理，否則容易讀成情緒勒索（2026-07-04 實證：催回覆信裡的 "I know things have probably been busy on your end" 被指出有情勒感）。
+Determine the mode before rewriting. Shared rule for both modes: **never invent circumstances or excuses for the other person** (e.g., assuming they "must have been busy lately" as the reason they didn't reply) — don't bring up situations they never actually mentioned; deal only with the facts or the request itself. Otherwise it tends to read as guilt-tripping (confirmed case, 2026-07-04: a follow-up email's line "I know things have probably been busy on your end" was flagged as landing that way).
 
-## 模式判斷
+## Determining the mode
 
-| 訊號 | 模式 |
+| Signal | Mode |
 |---|---|
-| 「太冷」「太生硬」「軟一點」「多點同理心」「安撫一下」「讀起來很傷人」；客服回覆、壞消息、道歉、婉拒、安撫 | **A 溫暖同理** |
-| 「太隨便」「這樣寫太衝」「正式一點」「商務語氣」「官方一點」；對外 email、提案、跟催信、公告 | **B 正式商務** |
+| "too cold," "too blunt," "soften it up," "more empathy," "make it more reassuring," "this reads as harsh"; customer service replies, bad news, apologies, declining a request, reassurance | **A Warm & Empathetic** |
+| "too casual," "this comes off too harsh," "more formal," "business tone," "more official"; outward-facing emails, proposals, follow-up/reminder emails, announcements | **B Formal Business** |
 
-**兩者皆不適用**：包裝真相讓對方誤判、操弄式安慰、法律文件、安全警告、事故事實陳述、內部群組隨性聊天。
+**Neither mode applies to**: spinning the truth so the other person draws the wrong conclusion, manipulative reassurance, legal documents, safety warnings, factual incident reports, or casual chatter in an internal group chat.
 
-## 模式 A：溫暖同理
+## Mode A: Warm & Empathetic
 
-核心原則：
+Core principles:
 
-1. **先承認，再處理**：把感受或處境講在解法前面。「這樣真的滿卡的，我們來想辦法」優於直接丟解法。注意：只承認對方明確講出來的處境/感受（見共同鐵則）。
-2. **人先於規定**：「我想幫你」放在「依規定」前面。
-3. **肯定但不評價**：「這樣想很合理」「你會這樣問也是應該的」。
-4. **軟化指令句**：「你要…」改成「方便的話，你可以…」。
-5. **用溫暖、平實的字詞**，善用「你/我們」，簡短的安撫勝過華麗詞藻。
-6. **共同承擔**：「我們這邊沒處理好」優於「發生了一個錯誤」。
-7. **收尾留支持**：給下一步、留開放性。「有不清楚的地方隨時說」。
+1. **Acknowledge first, then address**: put the feeling or situation ahead of the solution. "That's genuinely frustrating — let's figure this out" beats jumping straight to the fix. Note: only acknowledge circumstances or feelings the other person has actually stated (see the shared rule above).
+2. **People before policy**: "I want to help you with this" comes before "per policy."
+3. **Validate without judging**: "That makes complete sense" / "It's totally fair to ask that."
+4. **Soften commands**: turn "You need to..." into "Whenever it's convenient, you could..."
+5. **Use warm, plain words**, lean on "you/we," and keep the reassurance short — a brief warm line beats an elaborate one.
+6. **Share the responsibility**: "we dropped the ball on this" beats "an error occurred."
+7. **Close with support**: give a next step and leave the door open. "Let me know if anything's unclear."
 
-技巧：固定套路是**承認 → 安撫 → 幫忙 → 邀請**；把指責（「你忘記了…」）改成中性敘述（「這步驟好像被漏掉了」）；把「不行」變成一條路（「這個我沒辦法，但這樣做也許可以」）；句子保持沉穩不趕，避免堆疊驚嘆號。
+Technique: the go-to shape is **acknowledge → reassure → help → invite**; turn blame ("you forgot to...") into a neutral statement ("it looks like this step got missed"); turn "no" into a path forward ("I can't do that, but here's something that might work"); keep sentences unhurried and steady, and don't stack up exclamation points.
 
-Before / After：
+Before / After:
 
-**Before**：您的申請不予核准，您沒有依照規定步驟操作。
-**After**：謝謝您送來申請，看起來有幾個步驟被漏掉了，所以我這邊還沒辦法核准——不過我可以跟您說明確切需要補的部分，我們一起把它處理好。
+**Before**: Your application has been denied. You did not follow the required steps.
+**After**: Thanks for sending this in — it looks like a couple of steps got missed, so I can't approve it just yet. That said, I can walk you through exactly what's needed, and we'll get it sorted together.
 
-**Before**：這個商品已經缺貨，請稍後再查詢。
-**After**：不好意思，這個目前剛好缺貨，我知道這樣有點掃興。一有貨我可以馬上通知您，或者我也可以先推薦一個接近的替代選項，看您方便。
+**Before**: This item is out of stock. Please check back later.
+**After**: Sorry about this — it's actually out of stock right now, and I know that's disappointing. I can let you know the moment it's back in, or point you toward a similar option in the meantime, whichever works better for you.
 
-別用力過猛：溫暖不是灌雞湯。避免空洞正能量（「一切都是最好的安排！」）、假裝很熟的親暱感、或用軟化詞把真正的答案埋起來。既要體貼，也要把話講清楚。
+Don't overdo it: warmth isn't a pep talk. Avoid empty positivity ("everything happens for a reason!"), fake familiarity, or burying the real answer under soft language. Be considerate, but still say the actual answer clearly.
 
-## 模式 B：正式商務
+## Mode B: Formal Business
 
-核心原則：
+Core principles:
 
-1. **語氣正式**：少用口語俚語；一般商務信保留適當的口語連接詞即可，不需要每句都文謅謅。
-2. **精準、簡潔**：把模糊或灌水的說法換成具體直接的陳述。
-3. **有禮貌、有分寸**：客氣、中性、不酸不諷刺，語氣自信但不強勢（見共同鐵則）。
-4. **有結構**：開頭先講目的，段落清楚、一段一個重點。
-5. **收尾明確**：附上具體下一步，用得體的署名收尾。
-6. **格式一致**：稱謂正確、不要全大寫/整段驚嘆，避免情緒化用詞。
-7. **條件式回應先講可以**：對方提需求且附帶前提／但書時，先給正面結論（可以、沒問題），再把前提包裝成「這樣會更快/更準」的推進因素，不用「除非…否則不行」的門檻語氣把對方擋在外面。常見於 BD／客戶詢問場景：先確認可行，但書是下一步行動項不是拒絕理由。
+1. **Formal tone**: cut casual slang; a normal business email can keep natural connecting phrases — it doesn't need to sound stiff in every sentence.
+2. **Precise and concise**: replace vague or padded phrasing with specific, direct statements.
+3. **Polite and measured**: courteous, neutral, no sarcasm, confident without being pushy (see the shared rule above).
+4. **Structured**: state the purpose up front, with clear paragraphs, one point per paragraph.
+5. **Clear close**: include a concrete next step and sign off appropriately.
+6. **Consistent formatting**: correct forms of address, no all-caps or exclamation-heavy passages, no emotionally charged language.
+7. **Lead with yes on conditional requests**: when someone makes a request with a condition or prerequisite attached, give the positive answer first (yes, that works), then frame the prerequisite as something that speeds things up or improves accuracy — not as a gate that blocks them ("can't do it unless..."). This comes up often in business-development or client inquiries: confirm it's doable first, and present the prerequisite as the next action item, not a reason to say no.
 
-技巧：把隨性開場（「欸，那個…」）換成有目的的開場（「跟您確認一下…」）；填充詞（「還滿」「差不多」「盡快」）換成精確用詞（「約」「本週五前」）；抱怨/情緒句改寫成中性事實陳述＋請求；「這個需要 X 才能做」改寫成「先幫我準備 X，我就能直接開始/做得更準」——但書從限制變成對方能主動配合的下一步；結尾附明確下一步 + 得體署名。
+Technique: turn a casual opener ("Hey, so...") into a purposeful one ("Following up on..."); replace filler ("kind of," "roughly," "ASAP") with precise wording ("approximately," "by end of day Friday"); rewrite complaints or emotional statements as a neutral fact plus a request; turn "I need X before I can do this" into "If you can get me X first, I can get started right away / be more accurate" — the prerequisite shifts from a limitation into something the other person can proactively do; close with a clear next step and an appropriate sign-off.
 
-Before / After：
+Before / After:
 
-**Before**：欸，這個東西好像有點晚了欸，滿麻煩的欸。可以快點處理一下嗎？？
-**After**：跟您確認一下，這項交付目前進度略有延遲，可能會影響後續時程。方便的話，麻煩今天內提供新的預計完成時間，謝謝。
+**Before**: Hey, so this thing is kind of running late and it's honestly a pain. Can you speed it up??
+**After**: Following up to flag that this deliverable is currently behind schedule, which may affect the downstream timeline. Could you provide an updated completion estimate by end of day, please?
 
-**Before**：這季我們超猛，數字超好。
-**After**：本季團隊表現亮眼，多項關鍵指標均超出原訂目標。
+**Before**: We crushed it this quarter, numbers are great.
+**After**: The team delivered strong results this quarter, with several key metrics exceeding original targets.
 
-**Before**：這個我可以教，但你們要先開一個帳號給我，不然我沒辦法測試。
-**After**：沒問題，這塊我可以教。有一件事會讓進度快很多——麻煩先幫我開一個帳號，我就能直接上手實測，內容也會更貼近你們實際會用到的畫面。
+**Before**: I can teach this, but you'll need to set me up with an account first or I can't test anything.
+**After**: Happy to teach this. One thing that would speed things up considerably — if you could set me up with an account beforehand, I can test it hands-on directly, which will also make the content more relevant to what your team will actually be using.
 
-別用力過猛：正式不等於官腔。避免堆疊術語（「跨部門綜效整合交付物」）、無謂的冗長、或整段被動式寫到讀不出主詞。目標是乾淨俐落，不是公文腔。
+Don't overdo it: formal doesn't mean bureaucratic. Avoid stacking jargon ("cross-functional synergy alignment deliverables"), unnecessary length, or passive voice so pervasive the sentence loses its subject. The goal is clean and sharp, not corporate-speak.

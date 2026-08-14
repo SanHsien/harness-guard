@@ -1,51 +1,51 @@
 ---
 name: explain
-description: "用高中生聽得懂的純白話繁體中文重新解釋上一段內容或指定主題，禁中英交雜、禁術語。Triggers: /explain, 白話, 聽不懂, 當外行人, 太多英文."
+description: "Re-explain the previous reply or a specified topic in plain language a high-schooler could follow, no jargon. Triggers: /explain, plain English, I don't get it, ELI5, too much jargon."
 ---
 
-# Explain — 把話講成外行人聽得懂
+# Explain — Say It So a Layperson Gets It
 
-使用者打 `/explain`（可帶主題，也可不帶）時，把對象**重新講一次**，標準是「**一個沒有相關背景的高中生也能秒懂**」。
+When someone types `/explain` (with or without a topic), **re-explain** the subject to a standard of "**a high-schooler with no background in this could follow it right away**."
 
-## 要解釋什麼
+## What to explain
 
-- **沒帶主題**（單純 `/explain`）：解釋**上一則我自己的回覆**——使用者看不懂的就是它。
-- **有帶主題**（`/explain 報價單怎麼算的`）：解釋指定的那件事。
-- **有帶檔案路徑**（`/explain <檔案路徑>`）：先把那個檔案讀進來，再照下面的規則重講一次。
-- 不確定指哪一段時，挑使用者最可能卡住的那段，開頭一句先說「我猜你想問的是 X，如果不對再跟我說」。
+- **No topic given** (just `/explain`): explain **my own previous reply** — whatever the user didn't follow is that.
+- **Topic given** (`/explain how the quote was calculated`): explain that specific thing.
+- **File path given** (`/explain <file path>`): read that file first, then re-explain it following the rules below.
+- If it's unclear which part is meant, pick the part the user is most likely stuck on, and open with "I'm guessing you mean X — let me know if that's not it."
 
-## 硬規則（違反就是失敗）
+## Hard rules (breaking these means the explanation failed)
 
-1. **不中英交雜**。一律純繁體中文。
-   - 專有名詞若真的沒有中文、或中文反而更難懂（例如 Excel、Bloomberg、Claude、PDF、email），可以**保留原字**，但**後面立刻用括號補一句白話**：例「Bloomberg（金融業查股價跟財報數字的付費系統）」。
-   - 第一次出現才補解釋，之後可直接用。
-   - 禁止無解釋就丟出 SOW、addendum、roster、builder、enterprise、pipeline 這類字——要嘛翻成中文，要嘛括號解釋。
-2. **不用術語、不用縮寫**。能講「表格」就不要講「試算表檔案」，能講「先付一部分錢」就不要講「首期款」。
-3. **短句**。一句講一件事，避免一句話塞三個概念。
-4. **多用比喻、生活例子**。抽象的東西先給一個日常生活的對照（「這就像……」）。
-5. **先講結論 / 對使用者的意義**，再講細節。使用者最想知道的是「這對我來說是什麼、好還是壞」。
-6. **不堆資訊**。寧可少講、講清楚，也不要每個細節都塞。看不懂的根因通常是「講太多」，不是「講太少」。
-7. **emoji 預設不用**（除非使用者既有對話風格在用）。
+1. **Reply in the language the user is using, and re-explain it in plain language a high-schooler could follow — no jargon.**
+   - If a technical term genuinely has no good equivalent, or the original term is actually clearer than any translation (e.g., API, SaaS, PDF), you can keep the original term — but **immediately follow it with a plain-language explanation in parentheses** the first time it appears. Example: "API (a way for two pieces of software to talk to each other)."
+   - Only explain it the first time it shows up; after that you can use it directly.
+   - Don't drop jargon like "SOW," "addendum," "roster," "pipeline," or "enterprise" without explaining it — either use an everyday word instead, or add a parenthetical explanation.
+2. **No jargon, no abbreviations.** Say "spreadsheet" instead of "workbook file," say "pay part of it upfront" instead of "remit an initial installment."
+3. **Short sentences.** One idea per sentence — don't cram three concepts into one sentence.
+4. **Use comparisons and everyday examples.** Give an everyday analogy before anything abstract ("it's like...").
+5. **Lead with the conclusion / what it means for the reader**, then the details. What the user wants to know first is "what does this mean for me — good news or bad."
+6. **Don't pile on information.** Say less and say it clearly, rather than cramming in every detail. When something doesn't land, the usual cause is "too much," not "too little."
+7. **No emoji by default** (unless the existing conversation is already using them).
 
-## 建議結構（視內容彈性調整，不必每段都有）
+## Suggested structure (adapt freely — not every explanation needs all four)
 
-1. **一句話總結**：這到底是什麼 / 發生了什麼事。
-2. **白話展開**：拆成 2–4 個小點，每點配一個比喻或例子。
-3. **對你的意義**：這是好消息還壞消息、你要不要做什麼、會不會花錢、有沒有風險。
-4. **要不要我繼續**：如果還有更深的層次，問使用者要不要再往下講，不要一次全倒。
+1. **One-sentence summary**: what this actually is / what happened.
+2. **Plain-language breakdown**: 2–4 points, each with a comparison or example.
+3. **What it means for you**: good news or bad, whether you need to do anything, whether it costs money, any risk.
+4. **Offer to go deeper**: if there's a more detailed layer, ask whether the user wants it — don't dump everything at once.
 
-## 自我檢查（送出前掃一遍）
+## Self-check (run through before sending)
 
-- 有沒有任何一個英文字沒被翻譯或括號解釋？→ 有就改掉。
-- 有沒有哪句話需要「先懂另一個術語才看得懂」？→ 有就拆開先解釋。
-- 高中生讀完這段，能不能用自己的話複述？→ 不能就再簡化。
+- Any jargon or foreign-language term left unexplained? → Fix it.
+- Any sentence that requires understanding another term first? → Break it apart and explain that first.
+- Could a high-schooler read this and repeat it back in their own words? → If not, simplify further.
 
-## 範例對照
+## Before / after example
 
-**改寫前（不合格）**：
-> 我把 SOW Addendum 轉成 PDF 寄給 Sho 了，內容是 recorded course 的 quotation，fee 併入 Stage 2 balance。
+**Before (fails the bar)**:
+> I converted the SOW Addendum to a PDF and sent it to Sho — it's the quotation for the recorded course, with the fee folded into the Stage 2 balance.
 
-**改寫後（合格）**：
-> 我幫你做了一份補充合約，存成可以直接列印簽名的檔案，寄給客戶 Sho 了。
-> 內容是：你要多賣他一門「事先錄好的線上課」，這份文件就是寫清楚這門課多少錢。
-> 這筆錢不另外收，會跟之前那筆還沒付完的尾款一起算。
+**After (passes the bar)**:
+> I put together a supplementary contract for you, saved it as a file that's ready to print and sign, and sent it to your client Sho.
+> It's about a pre-recorded online course you're offering him as an add-on — the document just spells out how much that course costs.
+> He won't be billed separately for it; it gets added to the balance he still owes from before.

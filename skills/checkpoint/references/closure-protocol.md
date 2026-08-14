@@ -1,45 +1,43 @@
 # Checkpoint Closure Protocol
 
-輸入是主線產生的 closure manifest。你是唯一 closure worker；不得再派 subagent，也不得重新摘要整段對話。
+The input is a closure manifest produced by the main thread. You are the sole closure worker; don't spawn further subagents, and don't re-summarize the whole conversation.
 
-## 1. 重驗狀態
+## 1. Re-verify state
 
-1. 用 `date` 核實 manifest 日期與時區。
-2. 逐 repo 重跑 status／branch；同一路徑的 vault 不重複處理。
-3. manifest 未列出的 dirty files 視為並行或他人修改；先讀 diff 判斷歸因，無法安全分離就保留並警告。
-4. 檢查 coverage：每個 changed file 與列出的外部／排程／付款／待辦動作都必須分類。發現缺口就停止並退回主線補 manifest，不自行猜測。
+1. Confirm the manifest's date and timezone with `date`.
+2. Re-run status/branch checks per repo; don't process the same vault path twice.
+3. Treat dirty files not listed in the manifest as concurrent or someone else's changes; read the diff to judge attribution — if you can't safely separate them, leave them in place and flag a warning.
+4. Check coverage: every changed file, and every listed external / scheduled / payment / todo action, must be classified. If you find a gap, stop and send it back to the main thread to fill in the manifest — don't guess.
 
-## 2. Daily 只寫一次
+## 2. Write the daily log exactly once
 
-除 `git-only`、`daily_action: skip_duplicate` 或沒有 material session 外，讀取：
+Except for `git-only`, `daily_action: skip_duplicate`, or no material session, read:
 
-依你自己的日誌格式規範寫一次（若你有另外的日誌流程腳本，讀它的規範檔，
-但不要整支叫起來跑，那會重複做事）。內容用 manifest 裡的 `daily_entries`。
-同一輪不要在對帳階段再寫第二次。
+Write it once following your own log-format conventions (if you have a separate logging process script, read its conventions file, but don't run the whole thing — that would duplicate the work). Use the `daily_entries` from the manifest for the content. Don't write a second entry during the reconciliation step in the same pass.
 
-## 3. 條件式事實對帳
+## 3. Conditional fact reconciliation
 
-- `git-only`：跳過。
-- `scoped` 且 fact list 為空：跳過，回報 `sync: skipped (no fact delta)`。
-- 其餘：完整讀取 `<neat-freak-skill-dir>/references/sync-protocol.md`，傳入 manifest 的 mode、memory_mode、fact list 與路徑。
+- `git-only`: skip.
+- `scoped` with an empty fact list: skip, report `sync: skipped (no fact delta)`.
+- Otherwise: read `<neat-freak-skill-dir>/references/sync-protocol.md` in full, passing it the manifest's mode, memory_mode, fact list, and paths.
 
-sync protocol 只做對帳，不會 commit；完成後再進下一節。
+The sync protocol only reconciles facts — it does not commit. Move to the next section once it's done.
 
-## 4. 驗證、stage、commit、push
+## 4. Verify, stage, commit, push
 
-對每個 repo：
+For each repo:
 
-1. 讀 status 與 diff，確認可歸因檔案；排除 `.env`、`credentials*`、`*.secret`、session dumps、lock files 與 manifest 未授權的敏感資料。
-2. 跑與變更風險相稱的 tests；至少 `git diff --check`。若該 repo 有自己的 lint／檢查腳本，一併跑過；修復範圍只限本次收尾相關的項目，不擴張成整套定期維護。
-3. 逐檔 stage，禁止盲目 `git add -A`。掃 staged diff 的 secret-like pattern，但不要把命中值印出。
-4. staged diff 為空就回報 clean，不製造空 commit。
-5. Conventional Commit subject ≤72 字元；只有系統或使用者明確要求才加 `Co-Authored-By`。
-6. push 當前 branch；失敗照實回報，不 force push。
-7. 驗證 local `HEAD == origin/<branch>`。若需要 live remote 證據且網路可用，再比對 `git ls-remote`。
+1. Read status and diff to confirm attributable files; exclude `.env`, `credentials*`, `*.secret`, session dumps, lock files, and any sensitive data not authorized by the manifest.
+2. Run tests proportionate to the risk of the change; at minimum `git diff --check`. If the repo has its own lint/check scripts, run those too — fixes stay scoped to what's relevant to this closure, not a full periodic-maintenance sweep.
+3. Stage file by file — never a blind `git add -A`. Scan the staged diff for secret-like patterns, but don't print the matched values.
+4. If the staged diff is empty, report clean — don't create an empty commit.
+5. Conventional Commit subject ≤72 characters; only add `Co-Authored-By` when the system or user explicitly asked for it.
+6. Push the current branch; report failures honestly, no force push.
+7. Verify local `HEAD == origin/<branch>`. If you need live-remote evidence and network access is available, also compare against `git ls-remote`.
 
-Vault 與當前 repo 不同時，各自 commit；只收本 session 可歸因檔案。重疊且不可分離時停止該 repo，不把未知變更 sweep 進去。
+When the vault and the current repo differ, commit each separately; only include files attributable to this session. If they overlap and can't be separated, stop on that repo rather than sweeping unknown changes in.
 
-## 5. 回傳
+## 5. Report back
 
 ```text
 daily: written | skipped (<reason>)
@@ -52,4 +50,4 @@ warnings:
 - <item>
 ```
 
-附 enumerate 最終證據一次；不要重貼完整 diff 或協議。
+Attach the final enumerate evidence once; don't repost the full diff or the protocol text.
