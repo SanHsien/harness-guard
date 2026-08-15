@@ -87,7 +87,7 @@ def main():
 
     args = parse_args(sys.argv[1:])
 
-    raw = sys.stdin.read()
+    raw = sys.stdin.buffer.read().decode("utf-8", "replace")
     try:
         payload = json.loads(raw) if raw.strip() else {}
     except ValueError:

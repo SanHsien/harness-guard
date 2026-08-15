@@ -84,6 +84,25 @@ MESSAGE_TEMPLATE = (
 )
 
 
+def read_payload():
+    """Read the hook payload as bytes and decode UTF-8 explicitly.
+
+    `json.load(sys.stdin)` decodes using whatever encoding the locale hands the
+    process. Where that is not UTF-8 -- the default on a Chinese, Japanese, or
+    Korean Windows install -- any non-ASCII text in the payload is mangled, the
+    JSON fails to parse, and the hook fails open. Silently, and precisely when
+    the message or the command is not in English.
+
+    Observed in service on 2026-08-15: a 2.3 KB Stop payload parsed as an empty
+    object, so claim-evidence-guard saw no assistant message and let the turn
+    end. Reading bytes removes the dependency on the ambient locale entirely.
+    """
+    raw = sys.stdin.buffer.read()
+    if not raw.strip():
+        return {}
+    return json.loads(raw.decode("utf-8", "replace"))
+
+
 def blank_heredocs(command):
     """Blank out heredoc bodies. Their contents are data being written."""
     chars = list(command)
@@ -157,7 +176,7 @@ def main():
         pass
 
     try:
-        payload = json.load(sys.stdin)
+        payload = read_payload()
     except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
         return 0
 
