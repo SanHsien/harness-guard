@@ -59,7 +59,7 @@ Exit code 0 confirms all installed guardrails actually fire and respond correctl
 8. **asd-ste100**: Simplified Technical English rewriting for unambiguous tool instructions.
 9. **iso-24495**: Plain language writing following ISO 24495-1 standards.
 10. **verification-protocol (New in fork)**: Modify-then-verify and zero-dummy standards.
-11. **task-orchestrator (New in fork)**: Four-stage lifecycle task decomposition (Research $\to$ Plan $\to$ Build $\to$ Verify) and context management.
+11. **task-orchestrator (New in fork)**: Four-stage lifecycle task decomposition (Research → Plan → Build → Verify) and context management.
 
 ---
 
@@ -70,6 +70,20 @@ Exit code 0 confirms all installed guardrails actually fire and respond correctl
 
 ---
 
+## Before installing, have the AI read the scripts to you
+
+These tools intercept what the AI is allowed to do, and that affects everything you work on
+afterwards. Have it read each script out loud, or at minimum explain what each one does. That
+holds for this folder and for any bundle of scripts you find online — convenience is not a
+reason to install something.
+
+---
+
 ## License
 
-MIT License.
+MIT — see [`LICENSE`](LICENSE).
+
+This kit is a fork of [agentcrew-academy/harness-starter-kit](https://github.com/agentcrew-academy/harness-starter-kit),
+and several hooks are in turn adapted from earlier work. The original authors and sources are
+listed in [`NOTICE`](NOTICE). Keep that file attached if you redistribute or reuse this — it is
+the one thing MIT actually requires of you.

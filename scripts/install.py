@@ -66,8 +66,12 @@ HOOKS = {
     ],
     "danger-zone-guard": [
         {
+            # Pure Python, so one file serves every platform. There is no
+            # separate windows/ build to get out of sync -- and a shim that
+            # imports a sibling folder cannot work here anyway, because hooks
+            # are installed flat.
             "source": {
-                "windows": "hooks/danger-zone-guard/windows/danger_zone_guard.py",
+                "windows": "hooks/danger-zone-guard/claude-code/danger_zone_guard.py",
                 "posix": "hooks/danger-zone-guard/claude-code/danger_zone_guard.py",
             },
             "event": "PreToolUse",

@@ -20,7 +20,7 @@
 | `scripts/install.py` | 一行指令重現整套設定：自動判平台與目標 Agent（支援 Claude Code、Google Antigravity、Codex）、複製對應版本、**合併**（不是覆蓋）進設定檔、先備份、原子寫入、寫完讀回驗證 JSON 仍合法。重跑不會重複註冊。 |
 | `scripts/verify-install.py` | 餵合成 payload 給每個已安裝的 hook、實際執行、檢查回應。「讀設定檔然後宣布沒問題」正是這個 kit 存在要擋的那種無證據宣稱。支援全部 5 個 hooks 之 Live Fire 檢驗與 Antigravity 目錄健康度。 |
 | lint-gate 專案級設定 `.lint-gate.json` | 全域註冊一次即可，沒有這個檔案的專案完全不受影響；哪個專案要開就在該專案根目錄丟一個檔案，立即生效、不用重啟。讓各專案的 agent 自己決定要跑什麼檢查。（Windows 版限定） |
-| `hooks/*/windows/*.py` | 5 個攔截工具之跨平台 Python 版。shell 版靠 `jq`，Windows 原生沒有 `jq`，而它們沒有 `jq` 時 exit 0——那代表「放行」。一個什麼都不擋的已註冊 hook，比沒裝更糟。 |
+| `hooks/*/windows/*.py` | claim-guard 與 lint-gate 的 Python 版（test-gate-guard 與 danger-zone-guard 本來就是純 Python 單檔，三平台共用，不另開 `windows/`）。shell 版靠 `jq`，Windows 原生沒有 `jq`，而它們沒有 `jq` 時 exit 0——那代表「放行」。一個什麼都不擋的已註冊 hook，比沒裝更糟。 |
 | `hooks/test-gate-guard/` | 第四個攔截工具。擋掉「測試指令與 `git commit`／`git push` 之間用 `;` 而非 `&&` 串接」的單條指令——那正是紅燈測試照樣出貨的形狀。支援 pytest, bun, deno, playwright, jest, vitest 等。 |
 | `hooks/danger-zone-guard/` | 第五個攔截工具（本 fork 新增）。在指令執行前攔截根目錄/家目錄遞迴刪除、刪除 `.git`、保護分支強推及敏感憑證外洩。附回歸測試。 |
 | Google Antigravity (AGY) 整合 | 支援 Antigravity Customization System，可一鍵將技能安裝至 `~/.gemini/config/skills/`，並附 `gemini-md-template/` 起手規則檔。 |

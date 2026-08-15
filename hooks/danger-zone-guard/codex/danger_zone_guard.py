@@ -14,7 +14,8 @@ import sys
 
 # 1. Catastrophic recursive deletion
 DANGEROUS_RM = re.compile(
-    r"(?:^|[|;&\s])("
+    # Command position only, so `echo rm -rf /` is an argument, not a command.
+    r"(?:^|[|;&\n]|&&|\|\|)\s*(?:sudo\s+)?("
     r"rm\s+-[a-zA-Z]*r[a-zA-Z]*f?\s+(?:/|~|\$HOME|/root|/\*|~/\*|\.\.(?:/|\\|\s|$))"
     r"|rm\s+-[a-zA-Z]*f[a-zA-Z]*r?\s+(?:/|~|\$HOME|/root|/\*|~/\*|\.\.(?:/|\\|\s|$))"
     r"|del\s+(?:/[a-zA-Z]+\s*)+\s*(?:[A-Za-z]:[\\/]|%USERPROFILE%|~|\.\.)"
@@ -45,8 +46,10 @@ SECRET_EXFIL = re.compile(
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 
 
-def strip_literals(command):
+def blank_heredocs(command):
+    """Blank out heredoc bodies. Their contents are data being written."""
     chars = list(command)
+
     for match in HEREDOC.finditer(command):
         delimiter = match.group(2)
         body_start = command.find("\n", match.end())
@@ -60,10 +63,14 @@ def strip_literals(command):
             if chars[i] != "\n":
                 chars[i] = " "
 
-    blanked = "".join(chars)
-    out = list(blanked)
+    return "".join(chars)
+
+
+def blank_quoted(command):
+    """Blank out quoted spans. Used where quoted text really is text."""
+    out = list(command)
     quote = None
-    for i, ch in enumerate(blanked):
+    for i, ch in enumerate(command):
         if quote is None:
             if ch in "'\"":
                 quote = ch
@@ -74,17 +81,34 @@ def strip_literals(command):
     return "".join(out)
 
 
+def unquote(command):
+    """Drop quote characters, keeping what they wrapped.
+
+    `rm -rf "$HOME"` and `rm -rf $HOME` delete the same thing, so the deletion
+    check has to see through the quotes. Two characters must never be enough to
+    walk past this guard.
+    """
+    return command.replace('"', " ").replace("'", " ")
+
+
 def inspect_command(command):
-    cleaned = strip_literals(command)
-    rm_match = DANGEROUS_RM.search(cleaned)
+    """Check command against dangerous patterns. Returns reason string or None."""
+    without_heredocs = blank_heredocs(command)
+
+    rm_match = DANGEROUS_RM.search(unquote(without_heredocs))
     if rm_match:
         return "Catastrophic file/directory deletion or .git removal (`%s`)" % rm_match.group(0).strip()
-    git_match = DANGEROUS_GIT.search(cleaned)
+
+    as_commands = blank_quoted(without_heredocs)
+
+    git_match = DANGEROUS_GIT.search(as_commands)
     if git_match:
         return "Forced push to protected branch (`%s`)" % git_match.group(0).strip()
-    exfil_match = SECRET_EXFIL.search(cleaned)
+
+    exfil_match = SECRET_EXFIL.search(as_commands)
     if exfil_match:
         return "Potential credential/secret transmission (`%s`)" % exfil_match.group(0).strip()
+
     return None
 
 

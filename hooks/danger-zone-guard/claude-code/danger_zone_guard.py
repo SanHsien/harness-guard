@@ -8,10 +8,29 @@ PreToolUse hook for Bash tool calls. Catches three classes of dangerous patterns
   3. Plaintext exfiltration or dangerous transmission of secret files (e.g., curl -d @.env , sending id_rsa)
 
 Non-destructive operations, standard branch git push, and normal project-local deletions
-are allowed. Text mentioning these commands inside quotes or heredocs is stripped to
-prevent false positives.
+are allowed.
 
-Cross-platform: pure Python standard library, no external dependencies.
+Two different readings of quotes, on purpose:
+
+  - For deletions, a quoted argument is a normal way to write the command:
+    `rm -rf "$HOME"` deletes exactly as much as `rm -rf $HOME`. Blanking the
+    quoted text would let anyone bypass this guard by adding two characters,
+    so quotes are removed and the result is matched at a command position
+    only -- meaning the start of the command or just after `;`, `&&`, `||` or
+    a pipe. That is what keeps `echo "rm -rf /"` from being read as a deletion.
+  - For force pushes and credential exfiltration, quoted text really is text
+    (`git commit -m "reverted that git push --force"`), so those two checks
+    run against a copy with quoted spans blanked out.
+
+Heredoc bodies are blanked for every check: they are data being written, not
+commands being run.
+
+Known limit: a command hidden behind an interpreter (`bash -c "rm -rf /"`) is
+not detected. This is a speed bump against catastrophic mistakes, not a
+sandbox against a determined bypass.
+
+Cross-platform: pure Python standard library, no external dependencies. The
+same file serves Windows, macOS, and Linux.
 Register on PreToolUse with matcher `Bash`. Exit 0 lets the call through,
 exit 2 blocks it and outputs the explanation to stderr.
 """
@@ -19,9 +38,12 @@ import json
 import re
 import sys
 
-# 1. Catastrophic recursive deletion
+# 1. Catastrophic recursive deletion.
+# The prefix accepts a command position only -- start of input, or just after a
+# separator -- so that `echo rm -rf /` (an argument, not a command) is not a
+# match. An optional `sudo` may sit in between.
 DANGEROUS_RM = re.compile(
-    r"(?:^|[|;&\s])("
+    r"(?:^|[|;&\n]|&&|\|\|)\s*(?:sudo\s+)?("
     r"rm\s+-[a-zA-Z]*r[a-zA-Z]*f?\s+(?:/|~|\$HOME|/root|/\*|~/\*|\.\.(?:/|\\|\s|$))"
     r"|rm\s+-[a-zA-Z]*f[a-zA-Z]*r?\s+(?:/|~|\$HOME|/root|/\*|~/\*|\.\.(?:/|\\|\s|$))"
     r"|del\s+(?:/[a-zA-Z]+\s*)+\s*(?:[A-Za-z]:[\\/]|%USERPROFILE%|~|\.\.)"
@@ -62,8 +84,8 @@ MESSAGE_TEMPLATE = (
 )
 
 
-def strip_literals(command):
-    """Blank out heredoc bodies and quoted strings to prevent false positives."""
+def blank_heredocs(command):
+    """Blank out heredoc bodies. Their contents are data being written."""
     chars = list(command)
 
     for match in HEREDOC.finditer(command):
@@ -79,10 +101,14 @@ def strip_literals(command):
             if chars[i] != "\n":
                 chars[i] = " "
 
-    blanked = "".join(chars)
-    out = list(blanked)
+    return "".join(chars)
+
+
+def blank_quoted(command):
+    """Blank out quoted spans. Used where quoted text really is text."""
+    out = list(command)
     quote = None
-    for i, ch in enumerate(blanked):
+    for i, ch in enumerate(command):
         if quote is None:
             if ch in "'\"":
                 quote = ch
@@ -93,19 +119,31 @@ def strip_literals(command):
     return "".join(out)
 
 
+def unquote(command):
+    """Drop quote characters, keeping what they wrapped.
+
+    `rm -rf "$HOME"` and `rm -rf $HOME` delete the same thing, so the deletion
+    check has to see through the quotes. Two characters must never be enough to
+    walk past this guard.
+    """
+    return command.replace('"', " ").replace("'", " ")
+
+
 def inspect_command(command):
     """Check command against dangerous patterns. Returns reason string or None."""
-    cleaned = strip_literals(command)
+    without_heredocs = blank_heredocs(command)
 
-    rm_match = DANGEROUS_RM.search(cleaned)
+    rm_match = DANGEROUS_RM.search(unquote(without_heredocs))
     if rm_match:
         return "Catastrophic file/directory deletion or .git removal (`%s`)" % rm_match.group(0).strip()
 
-    git_match = DANGEROUS_GIT.search(cleaned)
+    as_commands = blank_quoted(without_heredocs)
+
+    git_match = DANGEROUS_GIT.search(as_commands)
     if git_match:
         return "Forced push to protected branch (`%s`)" % git_match.group(0).strip()
 
-    exfil_match = SECRET_EXFIL.search(cleaned)
+    exfil_match = SECRET_EXFIL.search(as_commands)
     if exfil_match:
         return "Potential credential/secret transmission (`%s`)" % exfil_match.group(0).strip()
 

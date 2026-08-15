@@ -107,7 +107,7 @@ AI 跟你說「我測試過了，沒問題」，但它根本沒跑過測試。�
 8. **asd-ste100**：Simplified Technical English 改寫，消除多義詞與多構句。
 9. **iso-24495**：ISO 24495-1 淺白語言改寫，雙語技法。
 10. **verification-protocol**（本 fork 新增）：修改即驗證與零偽修正作業流程，禁止註解測試或以假資料掩蓋問題。
-11. **task-orchestrator**（本 fork 新增）：大型與多階段任務拆解（Research $\to$ Plan $\to$ Build $\to$ Verify）與 Context 管理。
+11. **task-orchestrator**（本 fork 新增）：大型與多階段任務拆解（Research → Plan → Build → Verify）與 Context 管理。
 
 ---
 
@@ -118,6 +118,18 @@ AI 跟你說「我測試過了，沒問題」，但它根本沒跑過測試。�
 
 ---
 
+## 裝之前，先讓 AI 把腳本讀給你聽
+
+這些東西會攔截 AI 的動作，影響你之後所有的工作。裝之前讓它把每支腳本讀一遍、或至少解釋
+每支在做什麼。這句話對這個資料夾成立，對你在網路上看到的任何一包腳本都成立——看起來方便
+不是裝它的理由。
+
+---
+
 ## 授權
 
-MIT License。
+MIT License，見 [`LICENSE`](LICENSE)。
+
+這個 kit fork 自 [agentcrew-academy/harness-starter-kit](https://github.com/agentcrew-academy/harness-starter-kit)，
+其中幾支 hook 又改寫自更早的作品，原作者與出處列在 [`NOTICE`](NOTICE)。你要轉發或再利用的話，
+把那份檔案一起留著——那是 MIT 唯一真正要求你做的事。
