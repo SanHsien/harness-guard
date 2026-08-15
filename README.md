@@ -6,13 +6,11 @@
 >
 > 每一版改了什麼看 [`CHANGELOG.md`](CHANGELOG.md)；跟上游的差異與同步方式看 [`FORK.md`](FORK.md)。
 
-你有沒有遇過這種事：你明明告訴 AI「每次改完程式碼都要先跑測試」，它前三次乖乖照做，第四次就忘了，而且忘記的時候完全不會講；或者它執行了危險的指令、刪掉未追蹤的檔案。
+你告訴 AI「每次改完程式碼都要先跑測試」，它前三次乖乖照做，第四次就忘了，而且忘記的時候完全不會講。或者它跑了一條毀滅性的指令。
 
-這就是我做這些東西的原因。
+問題出在「規則只是一段文字」。AI 讀了、也懂了，但它沒有義務照做；聊天一長那段文字就被沖淡。它不是故意騙你，是真的沒放在心上。
 
-問題出在「規則只是一段文字」。你把規則寫下來，AI 讀了、也懂了，但它沒有義務照做。聊天內容一長，那段文字就被沖淡了。它不是故意騙你，是真的沒放在心上。
-
-這裡的做法是：**不要拜託它，直接擋住它。** 把「希望它做到的事」變成電腦會自動執行的檢查，它沒做到就過不去。
+這裡的做法是：**不要拜託它，直接擋住它。** 把希望它做到的事變成電腦會執行的檢查，沒做到就過不去。
 
 ---
 
@@ -26,7 +24,7 @@
 
 ---
 
-## 會開終端機的話：一行裝完（本 fork 新增）
+## 會開終端機的話：一行裝完
 
 換一台電腦要裝出同一套環境，不用照著文件一步步做：
 
@@ -41,11 +39,11 @@ python scripts/install.py --agent antigravity --skills all
 python scripts/install.py --agent all --hooks all --skills all
 ```
 
-先看它打算動哪些檔案、往設定檔加哪幾行。確認沒問題再拿掉 `--dry-run` 跑一次。
+`--dry-run` 會先列出它打算動哪些檔案、往設定檔加哪幾行，確認沒問題再拿掉重跑。
 
-它會自動判斷你的作業系統挑對應版本（Windows 挑 Python 版），**合併**進你既有的設定檔而不是覆蓋，動手前先備份，寫完再讀回來確認 JSON 還是合法的。重跑不會重複註冊，已經存在的 skill 資料夾也不會被蓋掉——你調整過的版本比原版值錢。
+它自動判斷作業系統挑對應版本（Windows 挑 Python 版），**合併**進既有設定檔而不是覆蓋，動手前先備份，寫完讀回來確認 JSON 仍合法。重跑不會重複註冊，既有的 skill 資料夾也不覆蓋——你調整過的版本比原版值錢。
 
-然後重啟你的 Agent，再跑：
+然後重啟 agent，再跑：
 
 ```bash
 python scripts/verify-install.py
@@ -69,7 +67,9 @@ exit code 0 才算裝好。這支腳本不看設定檔臉色，它直接把每�
 
 ## 五個攔截工具
 
-每一支底下提供跨平台與各 Agent 的適配版本，判斷邏輯一模一樣。
+claim-guard、no-emoji-guard、lint-gate 各有 `claude-code/` 與 `codex/` 版，判斷邏輯一樣，差別只在跟平台介面有關的那幾行；test-gate-guard 與 danger-zone-guard 是純 Python 單檔，三平台共用。
+
+**Windows 用 `windows/` 版**——shell 版靠 `jq`，Windows 原生沒有 `jq`，而它們沒有 `jq` 時會直接放行。
 
 ### 1. claim-guard：抓它嘴上說有、實際沒做
 AI 跟你說「我測試過了，沒問題」，但它根本沒跑過測試。這個工具一支腳本在旁邊默默記帳，另一支在它想結束對話的時候跳出來對帳。說測試通過？帳本裡要有跑測試紀錄。說找不到檔案？帳本裡要有搜尋紀錄。對不上就攔下。
@@ -83,7 +83,7 @@ AI 跟你說「我測試過了，沒問題」，但它根本沒跑過測試。�
 ### 4. test-gate-guard：測試紅燈不准出貨
 擋掉單條指令中「測試指令與 `git commit`/`git push` 之間用 `;` 或換行而非 `&&` 串接」的高危行為，避免測試失敗卻依然提交代碼。支援 pytest, npm, bun, deno, playwright, jest, vitest, cargo 等。
 
-### 5. danger-zone-guard：高危指令與越界防護（本 fork 新增）
+### 5. danger-zone-guard：高危指令與越界防護
 在指令執行前攔截毀滅性操作：
 - 根目錄/家目錄遞迴刪除（如 `rm -rf /`, `rm -rf ~`, `rd /s /q C:\`）。
 - 誤刪 `.git` 版本庫目錄。
@@ -103,15 +103,15 @@ AI 跟你說「我測試過了，沒問題」，但它根本沒跑過測試。�
 7. **info-diet**：盤點個人注意力與瀏覽資訊結構，純本地運算、隱私保護。
 8. **asd-ste100**：Simplified Technical English 改寫，消除多義詞與多構句。
 9. **iso-24495**：ISO 24495-1 淺白語言改寫，雙語技法。
-10. **verification-protocol**（本 fork 新增）：修改即驗證與零偽修正作業流程，禁止註解測試或以假資料掩蓋問題。
-11. **task-orchestrator**（本 fork 新增）：大型與多階段任務拆解（Research → Plan → Build → Verify）與 Context 管理。
+10. **verification-protocol**：修改即驗證與零偽修正作業流程，禁止註解測試或以假資料掩蓋問題。
+11. **task-orchestrator**：大型與多階段任務拆解（Research → Plan → Build → Verify）與 Context 管理。
 
 ---
 
 ## 起手規則檔範本
 
 - **`claude-md-template/`**：依 Anthropic 官方指引精簡編寫的 `CLAUDE.md` 起手範本與可選規則檔。
-- **`gemini-md-template/`**（本 fork 新增）：依 Google Antigravity / Gemini 規範編寫的 `GEMINI.md` 全局與專案規則範本。
+- **`gemini-md-template/`**：依 Google Antigravity / Gemini 規範編寫的 `GEMINI.md` 全局與專案規則範本。
 
 ---
 

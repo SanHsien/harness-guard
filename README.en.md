@@ -43,7 +43,7 @@ Exit code 0 confirms all installed guardrails actually fire and respond correctl
 2. **no-emoji-guard**: Strictly filters emojis from documents, comments, and commit messages based on official Unicode definitions.
 3. **lint-gate**: Runs checks before wrap-up. Windows build supports per-project `.lint-gate.json` opt-in.
 4. **test-gate-guard**: Blocks commands chaining tests and git commits with `;` instead of `&&` (preventing broken code shipping).
-5. **danger-zone-guard (New in fork)**: Intercepts catastrophic deletions (`rm -rf /`, `rm -rf ~`, `rd /s /q C:\`), accidental `.git` removal, force pushes to primary branches, and `.env`/secret exfiltration.
+5. **danger-zone-guard**: Intercepts catastrophic deletions (`rm -rf /`, `rm -rf ~`, `rd /s /q C:\`), accidental `.git` removal, force pushes to primary branches, and `.env`/secret exfiltration.
 
 ---
 
@@ -58,15 +58,15 @@ Exit code 0 confirms all installed guardrails actually fire and respond correctl
 7. **info-diet**: Computes local attention and browsing structure with complete privacy.
 8. **asd-ste100**: Simplified Technical English rewriting for unambiguous tool instructions.
 9. **iso-24495**: Plain language writing following ISO 24495-1 standards.
-10. **verification-protocol (New in fork)**: Modify-then-verify and zero-dummy standards.
-11. **task-orchestrator (New in fork)**: Four-stage lifecycle task decomposition (Research → Plan → Build → Verify) and context management.
+10. **verification-protocol**: Modify-then-verify and zero-dummy standards.
+11. **task-orchestrator**: Four-stage lifecycle task decomposition (Research → Plan → Build → Verify) and context management.
 
 ---
 
 ## Starter Rule Templates
 
 - **`claude-md-template/`**: Minimal `CLAUDE.md` template based on latest model guidelines.
-- **`gemini-md-template/` (New in fork)**: Hierarchical `GEMINI.md` rules for Google Antigravity and Gemini CLI.
+- **`gemini-md-template/`**: Hierarchical `GEMINI.md` rules for Google Antigravity and Gemini CLI.
 
 ---
 

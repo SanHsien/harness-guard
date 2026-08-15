@@ -32,20 +32,24 @@ Antigravity 支援階層式規則載入（Global: `~/.gemini/GEMINI.md`，專案
 
 ---
 
-## 信任工作區與免彈窗設定 (Trusted Workspaces & Auto Mode)
+## 信任工作區與免彈窗設定
 
-若希望 Antigravity 在執行測試與修改檔案時不被頻繁的授權彈窗中斷，可編輯 `~/.gemini/antigravity-cli/settings.json`：
+不想被授權彈窗一直打斷的話，編輯 `~/.gemini/antigravity-cli/settings.json`。
 
-### 1. 信任工作區建議設為家目錄
-直接將整個使用者家目錄設為信任路徑，底下的所有現有與未來新增的專案都會自動被涵蓋，無須每次手動增添：
+**先看清楚這是什麼交易。** 關掉彈窗等於把「人按確認」這道關卡拿掉，剩下唯一擋在 agent 與
+你檔案之間的就是這包 hook。這也正是這包東西存在的理由——但那是攔截器，不是沙箱。
+它擋掉的是幾類已知的災難指令，不是所有壞事。範圍開多大，風險就多大。
+
+信任路徑**只給你放專案的資料夾**，不要給整個家目錄。家目錄底下有 SSH 金鑰、瀏覽器
+資料、憑證與你所有的私人檔案，沒有理由納進來：
 
 ```json
 "trustedWorkspaces": [
-  "C:\\Users\\<你的使用者名稱>"
+  "C:\\Users\\<你的使用者名稱>\\Documents\\GitHub"
 ]
 ```
 
-### 2. 開啟全自動執行模式 (Full-Auto)
+自動執行的部分，建議分兩段開。先開不會改到東西的：
 
 ```json
 "agent_features": {
@@ -53,12 +57,18 @@ Antigravity 支援階層式規則載入（Global: `~/.gemini/GEMINI.md`，專案
   "smart_context_retrieval": true,
   "web_search_enabled": true,
   "browser_testing_enabled": true,
-  "mcp_enabled": true,
-  "auto_approve_commands": true,
-  "auto_approve_file_edits": true,
-  "skip_permission_prompts": true,
-  "auto_execution_mode": "full_auto"
+  "mcp_enabled": true
 }
+```
+
+用一陣子確定 hook 真的會擋（`verify-install.py` 綠燈、而且你**親眼看它擋下來過**）再考慮
+下面這三個。它們一開，檔案改寫與指令執行就沒有人工確認了：
+
+```json
+"auto_approve_commands": true,
+"auto_approve_file_edits": true,
+"skip_permission_prompts": true,
+"auto_execution_mode": "full_auto"
 ```
 
 ---

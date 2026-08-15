@@ -70,29 +70,18 @@ python scripts/install.py --agent all --hooks all --skills all
 
 ---
 
-## 五個攔截工具 (Hooks)
+## 裝什麼、各是做什麼的
 
-1. **claim-guard**：抓嘴上說測試通過或找不到檔案、實際零紀錄的宣稱。兩支腳本必須一起裝。
-2. **no-emoji-guard**：照 Unicode 官方規範過濾文件與程式碼中的 Emoji 裝飾符號。
-3. **lint-gate**：收工前強制執行自訂檢查。Windows 版支援專案 `.lint-gate.json` 動態啟用。
-4. **test-gate-guard**：擋掉單條指令用 `;` 串接測試與 commit 的紅燈出貨行為。
-5. **danger-zone-guard**（本 fork 新增）：攔截根目錄/家目錄刪除、刪除 `.git`、保護分支強推與憑證外洩。
+五個攔截工具與十一套工作流程的說明在 [`README.md`](README.md)，不在這裡重複一遍。
+要跟使用者解釋某一支在做什麼，去讀那份。
 
----
+安裝時只有三件事是這裡才有的：
 
-## 十一套工作流程 (Skills)
-
-1. **explain**：白話重述，無術語。
-2. **polite**：專業修辭與溫暖商務語氣。
-3. **first-principles**：第一性原理思考與未知盤點。
-4. **checkpoint**：收工日誌與精確提交。
-5. **neat-freak**：事實對帳引擎。
-6. **review-loop**：長文件段落防丟失與網頁審閱。
-7. **info-diet**：本地注意力與瀏覽資訊結構分析。
-8. **asd-ste100**：Simplified Technical English 改寫。
-9. **iso-24495**：ISO 24495-1 淺白語言改寫。
-10. **verification-protocol**（本 fork 新增）：修改即驗證與零偽修正作業協議。
-11. **task-orchestrator**（本 fork 新增）：大型任務拆解與 Context 隔離。
+- **claim-guard 的兩支腳本必須一起裝**，只裝一支會無聲失效。
+- **lint-gate 需要一個檢查指令才有意義**，對方講不出要檢查什麼就先跳過（Windows 版可留著
+  全域註冊，讓各專案自己丟 `.lint-gate.json` 開啟）。
+- **checkpoint 與 neat-freak 要照對方的檔案擺法調過才會準**，當下答不出來就先跳過，
+  它們不會壞，只是對帳結果不準。
 
 ---
 
