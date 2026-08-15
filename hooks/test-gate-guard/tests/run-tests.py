@@ -36,6 +36,11 @@ CASES = [
     (True, 'pytest -k "slow ; case" ; git commit -m "wip"'),
     # Windows-native runner, same shape
     (True, "Invoke-Pester ; git push"),
+    (True, "bun test ; git push"),
+    (False, "bun test && git push"),
+    (True, "playwright test ; git commit -m 'fix e2e'"),
+    (False, "playwright test && git commit -m 'fix e2e'"),
+    (True, "deno test ; git push"),
 ]
 
 

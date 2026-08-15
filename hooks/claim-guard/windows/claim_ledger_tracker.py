@@ -42,7 +42,8 @@ LEDGER_DIR = Path(
 # the second group is what the same intent looks like on Windows.
 VERIFY_CMD = re.compile(
     r"(--version"
-    r"|npm (run build|test)|pytest|jest|vitest|cargo test|go test|make test|uv run"
+    r"|npm (run build|test|run check)|yarn (build|test)|pnpm (run build|test)|bun (test|run build)|deno (test|task)"
+    r"|pytest|jest|vitest|playwright|cargo test|go test|make (test|check)|uv run"
     r"|py_compile|bash -n|jq (-e |\.)|curl.*-[sI]"
     r"|git\s+(-C\s+\S+\s+)?(status|diff|log)"
     r"|systemctl (status|is-active)"
@@ -58,8 +59,8 @@ VERIFY_CMD = re.compile(
 
 # Search-type commands: looking for files or looking for text inside them.
 SEARCH_CMD = re.compile(
-    r"(^|[|;&]\s*)"
-    r"(grep|rg|find|ls|fd|gh api|mdfind"
+    r"(^|[|;&\s])"
+    r"(grep|rg|find|ls|fd|gh api|mdfind|grep_search|code_search"
     r"|Select-String|Get-ChildItem|gci|dir|findstr)"
     r"(\s|$)",
     re.IGNORECASE,
@@ -67,9 +68,21 @@ SEARCH_CMD = re.compile(
 
 
 def append(path, line):
+    """Append one ledger line and force it to disk before returning.
+
+    The flush and fsync are not decoration. A PostToolUse hook is a short-lived
+    process the harness can reap as soon as the tool result is ready, and a
+    buffered write that has not reached the file system dies with it. Observed
+    in service on 2026-08-15: ledger files created at the right moment, with
+    the right name, containing zero bytes -- which reads downstream as "no
+    evidence" and makes claim-evidence-guard block a claim that was in fact
+    backed by a real test run. An empty ledger is worse than no ledger.
+    """
     LEDGER_DIR.mkdir(parents=True, exist_ok=True)
     with open(path, "a", encoding="utf-8") as fh:
         fh.write("%s %s\n" % (time.strftime("%H:%M:%S"), line))
+        fh.flush()
+        os.fsync(fh.fileno())
 
 
 def main():

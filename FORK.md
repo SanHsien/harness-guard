@@ -17,16 +17,18 @@
 
 ## 加了什麼
 
-| 新增 | 為什麼 |
-|---|---|
-| `scripts/install.py` | 一行指令重現整套設定：自動判平台、複製對應版本、**合併**（不是覆蓋）進 `settings.json`、先備份、原子寫入、寫完讀回驗證 JSON 仍合法。重跑不會重複註冊。 |
-| `scripts/verify-install.py` | 餵合成 payload 給每個已安裝的 hook、實際執行、檢查回應。「讀設定檔然後宣布沒問題」正是這個 kit 存在要擋的那種無證據宣稱。 |
+| `scripts/install.py` | 一行指令重現整套設定：自動判平台與目標 Agent（支援 Claude Code、Google Antigravity、Codex）、複製對應版本、**合併**（不是覆蓋）進設定檔、先備份、原子寫入、寫完讀回驗證 JSON 仍合法。重跑不會重複註冊。 |
+| `scripts/verify-install.py` | 餵合成 payload 給每個已安裝的 hook、實際執行、檢查回應。「讀設定檔然後宣布沒問題」正是這個 kit 存在要擋的那種無證據宣稱。支援全部 5 個 hooks 之 Live Fire 檢驗與 Antigravity 目錄健康度。 |
 | lint-gate 專案級設定 `.lint-gate.json` | 全域註冊一次即可，沒有這個檔案的專案完全不受影響；哪個專案要開就在該專案根目錄丟一個檔案，立即生效、不用重啟。讓各專案的 agent 自己決定要跑什麼檢查。（Windows 版限定） |
-| `hooks/*/windows/*.py` | claim-guard 與 lint-gate 的 Python 版。shell 版靠 `jq`，Windows 原生沒有 `jq`，而它們沒有 `jq` 時 exit 0——那代表「放行」。一個什麼都不擋的已註冊 hook，比沒裝更糟。 |
-| `hooks/test-gate-guard/` | 第四個攔截工具。擋掉「測試指令與 `git commit`／`git push` 之間用 `;` 而非 `&&` 串接」的單條指令——那正是紅燈測試照樣出貨的形狀。來自一次真實事故，並附上它自己上線第一天誤報所產生的回歸測試。 |
+| `hooks/*/windows/*.py` | 5 個攔截工具之跨平台 Python 版。shell 版靠 `jq`，Windows 原生沒有 `jq`，而它們沒有 `jq` 時 exit 0——那代表「放行」。一個什麼都不擋的已註冊 hook，比沒裝更糟。 |
+| `hooks/test-gate-guard/` | 第四個攔截工具。擋掉「測試指令與 `git commit`／`git push` 之間用 `;` 而非 `&&` 串接」的單條指令——那正是紅燈測試照樣出貨的形狀。支援 pytest, bun, deno, playwright, jest, vitest 等。 |
+| `hooks/danger-zone-guard/` | 第五個攔截工具（本 fork 新增）。在指令執行前攔截根目錄/家目錄遞迴刪除、刪除 `.git`、保護分支強推及敏感憑證外洩。附回歸測試。 |
+| Google Antigravity (AGY) 整合 | 支援 Antigravity Customization System，可一鍵將技能安裝至 `~/.gemini/config/skills/`，並附 `gemini-md-template/` 起手規則檔。 |
+| 新增 2 套工作流程技能 | `verification-protocol`（修改即驗證與零偽修正）與 `task-orchestrator`（四階段任務生命週期拆解與 Context 管理）。 |
 | `settings-example.windows.json` | 絕對路徑、用 `python` 不用 `bash`、設定用參數不用 `VAR=value` 前綴。 |
 | `docs/windows-install.md`（+ `.en.md`） | Windows 三個失敗模式，每個都在真實機器上實測過，各自附解法。 |
-| `AGENTS.md` 改寫為單一真相源 | 安裝指引不再綁定單一 agent，任何 AI agent 讀這一份就夠。`CLAUDE.md` 縮成 Claude Code 專屬薄補丁。 |
+| `docs/antigravity-install.md`（+ `.en.md`） | Google Antigravity (AGY) 環境安裝與規則整合指南。 |
+| `AGENTS.md` 改寫為單一真相源 | 安裝指引不再綁定單一 agent，任何 AI agent（Claude Code, Codex, Antigravity, Cursor）讀這一份就夠。`CLAUDE.md` 縮成 Claude Code 專屬薄補丁。 |
 | `.gitignore` 補 `__pycache__` | 上游誤追蹤了 6 個 `.pyc`。 |
 
 ---

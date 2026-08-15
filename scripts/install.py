@@ -1,34 +1,23 @@
 #!/usr/bin/env python3
 """install.py -- one command that reproduces this setup on another machine.
 
-    python scripts/install.py --dry-run              # show exactly what would change
-    python scripts/install.py                        # hooks only
-    python scripts/install.py --hooks all --skills all   # the full setup
-    python scripts/install.py --skills explain,polite
+    python scripts/install.py --dry-run                           # show exactly what would change
+    python scripts/install.py                                     # default hooks
+    python scripts/install.py --hooks all --skills all            # full setup for Claude Code
+    python scripts/install.py --agent antigravity --skills all    # install for Google Antigravity
+    python scripts/install.py --agent all --hooks all --skills all # install across supported agents
 
 What it does:
 
-  1. Works out the platform and picks the right build of each hook. On Windows
-     that means the Python builds -- the shell builds need `jq`, and without
-     `jq` they exit 0, which means "allow."
-  2. Copies the hook scripts flat into ~/.claude/hooks/.
-  3. Merges the matching registrations into ~/.claude/settings.json. Merge, not
-     overwrite: existing hooks are kept, and re-running does not duplicate
-     anything.
-  4. Backs up settings.json before touching it, writes atomically, and reads
-     the file back to confirm it is still valid JSON.
-  5. Tells you to restart, then points at verify-install.py, which proves the
-     hooks actually fire.
-
-  6. With --skills, copies skill folders into ~/.claude/skills/. An existing
-     folder of the same name is left alone unless you pass --force, because
-     checkpoint and neat-freak are meant to be tuned per person and yours are
-     worth more than the stock copies.
-
-What it deliberately does not do: install the rules-file template (that gets
-merged into an existing CLAUDE.md by hand, section by section -- see
-AGENTS.md), or configure lint-gate (it needs a check command that only you
-know).
+  1. Works out the platform and target agent (Claude Code, Antigravity, Codex).
+     Picks the right build of each hook. On Windows that means the Python builds --
+     the shell builds need `jq`, and without `jq` they exit 0, which means "allow."
+  2. Copies hook scripts flat into the agent's hook directory.
+  3. Merges registrations into the settings file (e.g. ~/.claude/settings.json).
+     Merge, not overwrite: existing hooks are kept, and re-running does not duplicate.
+  4. Backs up settings before touching it, writes atomically, and validates JSON.
+  5. With --skills, copies skill folders into the agent's skills directory.
+     Existing folders of the same name are left alone unless you pass --force.
 """
 import argparse
 import json
@@ -42,8 +31,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 IS_WINDOWS = platform.system() == "Windows"
 
-# Each entry: which file to copy for this platform, and how to register it.
-# `event`/`matcher` follow the Claude Code hooks schema.
+# Hook definitions for Claude Code and Windows/POSIX platforms
 HOOKS = {
     "claim-guard": [
         {
@@ -76,13 +64,19 @@ HOOKS = {
             "timeout": 10,
         },
     ],
+    "danger-zone-guard": [
+        {
+            "source": {
+                "windows": "hooks/danger-zone-guard/windows/danger_zone_guard.py",
+                "posix": "hooks/danger-zone-guard/claude-code/danger_zone_guard.py",
+            },
+            "event": "PreToolUse",
+            "matcher": "Bash",
+            "timeout": 10,
+        },
+    ],
     "lint-gate": [
         {
-            # Registering this with no arguments is deliberate and does nothing
-            # anywhere -- until a project opts in with a .lint-gate.json in its
-            # root. Register once now, switch it on per project later, no
-            # restart needed. (Windows build only; the shell build reads
-            # LINT_CMD from the environment instead.)
             "source": {
                 "windows": "hooks/lint-gate/windows/lint_gate.py",
                 "posix": "hooks/lint-gate/claude-code/lint-gate.sh",
@@ -107,18 +101,16 @@ HOOKS = {
     ],
 }
 
-DEFAULT_HOOKS = "claim-guard,test-gate-guard"
+DEFAULT_HOOKS = "claim-guard,test-gate-guard,danger-zone-guard"
 
 
 def build_command(installed_path):
-    """The settings.json command line for a hook that now lives at this path."""
+    """The command line for an installed hook script."""
     quoted = '"%s"' % installed_path
     if installed_path.suffix == ".py":
         interpreter = "python" if IS_WINDOWS else "python3"
         return "%s %s" % (interpreter, quoted)
     if IS_WINDOWS:
-        # Never a bare `bash` here: on Windows that is System32\bash.exe, i.e.
-        # WSL, where this path does not exist and the hook silently never runs.
         git_bash = Path(r"C:\Program Files\Git\bin\bash.exe")
         if git_bash.exists():
             return '"%s" %s' % (git_bash, quoted)
@@ -181,36 +173,130 @@ def select_skills(requested):
     return [by_name[name] for name in sorted(wanted)]
 
 
-def install_skills(args, claude_dir):
+def install_skills(args, target_skills_dir):
     sources = select_skills(args.skills)
     if not sources:
         return 0 if sources is not None else 2
 
-    skills_dir = claude_dir / "skills"
-    print("\nskills -> %s" % skills_dir)
+    print("\nskills -> %s" % target_skills_dir)
     copied = 0
     for source in sources:
-        target = skills_dir / source.name
+        target = target_skills_dir / source.name
         if target.exists() and not args.force:
-            print("  %-16s already there, left alone (--force to overwrite)" % source.name)
+            print("  %-20s already there, left alone (--force to overwrite)" % source.name)
             continue
         if args.dry_run:
-            print("  %-16s would copy" % source.name)
+            print("  %-20s would copy" % source.name)
             continue
         if target.exists():
             shutil.rmtree(target)
         shutil.copytree(source, target, ignore=shutil.ignore_patterns("__pycache__"))
         copied += 1
-        print("  %-16s copied" % source.name)
+        print("  %-20s copied" % source.name)
 
     if copied and not args.dry_run:
         print("  note: checkpoint and neat-freak only produce accurate numbers "
-              "once their reference tables match how you file things.")
+              "once their reference tables match your filing structure.")
     return 0
+
+
+def install_for_claude(args):
+    claude_dir = Path(args.claude_dir)
+    hooks_dir = claude_dir / "hooks"
+    settings_path = claude_dir / "settings.json"
+    key = "windows" if IS_WINDOWS else "posix"
+
+    selected = list(HOOKS) if args.hooks == "all" else [
+        name.strip() for name in args.hooks.split(",") if name.strip()
+    ]
+    unknown = [name for name in selected if name not in HOOKS]
+    if unknown:
+        print("Unknown hook(s): %s" % ", ".join(unknown))
+        print("Available: %s" % ", ".join(HOOKS))
+        return 2
+
+    print("=== Claude Code Installation ===")
+    print("target   : %s" % claude_dir)
+    print("hooks    : %s" % ", ".join(selected))
+
+    try:
+        settings = load_settings(settings_path)
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
+        print("settings.json could not be read: %s" % exc)
+        return 1
+
+    planned = []
+    for name in selected:
+        for spec in HOOKS[name]:
+            source = REPO / spec["source"][key]
+            if not source.exists():
+                print("SKIP %s -- missing %s" % (name, source))
+                continue
+            target = hooks_dir / source.name
+            command = build_command(target)
+            state = "already registered" if already_registered(
+                settings, spec["event"], command
+            ) else "will register"
+            print("%-20s %-12s %s" % (name, spec["event"], command))
+            print("%-20s %-12s %s" % ("", "", state))
+            planned.append((spec, source, target, command, state))
+
+    if args.dry_run:
+        install_skills(args, claude_dir / "skills")
+        return 0
+
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    for _spec, source, target, _command, _state in planned:
+        shutil.copyfile(source, target)
+        if not IS_WINDOWS:
+            os.chmod(target, 0o755)
+    print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
+
+    if settings_path.exists():
+        backup_dir = claude_dir / "backups"
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        backup = backup_dir / ("settings.json.bak-%s" % time.strftime("%Y%m%d-%H%M%S"))
+        shutil.copyfile(settings_path, backup)
+        print("backed up settings.json to %s" % backup)
+
+    added = 0
+    for spec, _source, _target, command, state in planned:
+        if state == "already registered":
+            continue
+        register(settings, spec, command)
+        added += 1
+
+    if added:
+        tmp = settings_path.with_suffix(".json.tmp")
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(settings, fh, indent=2, ensure_ascii=False)
+            fh.write("\n")
+        os.replace(tmp, settings_path)
+        print("registered %d hook(s); settings.json re-read and valid" % added)
+    else:
+        print("nothing new to register in settings.json")
+
+    install_skills(args, claude_dir / "skills")
+    return 0
+
+
+def install_for_antigravity(args):
+    print("\n=== Google Antigravity (AGY) Installation ===")
+    gemini_dir = Path.home() / ".gemini"
+    skills_target = gemini_dir / "config" / "skills"
+    print("target   : %s" % skills_target)
+    skills_target.mkdir(parents=True, exist_ok=True)
+    return install_skills(args, skills_target)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--agent",
+        default="claude",
+        choices=["claude", "antigravity", "all"],
+        help="Target agent ecosystem (default: claude)",
+    )
     parser.add_argument(
         "--hooks",
         default=DEFAULT_HOOKS,
@@ -239,113 +325,23 @@ def main():
     except (AttributeError, ValueError):
         pass
 
-    claude_dir = Path(args.claude_dir)
-    hooks_dir = claude_dir / "hooks"
-    settings_path = claude_dir / "settings.json"
-    key = "windows" if IS_WINDOWS else "posix"
-
-    selected = list(HOOKS) if args.hooks == "all" else [
-        name.strip() for name in args.hooks.split(",") if name.strip()
-    ]
-    unknown = [name for name in selected if name not in HOOKS]
-    if unknown:
-        print("Unknown hook(s): %s" % ", ".join(unknown))
-        print("Available: %s" % ", ".join(HOOKS))
-        return 2
-
     print("platform : %s" % platform.system())
-    print("target   : %s" % claude_dir)
-    print("hooks    : %s" % ", ".join(selected))
     if args.dry_run:
-        print("mode     : dry run, nothing will be written")
-    print()
+        print("mode     : dry run, nothing will be written\n")
 
-    try:
-        settings = load_settings(settings_path)
-    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
-        print("settings.json could not be read: %s" % exc)
-        print("Fix that first -- this script will not overwrite a file it cannot parse.")
-        return 1
-
-    if IS_WINDOWS and shutil.which("jq") is None:
-        print("note: jq is not installed. The Python builds are being used, "
-              "which do not need it.\n")
-
-    planned = []
-    for name in selected:
-        for spec in HOOKS[name]:
-            source = REPO / spec["source"][key]
-            if not source.exists():
-                print("SKIP %s -- missing %s" % (name, source))
-                continue
-            target = hooks_dir / source.name
-            command = build_command(target)
-            state = "already registered" if already_registered(
-                settings, spec["event"], command
-            ) else "will register"
-            print("%-16s %-12s %s" % (name, spec["event"], command))
-            print("%-16s %-12s %s" % ("", "", state))
-            planned.append((spec, source, target, command, state))
-
-    if args.dry_run:
-        rc = install_skills(args, claude_dir)
-        if rc:
+    rc = 0
+    if args.agent in ("claude", "all"):
+        rc = install_for_claude(args)
+        if rc != 0:
             return rc
-        print("\nDry run only. Re-run without --dry-run to apply.")
-        return 0
+    if args.agent in ("antigravity", "all"):
+        rc = install_for_antigravity(args)
+        if rc != 0:
+            return rc
 
-    # 1. copy the scripts
-    hooks_dir.mkdir(parents=True, exist_ok=True)
-    for _spec, source, target, _command, _state in planned:
-        shutil.copyfile(source, target)
-        if not IS_WINDOWS:
-            os.chmod(target, 0o755)
-    print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
-
-    # 2. back up settings.json before changing it
-    if settings_path.exists():
-        backup_dir = claude_dir / "backups"
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        backup = backup_dir / ("settings.json.bak-%s" % time.strftime("%Y%m%d-%H%M%S"))
-        shutil.copyfile(settings_path, backup)
-        print("backed up settings.json to %s" % backup)
-
-    # 3. merge the registrations
-    added = 0
-    for spec, _source, _target, command, state in planned:
-        if state == "already registered":
-            continue
-        register(settings, spec, command)
-        added += 1
-
-    if added:
-        # Write to a temporary file and move it into place, so a crash halfway
-        # through cannot leave a half-written settings.json behind.
-        tmp = settings_path.with_suffix(".json.tmp")
-        with open(tmp, "w", encoding="utf-8") as fh:
-            json.dump(settings, fh, indent=2, ensure_ascii=False)
-            fh.write("\n")
-        os.replace(tmp, settings_path)
-
-        # 4. read it back -- a broken settings.json stops Claude Code starting
-        try:
-            load_settings(settings_path)
-        except (json.JSONDecodeError, ValueError) as exc:
-            print("settings.json is no longer valid JSON: %s" % exc)
-            print("Restore from the backup above.")
-            return 1
-        print("registered %d hook(s); settings.json re-read and still valid" % added)
-    else:
-        print("nothing new to register")
-
-    rc = install_skills(args, claude_dir)
-    if rc:
-        return rc
-
-    print("\nNext, in this order:")
-    print("  1. Quit Claude Code completely and reopen it. Hooks load at startup.")
-    print("  2. Run: python scripts/verify-install.py")
-    print("     Exit code 0 means each hook actually fired and answered correctly.")
+    if not args.dry_run:
+        print("\nInstallation finished.")
+        print("Run `python scripts/verify-install.py` to verify.")
     return 0
 
 
