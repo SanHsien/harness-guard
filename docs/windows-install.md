@@ -68,7 +68,7 @@ hooks/test-gate-guard/claude-code/test_gate_guard.py （Python，三個平台都
 |---|---|---|
 | 解析輸入靠 | `jq` | Python 標準函式庫 |
 | 執行於 | `bash` | `python` |
-| lint-gate 設定方式 | `VAR=value` 前綴（只有 POSIX shell 認得） | `--cmd` / `--fail` 參數，在 cmd、PowerShell、Git Bash 意思都一樣 |
+| lint-gate 設定方式 | `VAR=value` 前綴（只有 POSIX shell 認得） | `--cmd` / `--fail` 參數，在 cmd、PowerShell、Git Bash 意思都一樣；另外會讀專案根目錄的 `.lint-gate.json`（優先權最高） |
 | 額外相依 | `jq` | 無 |
 
 兩版共用同一個帳本目錄（`%USERPROFILE%\.cache\claude-guard-hooks`），互換不需要清理。

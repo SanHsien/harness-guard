@@ -72,7 +72,7 @@ fail-open rules, same messages. What changed is the plumbing:
 |---|---|---|
 | Parses input with | `jq` | Python standard library |
 | Runs under | `bash` | `python` |
-| lint-gate settings | `VAR=value` prefix (POSIX shells only) | `--cmd` / `--fail` arguments, which mean the same thing in cmd, PowerShell, and Git Bash |
+| lint-gate settings | `VAR=value` prefix (POSIX shells only) | `--cmd` / `--fail` arguments, which mean the same thing in cmd, PowerShell, and Git Bash; plus `.lint-gate.json` in the project root, which wins over both |
 | Extra dependencies | `jq` | none |
 
 Both builds use the same ledger directory (`%USERPROFILE%\.cache\claude-guard-hooks`),

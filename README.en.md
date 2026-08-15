@@ -113,6 +113,14 @@ It's not limited to code checks. Whatever command you point it at is what it run
 
 Two settings, and you can drop it into any project.
 
+The Windows build adds one thing (this fork): it reads `.lint-gate.json` from the project root. That means you register it globally once and forget it — a project without that file is untouched, and any project that wants it opts in by dropping a file in, effective immediately with no restart:
+
+```json
+{ "cmd": "python -m pytest -q", "fail": "[1-9][0-9]* (failed|error)" }
+```
+
+Precedence is `.lint-gate.json` > command-line arguments > environment. A malformed config file is ignored rather than fatal — a typo must never leave you unable to finish.
+
 There's a piece of logic in the code you should never delete. Without it, if the AI hits an error it can't fix, it gets stuck in a loop — try to finish, get blocked, try to finish again, get blocked again — forever. That's the single easiest trap to fall into if you build a tool like this yourself, so I left a comment explaining it.
 
 ### test-gate-guard: a red test doesn't get to ship (added by this fork)

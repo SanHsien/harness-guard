@@ -23,6 +23,20 @@ Examples, as they would appear in settings.json on Windows:
 The environment variables LINT_CMD / FAIL_PATTERN / PASS_PATTERN still work as
 a fallback, so a config carried over from the shell version keeps running.
 
+Per-project config, which is the point of registering this once and forgetting
+about it: if the project directory contains `.lint-gate.json`, its settings win
+over both. Register the hook globally with no arguments and it does nothing
+anywhere -- until a project opts in by dropping this file in its root:
+
+    {
+      "cmd": "python -m pytest -q",
+      "fail": "[1-9][0-9]* (failed|error)",
+      "pass": null
+    }
+
+Order of precedence: .lint-gate.json > command-line arguments > environment.
+A project that has no such file is never slowed down or blocked.
+
 Windows notes:
   - The check command itself runs through the system shell (cmd.exe). For a
     PowerShell one-liner use --cmd "powershell -NoProfile -Command \\"...\\"".
@@ -38,6 +52,22 @@ import sys
 
 DEFAULT_FAIL = r"[1-9][0-9]* (error|ERROR)"
 TIMEOUT_SECONDS = int(os.environ.get("LINT_TIMEOUT", "120"))
+PROJECT_CONFIG = ".lint-gate.json"
+
+
+def project_config(project_dir):
+    """Read .lint-gate.json from the project root, if there is one.
+
+    A malformed or unreadable file is ignored rather than fatal: a typo in a
+    config file must not leave someone unable to end a turn.
+    """
+    path = os.path.join(project_dir, PROJECT_CONFIG)
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (OSError, ValueError, UnicodeDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def parse_args(argv):
@@ -70,12 +100,14 @@ def main():
     if payload.get("stop_hook_active") is True:
         return 0
 
-    lint_cmd = (args.cmd or "").strip()
-    if not lint_cmd:
-        return 0
-
     project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
     if not os.path.isdir(project_dir):
+        return 0
+
+    # A project that opts in overrides whatever the global registration says.
+    config = project_config(project_dir)
+    lint_cmd = str(config.get("cmd") or args.cmd or "").strip()
+    if not lint_cmd:
         return 0
 
     try:
@@ -97,11 +129,11 @@ def main():
     if not out.strip():
         return 0
 
-    pass_pattern = (args.passing or "").strip()
+    pass_pattern = str(config.get("pass") or args.passing or "").strip()
     if pass_pattern and re.search(pass_pattern, out, re.MULTILINE):
         return 0
 
-    fail_pattern = (args.fail or "").strip() or DEFAULT_FAIL
+    fail_pattern = str(config.get("fail") or args.fail or "").strip() or DEFAULT_FAIL
     if re.search(fail_pattern, out, re.MULTILINE):
         failing = [ln for ln in out.splitlines() if re.search(fail_pattern, ln)][:20]
         sys.stderr.write(

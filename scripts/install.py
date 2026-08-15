@@ -76,6 +76,23 @@ HOOKS = {
             "timeout": 10,
         },
     ],
+    "lint-gate": [
+        {
+            # Registering this with no arguments is deliberate and does nothing
+            # anywhere -- until a project opts in with a .lint-gate.json in its
+            # root. Register once now, switch it on per project later, no
+            # restart needed. (Windows build only; the shell build reads
+            # LINT_CMD from the environment instead.)
+            "source": {
+                "windows": "hooks/lint-gate/windows/lint_gate.py",
+                "posix": "hooks/lint-gate/claude-code/lint-gate.sh",
+            },
+            "event": "Stop",
+            "matcher": None,
+            "timeout": 60,
+            "statusMessage": "Running end-of-session checks...",
+        },
+    ],
     "no-emoji-guard": [
         {
             "source": {

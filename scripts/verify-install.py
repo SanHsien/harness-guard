@@ -208,10 +208,38 @@ def check_settings(jq_present):
 # -- live fire -------------------------------------------------------------
 
 
+def exempts_everything(hook, probe_path):
+    """Is this copy of no-emoji-guard configured to allow every path?
+
+    Exempting the whole filesystem is a legitimate way to keep the hook loaded
+    but switched off. Reporting that as a failure would be a false alarm, so it
+    is read out of the file and reported as a state, not a fault.
+    """
+    try:
+        text = hook.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    match = re.search(r"^EXEMPT_PATH_SUBSTRINGS\s*=\s*\[(.*?)\]", text, re.MULTILINE | re.DOTALL)
+    if not match:
+        return False
+    entries = re.findall(r"""["']((?:\\.|[^"'\\])*)["']""", match.group(1))
+    return any(entry and entry.encode().decode("unicode_escape") in probe_path
+               for entry in entries)
+
+
 def check_no_emoji_guard():
     hook = find_hook("no-emoji-guard.py")
     if not hook:
         note("no-emoji-guard", "not installed, skipped")
+        return
+    probe = str(SCRATCH / "a.md")
+    if exempts_everything(hook, probe):
+        note(
+            "no-emoji-guard",
+            "installed and loaded, but EXEMPT_PATH_SUBSTRINGS currently exempts "
+            "every path, so it allows all writes. Empty that list in %s to switch "
+            "it on." % hook,
+        )
         return
     blocked = run_hook(
         hook,
@@ -303,6 +331,27 @@ def check_lint_gate():
 
     failing = run_hook(hook, {"stop_hook_active": False}, env=env, args=args)
     loop = run_hook(hook, {"stop_hook_active": True}, env=env, args=args)
+
+    # The Windows build also reads .lint-gate.json from the project root, which
+    # is how a single global registration stays inert until a project opts in.
+    if hook.suffix == ".py":
+        inert = run_hook(hook, {"stop_hook_active": False})
+        config = SCRATCH / ".lint-gate.json"
+        config.write_text(
+            json.dumps({"cmd": fake_check, "fail": "[1-9][0-9]* errors?"}),
+            encoding="utf-8",
+        )
+        opted_in = run_hook(hook, {"stop_hook_active": False})
+        config.unlink()
+        if inert and opted_in:
+            record(
+                inert.returncode == 0,
+                "lint-gate does nothing in a project with no .lint-gate.json",
+            )
+            record(
+                opted_in.returncode == 2,
+                "lint-gate blocks once a project opts in with .lint-gate.json",
+            )
     if not failing or not loop:
         record(False, "lint-gate runs")
         return
