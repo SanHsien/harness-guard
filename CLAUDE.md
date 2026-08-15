@@ -19,7 +19,7 @@ Windows 的 `~` 在不同 shell 下展開結果不同，設定檔裡一律寫完
 ## 這個 repo 用到的 hook 事件
 
 - `PreToolUse` + matcher `Write|Edit|MultiEdit` → no-emoji-guard
-- `PreToolUse` + matcher `Bash` → test-gate-guard
+- `PreToolUse` + matcher `Bash` → test-gate-guard、danger-zone-guard
 - `PostToolUse` + matcher `Bash|Grep|Glob` → claim-ledger-tracker
 - `Stop` → claim-evidence-guard、lint-gate
 

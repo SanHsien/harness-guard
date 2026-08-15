@@ -5,11 +5,26 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "apply_patch|Write|Edit|MultiEdit|Bash",
+        "matcher": "apply_patch|Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "command",
             "command": "python3 ~/.codex/hooks/no-emoji-guard.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "exec|shell|exec_command|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.codex/hooks/test_gate_guard.py",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.codex/hooks/danger_zone_guard.py",
             "timeout": 10
           }
         ]

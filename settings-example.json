@@ -12,6 +12,21 @@
             "statusMessage": "Scanning for emoji..."
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/test_gate_guard.py",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/danger_zone_guard.py",
+            "timeout": 10
+          }
+        ]
       }
     ],
 

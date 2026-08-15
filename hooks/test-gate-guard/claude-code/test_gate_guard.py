@@ -32,13 +32,13 @@ import sys
 TEST_CMD = re.compile(
     r"\b("
     r"pytest|tox|nox"
-    r"|npm\s+(?:run\s+)?test|yarn\s+test|pnpm\s+(?:run\s+)?test"
-    r"|jest|vitest"
-    r"|go\s+test|cargo\s+test|dotnet\s+test|mvn\s+test|gradle\s+test"
+    r"|npm\s+(?:run\s+)?test|yarn\s+test|pnpm\s+(?:run\s+)?test|bun\s+(?:test|run\s+test)|deno\s+test"
+    r"|jest|vitest|playwright\s+test|cypress\s+run"
+    r"|go\s+test|cargo\s+test|dotnet\s+test|mvn\s+test|gradle\s+test|swift\s+test|mix\s+test"
     r"|bundle\s+exec\s+rspec|rspec|phpunit"
     r"|Invoke-Pester"
     r"|make\s+(?:test|check)"
-    r"|ruff\s+check|mypy|tsc\s+--noEmit"
+    r"|ruff\s+check|mypy|flake8|eslint|tsc(?:\s+--noEmit)?"
     r")\b"
 )
 GIT_WRITE = re.compile(r"\bgit\s+(?:commit|push)\b")

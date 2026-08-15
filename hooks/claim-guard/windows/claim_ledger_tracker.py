@@ -42,7 +42,8 @@ LEDGER_DIR = Path(
 # the second group is what the same intent looks like on Windows.
 VERIFY_CMD = re.compile(
     r"(--version"
-    r"|npm (run build|test)|pytest|jest|vitest|cargo test|go test|make test|uv run"
+    r"|npm (run build|test|run check)|yarn (build|test)|pnpm (run build|test)|bun (test|run build)|deno (test|task)"
+    r"|pytest|jest|vitest|playwright|cargo test|go test|make (test|check)|uv run"
     r"|py_compile|bash -n|jq (-e |\.)|curl.*-[sI]"
     r"|git\s+(-C\s+\S+\s+)?(status|diff|log)"
     r"|systemctl (status|is-active)"
@@ -58,8 +59,8 @@ VERIFY_CMD = re.compile(
 
 # Search-type commands: looking for files or looking for text inside them.
 SEARCH_CMD = re.compile(
-    r"(^|[|;&]\s*)"
-    r"(grep|rg|find|ls|fd|gh api|mdfind"
+    r"(^|[|;&\s])"
+    r"(grep|rg|find|ls|fd|gh api|mdfind|grep_search|code_search"
     r"|Select-String|Get-ChildItem|gci|dir|findstr)"
     r"(\s|$)",
     re.IGNORECASE,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""verify-install.py -- proves the hooks are installed, instead of assuming it.
+"""verify-install.py -- proves the hooks and skills are installed, instead of assuming it.
 
 This kit exists because a claim with no evidence behind it is worthless. Its
 own installation is not exempt. Every one of these hooks has a silent failure
@@ -16,10 +16,8 @@ Run it after installing, and again after any change to settings.json:
 
 Exit code 0 means every installed piece answered correctly. Exit code 1 means
 at least one thing is broken, and the line above says which.
-
-Nothing here writes to your configuration. It only reads, and runs the hook
-scripts in a scratch directory.
 """
+import argparse
 import json
 import os
 import platform
@@ -32,15 +30,11 @@ from pathlib import Path
 
 IS_WINDOWS = platform.system() == "Windows"
 CLAUDE_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+GEMINI_DIR = Path.home() / ".gemini"
 SETTINGS = CLAUDE_DIR / "settings.json"
 HOOKS_DIR = CLAUDE_DIR / "hooks"
 
-# The shell builds of these three hooks parse their input with jq. Without jq
-# they exit quietly and protect nothing.
 JQ_DEPENDENT = re.compile(r"claim-(evidence-guard|ledger-tracker)|lint-gate\.sh")
-
-# Ledger writes go to a scratch directory so a verification run never pollutes
-# a live session's evidence.
 SCRATCH = Path(tempfile.mkdtemp(prefix="harness-verify-"))
 
 results = []
@@ -80,9 +74,6 @@ def run_hook(path, payload, env=None, timeout=60, args=()):
     elif path.suffix in (".sh", ""):
         bash = shutil.which("bash")
         if IS_WINDOWS:
-            # A bare `bash` on Windows is System32\bash.exe, which is WSL: a
-            # different filesystem and a different home directory. Only Git
-            # Bash can run a hook that lives under the Windows home.
             git_bash = Path(r"C:\Program Files\Git\bin\bash.exe")
             bash = str(git_bash) if git_bash.exists() else bash
         if not bash:
@@ -99,9 +90,6 @@ def run_hook(path, payload, env=None, timeout=60, args=()):
             input=json.dumps(payload),
             capture_output=True,
             text=True,
-            # A hook is free to print Chinese. Decoding its output with the
-            # console default (cp950 here) would crash this script instead of
-            # reporting the hook's answer.
             encoding="utf-8",
             errors="replace",
             timeout=timeout,
@@ -128,9 +116,6 @@ def check_environment():
         note("jq", "not installed")
 
     if IS_WINDOWS:
-        # Report every bash on PATH in order. The first one wins, and if the
-        # first one is System32 then any hook registered as `bash ...` is
-        # running under WSL, where the Windows home directory does not exist.
         found = []
         for directory in os.environ.get("PATH", "").split(os.pathsep):
             candidate = Path(directory) / "bash.exe"
@@ -160,9 +145,9 @@ def collect_commands(hooks_block):
 
 
 def check_settings(jq_present):
-    section("settings.json")
+    section("settings.json (Claude Code)")
     if not SETTINGS.exists():
-        record(False, "settings.json exists", str(SETTINGS))
+        note("settings.json", "does not exist yet at %s (skipped)" % SETTINGS)
         return []
 
     try:
@@ -184,11 +169,8 @@ def check_settings(jq_present):
             record(
                 False,
                 "no bare `bash` in a Windows hook command",
-                command[:70] + " -- resolves to WSL; use the full Git Bash path "
-                "or the Windows Python build",
+                command[:70] + " -- resolves to WSL; use full Git Bash path or Python build",
             )
-        # Only this kit's shell hooks depend on jq. Someone else's .sh hook is
-        # their business, so it is not flagged here.
         if jq_present is None and JQ_DEPENDENT.search(command):
             record(
                 False,
@@ -205,16 +187,23 @@ def check_settings(jq_present):
     return commands
 
 
+# -- Antigravity environment -----------------------------------------------
+
+
+def check_antigravity():
+    section("Google Antigravity (AGY)")
+    skills_dir = GEMINI_DIR / "config" / "skills"
+    if skills_dir.exists():
+        installed = [p.name for p in skills_dir.iterdir() if p.is_dir()]
+        record(True, "Antigravity global skills directory", "%d skills installed (%s)" % (len(installed), ", ".join(installed[:4])))
+    else:
+        note("Antigravity skills", "not yet populated under %s" % skills_dir)
+
+
 # -- live fire -------------------------------------------------------------
 
 
 def exempts_everything(hook, probe_path):
-    """Is this copy of no-emoji-guard configured to allow every path?
-
-    Exempting the whole filesystem is a legitimate way to keep the hook loaded
-    but switched off. Reporting that as a failure would be a false alarm, so it
-    is read out of the file and reported as a state, not a fault.
-    """
     try:
         text = hook.read_text(encoding="utf-8")
     except OSError:
@@ -276,7 +265,6 @@ def check_claim_guard():
     if not (tracker and guard):
         return
 
-    # 1. Claim of verification with an empty ledger: must be blocked.
     empty = run_hook(
         guard,
         {
@@ -292,7 +280,6 @@ def check_claim_guard():
         "claim-guard blocks 'tests pass' with an empty ledger",
     )
 
-    # 2. Same claim after a real test command was logged: must be allowed.
     logged = run_hook(
         tracker,
         {
@@ -323,17 +310,12 @@ def check_lint_gate():
         note("lint-gate", "not installed, skipped")
         return
     fake_check = "%s -c \"print('found 3 errors')\"" % sys.executable
-    # The Windows build takes its settings as arguments; the shell build reads
-    # them from the environment. Supplying both exercises whichever is
-    # installed.
     env = {"LINT_CMD": fake_check, "FAIL_PATTERN": "[1-9][0-9]* errors?"}
     args = ("--cmd", fake_check, "--fail", "[1-9][0-9]* errors?")
 
     failing = run_hook(hook, {"stop_hook_active": False}, env=env, args=args)
     loop = run_hook(hook, {"stop_hook_active": True}, env=env, args=args)
 
-    # The Windows build also reads .lint-gate.json from the project root, which
-    # is how a single global registration stays inert until a project opts in.
     if hook.suffix == ".py":
         inert = run_hook(hook, {"stop_hook_active": False})
         config = SCRATCH / ".lint-gate.json"
@@ -380,21 +362,45 @@ def check_test_gate():
     record(gated.returncode == 0, "test-gate-guard allows `pytest && git push`")
 
 
+def check_danger_zone_guard():
+    hook = find_hook("danger_zone_guard.py", "danger-zone-guard.py")
+    if not hook:
+        note("danger-zone-guard", "not installed, skipped")
+        return
+    destructive = run_hook(
+        hook, {"tool_name": "Bash", "tool_input": {"command": "rm -rf /"}}
+    )
+    safe = run_hook(
+        hook, {"tool_name": "Bash", "tool_input": {"command": "rm -rf dist/"}}
+    )
+    if not destructive or not safe:
+        record(False, "danger-zone-guard runs")
+        return
+    record(destructive.returncode == 2, "danger-zone-guard blocks catastrophic `rm -rf /`")
+    record(safe.returncode == 0, "danger-zone-guard allows safe `rm -rf dist/`")
+
+
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--agent", default="all", choices=["claude", "antigravity", "all"])
+    _args = parser.parse_args()
+
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
 
-    print("Verifying the harness install under %s" % CLAUDE_DIR)
+    print("Verifying the harness installation...")
     jq = check_environment()
     check_settings(jq)
+    check_antigravity()
 
     section("Live fire (each installed hook is run with a synthetic payload)")
     check_no_emoji_guard()
     check_claim_guard()
     check_lint_gate()
     check_test_gate()
+    check_danger_zone_guard()
 
     failed = [r for r in results if not r[0]]
     section("Result")

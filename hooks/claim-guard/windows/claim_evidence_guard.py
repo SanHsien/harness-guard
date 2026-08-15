@@ -39,7 +39,8 @@ LEDGER_DIR = Path(
 VERIFY_TRIGGERS = re.compile(
     r"verified|confirmed|all passing|tests? pass|build passes|all green"
     r"|works now|working now|deployed and verified"
-    r"|驗證通過|測試通過|驗證無誤|實測通過|實測有效|全數通過|建置通過|跑通|已驗證|確認無誤",
+    r"|驗證通過|測試通過|驗證無誤|實測通過|實測有效|全數通過|建置通過|跑通|已驗證|確認無誤"
+    r"|所有測試已通過|全部測試通過|編譯成功|建置成功|修改即驗證完成|功能正常|已確認運作正常",
     re.IGNORECASE,
 )
 

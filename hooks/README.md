@@ -1,4 +1,4 @@
-# Four interceptor hooks, in up to three builds each
+# Five interceptor hooks, in up to three builds each
 
 Each one has its builds in folders underneath it:
 
@@ -6,12 +6,11 @@ Each one has its builds in folders underneath it:
 hooks/<tool-name>/
 ├── claude-code/   for Claude Code
 ├── codex/         for Codex
-└── windows/       Python build, no jq, no bash  (this fork; claim-guard and lint-gate)
+└── windows/       Python build, no jq, no bash (pure Python, cross-platform)
 ```
 
-The fourth hook, `test-gate-guard/`, is added by this fork. It is pure Python
-on both platforms and needs no separate Windows build -- see the section at the
-bottom.
+The fourth and fifth hooks (`test-gate-guard/` and `danger-zone-guard/`) are added by this fork.
+They are pure Python on all platforms and require no external dependencies.
 
 **On Windows, use the `windows/` build.** The shell builds parse their input
 with `jq`, which is not present on a stock Windows box, and without `jq` they
