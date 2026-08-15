@@ -1,89 +1,139 @@
-> English | [中文版](README.md)
+English | [中文版](README.md)
 
-# Five Guardrail Hooks, Eleven Workflow Skills, and Starter Rule Templates
+# Harness Guard
 
-> **This is a fork.** It adds Windows-native Python builds, cross-agent support (Claude Code, OpenAI Codex, Google Antigravity, Cursor), and a self-verification script (`verify-install.py`) that test-fires hooks instead of guessing. Windows users start from [`docs/windows-install.en.md`](docs/windows-install.en.md); Antigravity users start from [`docs/antigravity-install.en.md`](docs/antigravity-install.en.md).
->
-> What changed in each release: [`CHANGELOG.en.md`](CHANGELOG.en.md). How this fork differs from upstream and how to sync: [`FORK.md`](FORK.md).
+[![CI](https://github.com/SanHsien/harness-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/SanHsien/harness-guard/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-Have you ever experienced this: you instruct your AI assistant to "always run tests after editing code", it complies three times, and on the fourth turn forgets without saying a word; or it runs a catastrophic deletion command or leaks sensitive tokens.
+**Turn “please remember the rules” into executable checks that can actually block an action.**
 
-That is why this kit exists.
+Harness Guard is a guardrail kit for AI coding agents: five hooks, eleven optional workflow skills, Claude / Gemini rule-file templates, a reproducible installer, and a live-fire installation verifier. Windows support is a major focus of this fork.
 
-Rules are just text. When conversations get long, text gets diluted. The approach here is: **Don't beg it; block it.** Turn desired behaviors into automated programmatic guardrails.
+This repository is a fork of [`agentcrew-academy/harness-starter-kit`](https://github.com/agentcrew-academy/harness-starter-kit). See [`FORK.md`](FORK.md) and [`NOTICE`](NOTICE) for upstream provenance, fork-specific changes, and attribution.
 
----
+## Why it exists
 
-## One-Command Reproducibility
+Text instructions can fade in long sessions. Hooks are different: they execute programmatic checks before or after agent actions, or when a turn is about to end.
+
+Harness Guard focuses on failure modes with practical consequences:
+
+- claiming tests passed without evidence that a test actually ran;
+- letting a failed test continue into `git commit` / `git push` because shell commands were chained incorrectly;
+- destructive deletion, force-pushing a protected branch, or exfiltrating `.env` / private-key files;
+- wrapping up without passing a project-defined lint or check command;
+- explicitly disallowing emoji in workflows where that is a project requirement.
+
+These guardrails are defense-in-depth, not a sandbox or formal policy engine. They use pattern matching and agent hook interfaces, so false positives and false negatives remain possible.
+
+## Five guardrail hooks
+
+| Hook | What it does |
+|---|---|
+| `claim-guard` | records tool evidence and reconciles completion claims before the turn ends |
+| `test-gate-guard` | blocks unsafe test + `git commit` / `git push` command chaining |
+| `danger-zone-guard` | blocks selected catastrophic deletions, force-pushes to protected branches, and sensitive-file exfiltration |
+| `lint-gate` | runs project checks before wrap-up; Windows can opt in per project with `.lint-gate.json` |
+| `no-emoji-guard` | blocks emoji in selected write flows; optional and preference-oriented |
+
+See [`hooks/`](hooks) for platform-specific implementations and interface details.
+
+## Eleven workflow skills
+
+`explain`, `polite`, `first-principles`, `checkpoint`, `neat-freak`, `review-loop`, `info-diet`, `asd-ste100`, `iso-24495`, `verification-protocol`, and `task-orchestrator`.
+
+They are optional workflows, not required dependencies of the five guardrail hooks. See [`skills/`](skills).
+
+## Support matrix
+
+| Agent / environment | Hooks | Skills / rules | Installation status |
+|---|---|---|---|
+| **Claude Code** | all five hooks; Windows selects Python builds where needed | `~/.claude/skills/` + CLAUDE rule templates | automated by `install.py` |
+| **OpenAI Codex** | Codex hook implementations and `codex-hooks-example.json` are included | skills can be integrated manually | **manual integration today; `install.py` does not register Codex hooks** |
+| **Google Antigravity / Gemini** | no equivalent hook registration in this repo today | skills + `GEMINI.md` templates | `install.py --agent antigravity` installs skills |
+| **Cursor / `.agents` ecosystem** | no dedicated hook installer | `.agents/skills/` and rule files are available | manual / agent-specific integration |
+
+Accordingly, `--agent all` currently means the automated **Claude Code + Antigravity** paths. It does not mean Codex or Cursor hooks are automatically registered.
+
+## Quick start
+
+### Claude Code
+
+Preview without changing configuration:
 
 ```bash
-# For Claude Code
 python scripts/install.py --dry-run --hooks all --skills all
+```
 
-# For Google Antigravity (AGY)
+Then install:
+
+```bash
+python scripts/install.py --hooks all --skills all
+```
+
+### Google Antigravity / Gemini skills
+
+```bash
+python scripts/install.py --dry-run --agent antigravity --skills all
 python scripts/install.py --agent antigravity --skills all
+```
 
-# For all supported agents
+### Both automated targets
+
+```bash
+python scripts/install.py --dry-run --agent all --hooks all --skills all
 python scripts/install.py --agent all --hooks all --skills all
 ```
 
-Restart your agent, then verify:
+The installer is designed to **merge rather than replace** existing configuration. Claude Code settings are backed up before a real write, and existing same-name skill folders are left untouched unless `--force` is explicitly requested.
+
+## Verify the installation
+
+After installing Claude Code hooks, restart the agent and run:
 
 ```bash
 python scripts/verify-install.py
 ```
 
-Exit code 0 confirms all installed guardrails actually fire and respond correctly.
+The verifier does more than inspect configuration: it feeds synthetic payloads into installed hooks and checks their actual allow / block behavior. Exit code `0` means the items it checked passed.
 
----
+It primarily verifies Claude Code hooks and the Antigravity skills directory. **It is not currently a Codex hook installation verifier.**
 
-## Five Guardrail Hooks
+## Windows
 
-1. **claim-guard**: Tracks tool calls quietly and reconciles completion claims against actual test/search logs before allowing the turn to end.
-2. **no-emoji-guard**: Strictly filters emojis from documents, comments, and commit messages based on official Unicode definitions.
-3. **lint-gate**: Runs checks before wrap-up. Windows build supports per-project `.lint-gate.json` opt-in.
-4. **test-gate-guard**: Blocks commands chaining tests and git commits with `;` instead of `&&` (preventing broken code shipping).
-5. **danger-zone-guard**: Intercepts catastrophic deletions (`rm -rf /`, `rm -rf ~`, `rd /s /q C:\`), accidental `.git` removal, force pushes to primary branches, and `.env`/secret exfiltration.
+Do not rely on the `jq`-dependent shell builds in a native Windows environment. The Claude Code installer selects Python builds where required so missing `jq` or a WSL `bash` path does not silently turn a guardrail into fail-open behavior.
 
----
+See [`docs/windows-install.en.md`](docs/windows-install.en.md). Antigravity / Gemini users should see [`docs/antigravity-install.en.md`](docs/antigravity-install.en.md).
 
-## Eleven Workflow Skills
+## Before installing
 
-1. **explain**: Rewrites complex explanations in plain language without jargon.
-2. **polite**: Shifts tone between warm empathy and business professional.
-3. **first-principles**: Re-examines problems from first principles.
-4. **checkpoint**: Structured session closure and commit synchronization.
-5. **neat-freak**: Mechanical fact reconciliation engine.
-6. **review-loop**: Prevents silent content loss during document revisions with paragraph locking and web review UI.
-7. **info-diet**: Computes local attention and browsing structure with complete privacy.
-8. **asd-ste100**: Simplified Technical English rewriting for unambiguous tool instructions.
-9. **iso-24495**: Plain language writing following ISO 24495-1 standards.
-10. **verification-protocol**: Modify-then-verify and zero-dummy standards.
-11. **task-orchestrator**: Four-stage lifecycle task decomposition (Research → Plan → Build → Verify) and context management.
+These scripts modify agent configuration, and hooks can intercept future actions. Before installing any guardrail bundle from the internet, read the scripts or ask your agent to explain:
 
----
+1. which files will be copied;
+2. which settings will be modified;
+3. which events can block an action;
+4. how to disable and remove it.
 
-## Starter Rule Templates
+You do not need every hook. Installing only the guardrails that match your actual risks is usually better than accumulating more rules.
 
-- **`claude-md-template/`**: Minimal `CLAUDE.md` template based on latest model guidelines.
-- **`gemini-md-template/`**: Hierarchical `GEMINI.md` rules for Google Antigravity and Gemini CLI.
+## If you are not comfortable with the terminal
 
----
+Give the repository URL to an AI coding agent and ask it to read [`AGENTS.md`](AGENTS.md), explain the changes in plain language, run the installer in dry-run mode first, and install items one at a time. Do not ask it to skip preview and verification.
 
-## Before installing, have the AI read the scripts to you
+## Development and verification
 
-These tools intercept what the AI is allowed to do, and that affects everything you work on
-afterwards. Have it read each script out loud, or at minimum explain what each one does. That
-holds for this folder and for any bundle of scripts you find online — convenience is not a
-reason to install something.
+CI runs the core Python syntax / regression checks, installer dry-run contract test, and existing hook test suites on Linux and Windows.
 
----
+Main regression commands:
+
+```bash
+python hooks/danger-zone-guard/tests/run-tests.py
+python hooks/test-gate-guard/tests/run-tests.py
+python hooks/tests/run-encoding-tests.py
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+Repository maintenance and installation rules live in [`AGENTS.md`](AGENTS.md). Release history lives in [`CHANGELOG.en.md`](CHANGELOG.en.md).
 
 ## License
 
-MIT — see [`LICENSE`](LICENSE).
-
-This kit is a fork of [agentcrew-academy/harness-starter-kit](https://github.com/agentcrew-academy/harness-starter-kit),
-and several hooks are in turn adapted from earlier work. The original authors and sources are
-listed in [`NOTICE`](NOTICE). Keep that file attached if you redistribute or reuse this — it is
-the one thing MIT actually requires of you.
+MIT License — see [`LICENSE`](LICENSE). Original authors, fork provenance, and adapted work are listed in [`NOTICE`](NOTICE).

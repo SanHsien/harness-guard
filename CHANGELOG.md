@@ -12,6 +12,7 @@
 
 ### 修正
 
+- **`fork` `--dry-run --agent antigravity/all` 現在真的零寫入。** 原本 `install.py` 在 dry-run 模式仍會建立 `~/.gemini/config/skills/`，與「nothing will be written」契約矛盾；現在只有正式安裝才會建立目錄，並加入跨平台 regression test 鎖住此行為。
 - **`fork` 所有 hook 改用 bytes 讀取 payload，中文觸發詞才真的會動。**
   原本九支 hook 都用 `json.load(sys.stdin)`，那會依 locale 決定解碼方式。在繁體中文
   Windows（cp950）上，claim-evidence-guard 收到「我已經驗證通過，測試全數通過」卻直接放行——
@@ -34,6 +35,7 @@
 
 ### 新增
 
+- **`fork` 跨平台 CI**：Linux / Windows × Python 3.11 / 3.14 執行核心 Python compile、danger-zone/test-gate/encoding regression suites、installer dry-run 契約測試與完整 dry-run 計畫。
 - **`fork` danger-zone-guard**（第五個攔截工具）：攔截根目錄／家目錄遞迴刪除、刪除 `.git`、
   保護分支強推、憑證外洩。附 25 案回歸測試（兩個平台版本）。
 - **`fork` Google Antigravity (AGY) 支援**：`docs/antigravity-install.md`（+ `.en.md`）、
@@ -55,6 +57,8 @@
 
 ### 變更
 
+- **`fork` README 改為產品／支援矩陣優先**：明確區分 Claude Code、Codex、Antigravity / Gemini、Cursor 的 hooks / skills / installer 能力；不再把 `--agent all` 說成 Codex / Cursor 也會自動註冊。
+- **`fork` `AGENTS.md` 收斂為安裝安全不變式 + repo 維護規則**，保留非技術使用者安裝契約，但正常 repo 工作改為 branch → PR → CI → merge，純文件整理不再機械式要求 changelog / release。
 - **`fork` `AGENTS.md` 改寫為單一真相源**，任何 AI agent 讀這一份就夠；`CLAUDE.md` 縮成
   Claude Code 專屬薄補丁。
 - **`fork` 文件語言翻轉**：`README.md` 等以繁體中文為主，英文放 `*.en.md` 鏡像。

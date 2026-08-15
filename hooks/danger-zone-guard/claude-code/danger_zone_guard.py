@@ -177,8 +177,7 @@ def main():
         pass
 
     try:
-        raw = sys.stdin.read()
-        payload = json.loads(raw) if raw.strip() else {}
+        payload = read_payload()
     except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
         return 0
 
