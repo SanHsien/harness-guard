@@ -2,12 +2,9 @@
 
 # 五個讓 AI 守規矩的小工具、十一套現成的工作流程，加上起手規則檔
 
-> **2026-08-09 更新**：三個攔截工具現在都有 Claude Code 版與 Codex 版，判斷邏輯相同。工作流程新增 review-loop，共六套。
-> **2026-08-12 更新**：新增 info-diet（算你的注意力實際跑到哪去了），共七套。
-> **2026-08-14 更新**：新增 claude-md-template——一份照五代模型官方指引寫的 CLAUDE.md 起手範本，加三個可選規則檔。
-> **2026-08-15 更新（本 fork 重大升級）**：新增第五個攔截工具 `danger-zone-guard`（高危指令與越界防護）、新增兩套工作流程（`verification-protocol` 與 `task-orchestrator`）、新增 Google Antigravity (AGY) 原生支援與 `gemini-md-template` 起手範本。
-
-> **這是一份 fork。** 多了五個攔截工具的 Windows 版、跨 Agent 支援（Claude Code、OpenAI Codex、Google Antigravity、Cursor），以及一支「用實際執行證明裝好了」而不是假設裝好了的驗證腳本。用 Windows 的話從 [`docs/windows-install.md`](docs/windows-install.md) 開始，用 Antigravity 從 [`docs/antigravity-install.md`](docs/antigravity-install.md) 開始。完整改動清單：[`FORK.md`](FORK.md)。
+> **這是一份 fork。** 多了五個攔截工具的 Windows 版、跨 Agent 支援（Claude Code、OpenAI Codex、Google Antigravity、Cursor），以及一支「用實際執行證明裝好了」而不是假設裝好了的驗證腳本。用 Windows 的話從 [`docs/windows-install.md`](docs/windows-install.md) 開始，用 Antigravity 從 [`docs/antigravity-install.md`](docs/antigravity-install.md) 開始。
+>
+> 每一版改了什麼看 [`CHANGELOG.md`](CHANGELOG.md)；跟上游的差異與同步方式看 [`FORK.md`](FORK.md)。
 
 你有沒有遇過這種事：你明明告訴 AI「每次改完程式碼都要先跑測試」，它前三次乖乖照做，第四次就忘了，而且忘記的時候完全不會講；或者它執行了危險的指令、刪掉未追蹤的檔案。
 

@@ -179,5 +179,10 @@ exit code 0 才算真正裝好且有效保護。
   英文放 `*.en.md` 鏡像檔。改中文版時同步英文版。
 - 本檔與 `CLAUDE.md` 的分工：通用規則一律寫在這裡，`CLAUDE.md` 只放 Claude Code 專屬的
   路徑與介面細節，不重複規則。
-- 改完 hook 一定要跑對應的回歸測試（`hooks/*/tests/run-tests.py`），並在**目標作業系統上**
-  跑一次 `scripts/verify-install.py`。只在一個平台上綠燈不算數。
+- 改完 hook 一定要跑對應的回歸測試（`hooks/*/tests/run-tests.py`）與
+  `hooks/tests/run-encoding-tests.py`，並在**目標作業系統上**跑一次 `scripts/verify-install.py`。
+  只在一個平台上綠燈不算數。
+- 有使用者看得到的改動就寫進 [`CHANGELOG.md`](CHANGELOG.md)（與 `CHANGELOG.en.md`）。
+  README 只講「這是什麼、怎麼用」，版本沿革一律進 CHANGELOG。
+- **hook 之間不可以互相 import。** 安裝是平放的，裝完之後 repo 的資料夾結構不存在，
+  靠相對路徑 import 的 hook 一定壞。要共用邏輯就複製一份。

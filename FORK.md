@@ -15,6 +15,8 @@
 
 ---
 
+逐版改了什麼看 [`CHANGELOG.md`](CHANGELOG.md)；本檔只講「與上游的差異」與「怎麼同步」。
+
 ## 加了什麼
 
 | `scripts/install.py` | 一行指令重現整套設定：自動判平台與目標 Agent（支援 Claude Code、Google Antigravity、Codex）、複製對應版本、**合併**（不是覆蓋）進設定檔、先備份、原子寫入、寫完讀回驗證 JSON 仍合法。重跑不會重複註冊。 |

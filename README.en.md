@@ -2,9 +2,9 @@
 
 # Five Guardrail Hooks, Eleven Workflow Skills, and Starter Rule Templates
 
-> **2026-08-15 Update (Major Fork Evolution)**: Added 5th guardrail hook `danger-zone-guard` (destructive commands & boundary protection), added 2 new workflow skills (`verification-protocol` and `task-orchestrator`), added native Google Antigravity (AGY) support and `gemini-md-template`.
-
-> **This is a fork.** It adds Windows-native Python builds, cross-agent support (Claude Code, OpenAI Codex, Google Antigravity, Cursor), and a self-verification script (`verify-install.py`) that test-fires hooks instead of guessing. Windows users start from [`docs/windows-install.md`](docs/windows-install.md); Antigravity users start from [`docs/antigravity-install.md`](docs/antigravity-install.md). Full changelog: [`FORK.md`](FORK.md).
+> **This is a fork.** It adds Windows-native Python builds, cross-agent support (Claude Code, OpenAI Codex, Google Antigravity, Cursor), and a self-verification script (`verify-install.py`) that test-fires hooks instead of guessing. Windows users start from [`docs/windows-install.en.md`](docs/windows-install.en.md); Antigravity users start from [`docs/antigravity-install.en.md`](docs/antigravity-install.en.md).
+>
+> What changed in each release: [`CHANGELOG.en.md`](CHANGELOG.en.md). How this fork differs from upstream and how to sync: [`FORK.md`](FORK.md).
 
 Have you ever experienced this: you instruct your AI assistant to "always run tests after editing code", it complies three times, and on the fourth turn forgets without saying a word; or it runs a catastrophic deletion command or leaks sensitive tokens.
 
