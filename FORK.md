@@ -1,5 +1,9 @@
 # 關於這份 fork
 
+本 repo：[SanHsien/harness-guard](https://github.com/SanHsien/harness-guard)
+（原名 `harness-starter-kit`，2026-08-15 更名；GitHub 會自動轉址舊網址。
+本機工作目錄仍叫 `harness-starter-kit`，同 voxprose 的做法。）
+
 上游：[agentcrew-academy/harness-starter-kit](https://github.com/agentcrew-academy/harness-starter-kit)
 
 這份 fork 加上 Windows 支援、第四個攔截工具，以及**可再現性**：換一台電腦，
@@ -29,8 +33,8 @@
 ## 可再現性：換一台電腦怎麼裝
 
 ```bash
-git clone <這個 repo>
-cd harness-starter-kit
+git clone https://github.com/SanHsien/harness-guard.git
+cd harness-guard
 python scripts/install.py --dry-run --hooks all --skills all   # 先看會動到什麼
 python scripts/install.py --hooks all --skills all             # 真的裝
 # 完全關掉 Claude Code 再開
