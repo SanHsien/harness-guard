@@ -32,6 +32,37 @@ Antigravity 支援階層式規則載入（Global: `~/.gemini/GEMINI.md`，專案
 
 ---
 
+## 信任工作區與免彈窗設定 (Trusted Workspaces & Auto Mode)
+
+若希望 Antigravity 在執行測試與修改檔案時不被頻繁的授權彈窗中斷，可編輯 `~/.gemini/antigravity-cli/settings.json`：
+
+### 1. 信任工作區建議設為家目錄
+直接將整個使用者家目錄設為信任路徑，底下的所有現有與未來新增的專案都會自動被涵蓋，無須每次手動增添：
+
+```json
+"trustedWorkspaces": [
+  "C:\\Users\\<你的使用者名稱>"
+]
+```
+
+### 2. 開啟全自動執行模式 (Full-Auto)
+
+```json
+"agent_features": {
+  "auto_run_tests": true,
+  "smart_context_retrieval": true,
+  "web_search_enabled": true,
+  "browser_testing_enabled": true,
+  "mcp_enabled": true,
+  "auto_approve_commands": true,
+  "auto_approve_file_edits": true,
+  "skip_permission_prompts": true,
+  "auto_execution_mode": "full_auto"
+}
+```
+
+---
+
 ## 驗證安裝
 
 執行以下指令進行安裝自我驗證：
