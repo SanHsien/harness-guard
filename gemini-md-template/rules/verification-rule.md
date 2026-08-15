@@ -1,13 +1,20 @@
-# 修改即驗證與零偽修正規範 (Modify-Then-Verify & Zero-Dummy Rule)
+# Verification: change it, then prove it
 
-## 核心要求
-1. **修改後立即驗證**：
-   - 每次新增或修改程式碼後，必須主動執行語法檢查 (Linting)、編譯測試 (Build) 或單元測試 (Unit Test)。
-   - 不准在未親自執行測試的情況下宣稱「已修復」、「已完成」。
+After adding or changing code, run the project's check — tests, build, or lint — before
+reporting anything. The exit code is the evidence; reading the diff is not.
 
-2. **零偽修正 (Zero Dummy Fix)**：
-   - 嚴禁以註解掉測試案例、註解掉斷言、吞掉例外 (Empty Exception Handler / catch-all pass) 或回傳假資料 (Dummy Fallback) 的方式製造通過的假象。
-   - 遇到測試失敗時，先查看完整錯誤日誌與 Stack Trace，針對根因進行實質修復。
+Never say "fixed", "done", or "tests pass" without having run the thing that produced that
+result. If it genuinely can't be checked automatically, say "not verified, needs manual
+confirmation" and name what needs confirming. That answer is always available.
 
-3. **邊界與回歸防護**：
-   - 修復 Bug 時，必須確保未破壞既有功能，並在可能的情況下補上回歸測試。
+When a check fails, read the whole stack trace and fix the cause. None of these are fixes:
+
+- commenting out the failing case or the assertion
+- swallowing the exception (`except Exception: pass`, empty `catch`)
+- returning hardcoded or dummy data so the caller stops complaining
+
+Each one converts a visible failure into an invisible one, which is worse than the failure
+you started with.
+
+When fixing a bug, check that the fix didn't break something adjacent, and add a regression
+test where the project has somewhere to put one.

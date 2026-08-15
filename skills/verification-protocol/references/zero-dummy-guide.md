@@ -1,39 +1,59 @@
-# 零偽修正指引 (Zero-Dummy Guide)
+# Fake fixes, and what to do instead
 
-偽修正（Dummy / Fake Fix）是指「在表面上讓測試或程式碼不報錯，但實際上破壞了業務邏輯或掩蓋了真實問題」的行為。
+A fake fix makes the error stop appearing without making the problem stop existing. It is
+worse than the failure it replaces: the failing test was telling you something, and now
+nothing is.
 
----
+Three shapes cover almost all of them.
 
-## 常見偽修正型態與正確做法
+## Swallowing the exception
 
-### 1. 吞掉異常 (Swallowing Exceptions)
-- **錯誤做法**：
-  ```python
-  try:
-      fetch_data()
-  except Exception:
-      pass  # 假裝沒事
-  ```
-- **正確做法**：
-  - 診斷 `fetch_data()` 為什麼拋出異常（是網路問題、認證失敗還是資料格式不符）。
-  - 精確捕捉特定例外並進行合適的重試或錯誤提示處理。
+```python
+try:
+    fetch_data()
+except Exception:
+    pass  # now it "works"
+```
 
-### 2. 弱化或註解測試斷言 (Weakening Assertions)
-- **錯誤做法**：
-  ```python
-  # assert result == 42
-  assert result is not None  # 測試太難過，把斷言放水
-  ```
-- **正確做法**：
-  - 修正運算邏輯，直到 `result == 42` 真正成立。
+The call still fails. You have only removed the report. Whatever depended on that data now
+gets nothing, and the next person debugging it starts from a program that appears healthy.
 
-### 3. 未完成 Placeholder (TODO / Mock Data in Production)
-- **錯誤做法**：
-  ```typescript
-  function calculateTax(amount: number) {
-      // TODO: implement later
-      return 0;
-  }
-  ```
-- **正確做法**：
-  - 一次性完整實現正確的計算公式與邊界處理。
+Instead: find out why it raised — network, authentication, a schema that changed — then
+catch that specific exception and do something real with it. Retry, fall back with a log
+line that says so, or let it propagate. All three are honest; `pass` is not.
+
+## Weakening the assertion
+
+```python
+# assert result == 42
+assert result is not None   # the real one was too hard to pass
+```
+
+The test now passes for any wrong answer that happens to be an object. You have kept the
+ceremony of a test and thrown away the check.
+
+Instead: fix the computation until `result == 42` is true. If 42 turns out to be the wrong
+expectation, change it deliberately and say why in the commit — that is a different act
+from quietly loosening it because it was red.
+
+## The placeholder that ships
+
+```typescript
+function calculateTax(amount: number) {
+    // TODO: implement later
+    return 0;
+}
+```
+
+This one is the most expensive, because it is silent and plausible. Every caller gets a
+tax of zero and nothing anywhere reports an error.
+
+Instead: implement it, including the edge cases. If it genuinely cannot be finished now,
+make it fail loudly — throw, or return an explicit "not implemented" the caller has to
+handle — so the gap is visible while it exists.
+
+## The common thread
+
+Ask one question before any change that makes a test go green: **does this make the
+program more correct, or only more quiet?** If it is the second, it is a fake fix, whatever
+it is called in the commit message.

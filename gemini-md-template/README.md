@@ -1,45 +1,57 @@
-# gemini-md-template
+# A Starter Rules File for Antigravity and Gemini CLI
 
-給 Google Antigravity (AGY) 與 Gemini CLI 的起手規則範本，照 Antigravity Customization System 官方規範設計。
+The same idea as [`claude-md-template/`](../claude-md-template/README.md), in the format
+Google Antigravity and Gemini CLI read: a "how we work together" file the agent loads on
+its own, so you stop re-explaining your preferences every conversation.
 
----
+## What's inside
 
-## 為什麼需要這份範本
+- `GEMINI.md` — the main template, in three parts: **Background** (things only you know),
+  **Hard gates** (a handful of things that must never go wrong, each with its reason), and
+  **Judgment context** (the reasoning spelled out, so the model can extrapolate to
+  situations you didn't list).
+- `rules/` — three optional add-ons: verification discipline, subagent workflow, and
+  defensive coding. Install whichever you want; skipping any of them changes nothing else.
 
-Antigravity 具備強大的階層式規則載入機制（`~/.gemini/GEMINI.md` -> 專案根目錄 `GEMINI.md` -> `.agents/rules/*.md`）與技能漸進式載入（Progressive Disclosure）。
+## Where the files go
 
-這份範本遵循**減法原則**：
-- 只有三個核心區塊：**身分背景、硬閘門、判斷脈絡**。
-- 不放無效的客套話，每一行都確保「拿掉這一行，AI 是否可能犯錯？不會就刪掉」。
-
----
-
-## 目錄結構
+Antigravity loads rules in layers, most specific last:
 
 ```
-gemini-md-template/
-├── GEMINI.md                    # 主起手範本（可放置於 ~/.gemini/GEMINI.md 或專案根目錄）
-├── README.md                    # 本說明檔
-└── rules/                       # 可選子規則檔（可放置於 ~/.gemini/config/rules/ 或 .agents/rules/）
-    ├── verification-rule.md     # 修改即驗證與零偽修正規範
-    ├── subagent-workflow.md     # 子任務分派與 Context 隔離規範
-    └── defensive-coding.md      # 防禦性程式設計與邊界安全規範
+~/.gemini/GEMINI.md              global, applies everywhere
+<project>/GEMINI.md              this project only
+<project>/.agents/rules/*.md     topic files for this project
 ```
 
----
+`rules/*.md` go in `~/.gemini/config/rules/` for global effect, or `.agents/rules/` inside
+a project.
 
-## 安裝方式
+## Installing
 
-### 方式一：一行指令安裝（推薦）
+The skills ship separately from the rules file:
 
 ```bash
 python scripts/install.py --agent antigravity --skills all
 ```
 
-此指令會將本 repo 的所有 skills 同步至 Antigravity 的全域技能目錄（`~/.gemini/config/skills/`）。
+That copies this repo's skills into `~/.gemini/config/skills/`, where Antigravity picks
+them up on demand.
 
-### 方式二：手動合併起手範本
+The rules file is merged by hand, on purpose:
 
-1. 打開你的全域規則檔（Windows 為 `C:\Users\<使用者名稱>\.gemini\GEMINI.md`，Linux/macOS 為 `~/.gemini/GEMINI.md`）。
-2. 若已有檔案，**請使用合併，不要直接覆蓋**。一段一段檢視並確認適合你的條目。
-3. 若為新建立，複製 `GEMINI.md` 並填寫當中的專屬資訊（語言、偏好技術棧、時區）。
+1. Open your global rules file — `~/.gemini/GEMINI.md`, or
+   `C:\Users\<you>\.gemini\GEMINI.md` on Windows.
+2. **If it already has content, merge — do not overwrite.** Go through this template a
+   section at a time and keep only what applies to you. A rule that already exists in your
+   file should not be added twice; two copies dilute each other.
+3. Fill in the blanks (`___`). Leaving them blank means it isn't really installed.
+
+## Keeping it short
+
+This template is maintained by subtraction. Every time you want to add a line, ask: **would
+the model get something wrong without it?** If not, don't add it.
+
+The line that fails this test most often is taste. "Use dark mode", "prefer this font",
+"always use this framework" — those belong to a project, not to every project you will ever
+open. Put them in that project's `GEMINI.md`, and keep the global file for things that are
+true regardless of what you are working on.

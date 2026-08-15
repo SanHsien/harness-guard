@@ -38,6 +38,23 @@ Entries marked `fork` are this fork's changes relative to
   Bash call, guarding nothing. Replaced by the single cross-platform file.
   **General rule: a flat install means hooks cannot import each other.**
 
+### Changed (documentation)
+
+- **`fork` The two new skills and `gemini-md-template/` are now in English**, matching the
+  nine existing skills and `claude-md-template/`. Files an agent reads are English
+  throughout the repo; `README` and `docs/` stay Chinese-primary with `.en.md` mirrors.
+- **`fork` `gemini-md-template/GEMINI.md` rewritten to its own subtraction rule.** The
+  original had five sections, including dark mode, glassmorphism, specific typefaces, and
+  language version numbers that go stale. Would the model get something wrong without that
+  line? No — so it does not belong in a file every project loads. It now has the three
+  sections its own README claims (background, hard gates, judgment context), with
+  preferences as blanks to fill in.
+- **`fork` Antigravity automation advice corrected.** It previously recommended trusting the
+  entire home directory and enabling every auto-approve flag at once. Trust is now scoped to
+  the projects folder, the trade is stated plainly — turning off prompts makes these hooks
+  the only thing left, and they are an interceptor, not a sandbox — and automation is split
+  into two stages.
+
 ### Added
 
 - **`fork` danger-zone-guard** (fifth interceptor hook): blocks recursive deletion of root or

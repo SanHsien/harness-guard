@@ -4,35 +4,58 @@ description: "Decompose complex multi-file or large-scale tasks into clean lifec
 allowed-tools: Agent Read
 ---
 
-# Task Orchestrator — 複雜任務拆解與上下文管理
+# Task Orchestrator — Four Stages, In Order
 
-本技能定義了大型工程與多階段任務的標準拆解工作流，確保 Agent 在高複雜度環境下保持上下文清爽、決策可溯源且驗證完備。
+Big changes go wrong in a particular way: you start editing while you are still working
+out what is there, the context fills with search output, and by the end nobody can say
+which decision was made deliberately and which one just happened.
 
----
+Four stages, and the discipline is not skipping ahead.
 
-## 四階段執行模型 (Four-Stage Model)
+## 1. Research — read only
 
-```
-[1. Research (調研)]
-  └── 唯讀探索、定位關鍵檔案、確認依賴與邊界條件。禁止直接改動代碼。
+Find the files that matter, the dependencies, the edge cases, the existing conventions.
+**No edits in this stage**, including obvious ones. An edit made before you have the whole
+picture is a decision made on partial information, and it is the hardest kind to notice
+later.
 
-[2. Plan (計畫)]
-  └── 制定結構化實作步驟、確認關鍵決策點、列出受影響模組。
+Finish by being able to name the files you will touch and why.
 
-[3. Build (實作)]
-  └── 循序建立或修改程式碼，模組化推進，遵循 SOLID/DRY 與防禦性原則。
+## 2. Plan — decide before building
 
-[4. Verify (驗證)]
-  └── 執行自動化測試、型別檢查與回歸驗證。確認 exit code 0 且零偽修正。
-```
+Write the implementation steps in order, name the decisions that have more than one
+defensible answer, and list what each step affects. This is where you find out that step
+four contradicts step two, which is much cheaper here than in the editor.
 
----
+If the user is waiting on a plan, show it before building. A plan reviewed in thirty
+seconds saves an afternoon.
 
-## 上下文防護策略 (Context Protection)
+## 3. Build — one step at a time
 
-1. **避免單一對話過載**：
-   - 當調研過程產生龐大日誌或需要多步搜尋時，可善用子代理人 (Subagent) 在獨立上下文處理，只回傳提煉後的結論。
-2. **減法思維**：
-   - 記錄產出時使用標準化的摘要結構，避免在主要交談記錄中堆積大段無關輸出。
+Work the plan in order. Keep each step small enough to describe in one sentence, and stay
+inside the project's existing conventions rather than importing your own.
 
-詳細拆解實務見 [`references/decomposition-playbook.md`](references/decomposition-playbook.md)。
+When something in the plan turns out to be wrong — and on a large task, something will —
+say so and adjust the plan explicitly. Silently building something other than what was
+agreed is how the final result stops matching the review.
+
+## 4. Verify — exit code, not opinion
+
+Run the tests, the type check, and whatever else the project uses. Exit code 0 is the
+result; a reading of the diff is not. See the `verification-protocol` skill for what
+counts as evidence and what counts as a fake fix.
+
+## Keeping the context clean
+
+Research is what fills a context window: greps that return two hundred lines, files read
+in full for the sake of three functions. Two habits:
+
+**Send the search out.** When a search will produce a lot of output, hand it to a subagent
+and ask for the conclusion — file paths, line numbers, and the answer — not the raw
+output. The main thread should receive the finding, not the transcript.
+
+**Write down conclusions, not logs.** Record what you learned in a couple of lines. Pasting
+whole outputs into the main thread buys nothing that a summary and a path do not.
+
+Worked examples for two common shapes of task are in
+[`references/decomposition-playbook.md`](references/decomposition-playbook.md).

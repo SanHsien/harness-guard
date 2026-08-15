@@ -1,10 +1,12 @@
-# 子任務分派與 Context 隔離規範 (Subagent & Context Workflow Rule)
+# Subagents and context
 
-## 核心要求
-1. **任務分派標準**：
-   - 遇到多檔案大規模重構、深度調研、或需要大量搜尋的工作時，依循「調研 (Research) -> 架構/計畫 (Plan) -> 實作 (Build) -> 測試驗證 (Test/Verify)」進行拆解。
-   - 避免在單一對話中累積過多無效輸出造成 Context 稀釋或記憶模糊。
+On anything large — a multi-file refactor, deep research, a search that will return a lot —
+work in stages: research, plan, build, verify. Don't edit during research. An edit made
+before you have the whole picture is a decision taken on partial information.
 
-2. **進度推進與收斂**：
-   - 每個子任務產出明確可讀的結構化摘要或產出物（Artifact）。
-   - 保持主對話脈絡專注於高層決策與最終驗證。
+Hand wide searches to a subagent and ask for the conclusion: the file paths, the line
+numbers, the answer. Not the raw output. The main thread should carry findings and
+decisions, not transcripts.
+
+Each subtask comes back with a short structured summary. If a summary is longer than the
+decision it supports, it's a log, not a summary.

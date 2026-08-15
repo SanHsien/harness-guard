@@ -4,53 +4,56 @@ description: "Enforce modify-then-verify and zero-dummy standards. Use when modi
 allowed-tools: Bash Agent Read
 ---
 
-# Verification Protocol — 修改即驗證與零偽修正作業流程
+# Verification Protocol — Change It, Then Prove It
 
-本技能落實最高規格之軟體開發驗證協議：**「修改代碼即自動執行驗證、日誌診斷優先、嚴禁偽修正 (Zero-Dummy)」**。
+Reading a diff and concluding it looks right is not verification. It costs nothing to
+say "fixed" and it feels the same from the inside whether or not anything was run. This
+skill is the working practice that keeps that from happening; claim-guard is the hook
+that catches you when the practice slips.
 
----
+Three rules, each with the reason it exists.
 
-## 核心原則 (Core Rules)
+## 1. Change it, then run it
 
-1. **修改即驗證 (Modify-Then-Verify)**：
-   - 只要新增、修改或重構程式碼，在回報用戶前必須在終端實際執行對應的測試、建置或 Linting 指令。
-   - 禁止僅憑代碼視覺檢查即宣稱「已修復」或「測試通過」。
+Anything added, modified, or refactored gets its test, build, or lint command actually
+run in the terminal before you report back. The exit code is the evidence. Your reading
+of the code is not.
 
-2. **零偽修正 (Zero-Dummy)**：
-   - 遇到測試失敗時，嚴禁：
-     - 註解掉失敗的測試案例或斷言。
-     - 吞掉例外錯誤（如 `except Exception: pass`）。
-     - 回傳假資料或 Hardcoded Dummy Fallback 掩蓋問題。
-   - 詳見 [`references/zero-dummy-guide.md`](references/zero-dummy-guide.md)。
+This matters because the failure is silent: code that looks correct and was never
+executed produces exactly the same confident summary as code that passed.
 
-3. **日誌診斷優先 (Log-First Diagnosis)**：
-   - 先完整讀取 Stack Trace 與失敗行號。
-   - 查明根因（Root Cause）後才進行精準修改，嚴禁盲改。
+If a change genuinely cannot be verified automatically — a UI behaviour, a hardware
+path, a third-party account you do not have — say "not verified, needs manual
+confirmation" and name what needs confirming. That sentence is always available, and it
+is never the wrong answer.
 
----
+## 2. No fake fixes
 
-## 驗證流程 (Verification Flow)
+When a test fails, none of the following count as fixing it:
 
-```mermaid
-graph TD
-    A[代碼變更完成] --> B[識別專案技術棧與測試指令]
-    B --> C[實際執行測試 / 建置指令]
-    C --> D{指令 Exit Code == 0 ?}
-    D -- 是 --> E[記錄驗證證據與日誌摘要]
-    D -- 否 --> F[讀取完整 Stack Trace 分析根因]
-    F --> G[修復根因（非偽修正）]
-    G --> C
-    E --> H[回報完成並附上真實測試數據]
-```
+- commenting out the failing case or the assertion
+- swallowing the exception (`except Exception: pass`)
+- returning hardcoded or dummy data so the caller stops complaining
 
----
+Each of these converts a visible failure into an invisible one, which is strictly worse
+than the failing test you started with. See
+[`references/zero-dummy-guide.md`](references/zero-dummy-guide.md) for the common shapes
+and what to do instead.
 
-## 技術棧測試矩陣 (Test Matrix)
+## 3. Read the log before touching the code
 
-常用指令請查閱 [`references/test-matrix.md`](references/test-matrix.md)。
-例如：
-- Python: `pytest -v`, `python -m unittest`
-- Node/TS: `npm test`, `bun test`, `pnpm test`, `npx vitest run`
-- Go: `go test ./...`
-- Rust: `cargo test`
-- .NET: `dotnet test`
+Read the whole stack trace and the failing line first, then find the root cause, then
+make one precise change. Changing things to see what happens turns one known failure into
+several unknown ones, and it hides the original cause under the edits.
+
+## The loop
+
+1. Finish the change.
+2. Work out this project's stack and its test command (see
+   [`references/test-matrix.md`](references/test-matrix.md)).
+3. Run it.
+4. Exit code 0? Record what you ran and what it printed — that is the evidence you report.
+5. Non-zero? Read the full trace, find the root cause, fix that, and go back to step 3.
+
+Report the command and its real output. "Tests pass" without the command that produced
+that result is the claim this whole protocol exists to make unnecessary.
