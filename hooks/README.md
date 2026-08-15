@@ -1,12 +1,23 @@
-# Three interceptor hooks: two versions each
+# Four interceptor hooks, in up to three builds each
 
-Each one has two folders underneath it:
+Each one has its builds in folders underneath it:
 
 ```
 hooks/<tool-name>/
 ├── claude-code/   for Claude Code
-└── codex/         for Codex
+├── codex/         for Codex
+└── windows/       Python build, no jq, no bash  (this fork; claim-guard and lint-gate)
 ```
+
+The fourth hook, `test-gate-guard/`, is added by this fork. It is pure Python
+on both platforms and needs no separate Windows build -- see the section at the
+bottom.
+
+**On Windows, use the `windows/` build.** The shell builds parse their input
+with `jq`, which is not present on a stock Windows box, and without `jq` they
+exit 0 -- which means "allow." Read [`../docs/windows-install.md`](../docs/windows-install.md)
+(English: [`../docs/windows-install.en.md`](../docs/windows-install.en.md))
+before registering anything there.
 
 **The logic is identical on both sides.** What gets blocked, what gets let through, how evidence gets counted — it's the same set of rules. The only difference is the handful of lines tied to each platform's interface.
 

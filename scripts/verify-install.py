@@ -1,0 +1,365 @@
+#!/usr/bin/env python3
+"""verify-install.py -- proves the hooks are installed, instead of assuming it.
+
+This kit exists because a claim with no evidence behind it is worthless. Its
+own installation is not exempt. Every one of these hooks has a silent failure
+mode: register it wrong, or leave out a dependency, and nothing errors -- the
+hook simply never runs, and you believe you are protected when you are not.
+
+So this script does not read the config and pronounce it fine. It test-fires
+each installed hook with a synthetic payload and checks what actually comes
+back.
+
+Run it after installing, and again after any change to settings.json:
+
+    python scripts/verify-install.py
+
+Exit code 0 means every installed piece answered correctly. Exit code 1 means
+at least one thing is broken, and the line above says which.
+
+Nothing here writes to your configuration. It only reads, and runs the hook
+scripts in a scratch directory.
+"""
+import json
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+IS_WINDOWS = platform.system() == "Windows"
+CLAUDE_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
+SETTINGS = CLAUDE_DIR / "settings.json"
+HOOKS_DIR = CLAUDE_DIR / "hooks"
+
+# The shell builds of these three hooks parse their input with jq. Without jq
+# they exit quietly and protect nothing.
+JQ_DEPENDENT = re.compile(r"claim-(evidence-guard|ledger-tracker)|lint-gate\.sh")
+
+# Ledger writes go to a scratch directory so a verification run never pollutes
+# a live session's evidence.
+SCRATCH = Path(tempfile.mkdtemp(prefix="harness-verify-"))
+
+results = []
+
+
+def record(ok, label, detail=""):
+    results.append((ok, label, detail))
+    status = "PASS" if ok else "FAIL"
+    print("%-4s %s%s" % (status, label, (" -- " + detail) if detail else ""))
+
+
+def note(label, detail=""):
+    print("     %s%s" % (label, (" -- " + detail) if detail else ""))
+
+
+def section(title):
+    print("\n== %s ==" % title)
+
+
+def find_hook(*names):
+    for name in names:
+        path = HOOKS_DIR / name
+        if path.exists():
+            return path
+    return None
+
+
+def run_hook(path, payload, env=None, timeout=60, args=()):
+    """Feed a hook one synthetic payload and return the finished process."""
+    full_env = dict(os.environ)
+    full_env["CLAIM_GUARD_LEDGER_DIR"] = str(SCRATCH / "ledger")
+    if env:
+        full_env.update(env)
+
+    if path.suffix == ".py":
+        cmd = [sys.executable, str(path)]
+    elif path.suffix in (".sh", ""):
+        bash = shutil.which("bash")
+        if IS_WINDOWS:
+            # A bare `bash` on Windows is System32\bash.exe, which is WSL: a
+            # different filesystem and a different home directory. Only Git
+            # Bash can run a hook that lives under the Windows home.
+            git_bash = Path(r"C:\Program Files\Git\bin\bash.exe")
+            bash = str(git_bash) if git_bash.exists() else bash
+        if not bash:
+            return None
+        cmd = [bash, str(path)]
+    else:
+        return None
+
+    cmd = cmd + [str(a) for a in args]
+
+    try:
+        return subprocess.run(
+            cmd,
+            input=json.dumps(payload),
+            capture_output=True,
+            text=True,
+            # A hook is free to print Chinese. Decoding its output with the
+            # console default (cp950 here) would crash this script instead of
+            # reporting the hook's answer.
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            env=full_env,
+            cwd=str(SCRATCH),
+        )
+    except (subprocess.TimeoutExpired, OSError) as exc:
+        note("could not run %s" % path.name, str(exc))
+        return None
+
+
+# -- environment -----------------------------------------------------------
+
+
+def check_environment():
+    section("Environment")
+    note("os", "%s %s" % (platform.system(), platform.release()))
+    note("python", "%s (%s)" % (platform.python_version(), sys.executable))
+
+    jq = shutil.which("jq")
+    if jq:
+        note("jq", jq)
+    else:
+        note("jq", "not installed")
+
+    if IS_WINDOWS:
+        # Report every bash on PATH in order. The first one wins, and if the
+        # first one is System32 then any hook registered as `bash ...` is
+        # running under WSL, where the Windows home directory does not exist.
+        found = []
+        for directory in os.environ.get("PATH", "").split(os.pathsep):
+            candidate = Path(directory) / "bash.exe"
+            if candidate.exists() and str(candidate) not in found:
+                found.append(str(candidate))
+        if found:
+            note("bash on PATH", " | ".join(found[:3]))
+            if "system32" in found[0].lower():
+                note(
+                    "warning",
+                    "the first bash on PATH is WSL. A hook registered as "
+                    "`bash ~/.claude/hooks/x.sh` will not find the file.",
+                )
+    return jq
+
+
+# -- settings.json ---------------------------------------------------------
+
+
+def collect_commands(hooks_block):
+    for _event, entries in (hooks_block or {}).items():
+        for entry in entries or []:
+            for hook in entry.get("hooks", []) or []:
+                command = hook.get("command")
+                if isinstance(command, str):
+                    yield command
+
+
+def check_settings(jq_present):
+    section("settings.json")
+    if not SETTINGS.exists():
+        record(False, "settings.json exists", str(SETTINGS))
+        return []
+
+    try:
+        with open(SETTINGS, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (json.JSONDecodeError, ValueError) as exc:
+        record(False, "settings.json is valid JSON", str(exc))
+        return []
+    except UnicodeDecodeError as exc:
+        record(False, "settings.json is UTF-8", str(exc))
+        return []
+    record(True, "settings.json is valid JSON", str(SETTINGS))
+
+    commands = list(collect_commands(data.get("hooks")))
+    record(bool(commands), "at least one hook is registered", "%d found" % len(commands))
+
+    for command in commands:
+        if IS_WINDOWS and re.match(r"^\s*bash\s", command):
+            record(
+                False,
+                "no bare `bash` in a Windows hook command",
+                command[:70] + " -- resolves to WSL; use the full Git Bash path "
+                "or the Windows Python build",
+            )
+        # Only this kit's shell hooks depend on jq. Someone else's .sh hook is
+        # their business, so it is not flagged here.
+        if jq_present is None and JQ_DEPENDENT.search(command):
+            record(
+                False,
+                "a jq-dependent hook is registered but jq is missing",
+                command[:70] + " -- it will exit quietly and protect nothing",
+            )
+
+        match = re.search(r"([A-Za-z]:[\\/][^\"']+|~[\\/][^\s\"']+|[\\/][^\s\"']+)\.(sh|py)", command)
+        if match:
+            raw = match.group(0)
+            path = Path(os.path.expanduser(raw.replace("\\", "/")))
+            if not path.exists():
+                record(False, "hook file referenced by settings exists", raw)
+    return commands
+
+
+# -- live fire -------------------------------------------------------------
+
+
+def check_no_emoji_guard():
+    hook = find_hook("no-emoji-guard.py")
+    if not hook:
+        note("no-emoji-guard", "not installed, skipped")
+        return
+    blocked = run_hook(
+        hook,
+        {
+            "tool_name": "Write",
+            "tool_input": {"file_path": str(SCRATCH / "a.md"), "content": "ship it \U0001F680"},
+        },
+    )
+    allowed = run_hook(
+        hook,
+        {
+            "tool_name": "Write",
+            "tool_input": {"file_path": str(SCRATCH / "a.md"), "content": "ship it"},
+        },
+    )
+    if not blocked or not allowed:
+        record(False, "no-emoji-guard runs")
+        return
+    record(blocked.returncode == 2, "no-emoji-guard blocks a write containing emoji")
+    record(allowed.returncode == 0, "no-emoji-guard allows a clean write")
+
+
+def check_claim_guard():
+    tracker = find_hook("claim_ledger_tracker.py", "claim-ledger-tracker.sh")
+    guard = find_hook("claim_evidence_guard.py", "claim-evidence-guard.sh")
+    if not tracker and not guard:
+        note("claim-guard", "not installed, skipped")
+        return
+    record(
+        bool(tracker and guard),
+        "claim-guard is installed as a pair",
+        "installing only one silently disables the feature",
+    )
+    if not (tracker and guard):
+        return
+
+    # 1. Claim of verification with an empty ledger: must be blocked.
+    empty = run_hook(
+        guard,
+        {
+            "session_id": "verify-empty",
+            "last_assistant_message": "I ran the tests, all passing.",
+        },
+    )
+    if not empty:
+        record(False, "claim-evidence-guard runs")
+        return
+    record(
+        '"block"' in (empty.stdout or ""),
+        "claim-guard blocks 'tests pass' with an empty ledger",
+    )
+
+    # 2. Same claim after a real test command was logged: must be allowed.
+    logged = run_hook(
+        tracker,
+        {
+            "session_id": "verify-logged",
+            "tool_name": "Bash",
+            "tool_input": {"command": "pytest -q"},
+        },
+    )
+    after = run_hook(
+        guard,
+        {
+            "session_id": "verify-logged",
+            "last_assistant_message": "I ran the tests, all passing.",
+        },
+    )
+    if logged is None or after is None:
+        record(False, "claim-ledger-tracker runs")
+        return
+    record(
+        '"block"' not in (after.stdout or ""),
+        "claim-guard allows the same claim once the ledger has a test run",
+    )
+
+
+def check_lint_gate():
+    hook = find_hook("lint_gate.py", "lint-gate.sh")
+    if not hook:
+        note("lint-gate", "not installed, skipped")
+        return
+    fake_check = "%s -c \"print('found 3 errors')\"" % sys.executable
+    # The Windows build takes its settings as arguments; the shell build reads
+    # them from the environment. Supplying both exercises whichever is
+    # installed.
+    env = {"LINT_CMD": fake_check, "FAIL_PATTERN": "[1-9][0-9]* errors?"}
+    args = ("--cmd", fake_check, "--fail", "[1-9][0-9]* errors?")
+
+    failing = run_hook(hook, {"stop_hook_active": False}, env=env, args=args)
+    loop = run_hook(hook, {"stop_hook_active": True}, env=env, args=args)
+    if not failing or not loop:
+        record(False, "lint-gate runs")
+        return
+    record(failing.returncode == 2, "lint-gate blocks when the check command fails")
+    record(
+        loop.returncode == 0,
+        "lint-gate lets a second pass through (no infinite block loop)",
+    )
+
+
+def check_test_gate():
+    hook = find_hook("test_gate_guard.py", "test-gate-guard.py")
+    if not hook:
+        note("test-gate-guard", "not installed, skipped")
+        return
+    chained = run_hook(
+        hook, {"tool_name": "Bash", "tool_input": {"command": "pytest ; git push"}}
+    )
+    gated = run_hook(
+        hook, {"tool_name": "Bash", "tool_input": {"command": "pytest && git push"}}
+    )
+    if not chained or not gated:
+        record(False, "test-gate-guard runs")
+        return
+    record(chained.returncode == 2, "test-gate-guard blocks `pytest ; git push`")
+    record(gated.returncode == 0, "test-gate-guard allows `pytest && git push`")
+
+
+def main():
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
+    print("Verifying the harness install under %s" % CLAUDE_DIR)
+    jq = check_environment()
+    check_settings(jq)
+
+    section("Live fire (each installed hook is run with a synthetic payload)")
+    check_no_emoji_guard()
+    check_claim_guard()
+    check_lint_gate()
+    check_test_gate()
+
+    failed = [r for r in results if not r[0]]
+    section("Result")
+    print("%d checked, %d failed" % (len(results), len(failed)))
+    if failed:
+        for _ok, label, detail in failed:
+            print("  - %s%s" % (label, (" -- " + detail) if detail else ""))
+        print(
+            "\nA failure here means that piece is not protecting you, whatever "
+            "the config file says."
+        )
+    shutil.rmtree(SCRATCH, ignore_errors=True)
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

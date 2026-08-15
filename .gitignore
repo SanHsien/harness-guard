@@ -1,5 +1,11 @@
 .DS_Store
 *.swp
+Thumbs.db
+desktop.ini
+
+# Python bytecode (the hooks and skill scripts are run in place)
+__pycache__/
+*.py[cod]
 
 # review-loop artifacts (regenerated on every render; not tracked)
 *.review-state.json
