@@ -181,6 +181,21 @@ def select_skills(requested):
     return [by_name[name] for name in sorted(wanted)]
 
 
+def robust_rmtree(path):
+    """Remove a directory tree handling Windows read-only file/folder permissions."""
+    def _fix_permission(func, p):
+        try:
+            os.chmod(p, 0o777)
+            func(p)
+        except Exception:
+            pass
+
+    if sys.version_info >= (3, 12):
+        shutil.rmtree(path, onexc=lambda func, p, _exc: _fix_permission(func, p))
+    else:
+        shutil.rmtree(path, onerror=lambda func, p, _excinfo: _fix_permission(func, p))
+
+
 def install_skills(args, target_skills_dir):
     sources = select_skills(args.skills)
     if not sources:
@@ -197,8 +212,16 @@ def install_skills(args, target_skills_dir):
             print("  %-20s would copy" % source.name)
             continue
         if target.exists():
-            shutil.rmtree(target)
-        shutil.copytree(source, target, ignore=shutil.ignore_patterns("__pycache__"))
+            try:
+                robust_rmtree(target)
+            except Exception:
+                pass
+        shutil.copytree(
+            source,
+            target,
+            dirs_exist_ok=True,
+            ignore=shutil.ignore_patterns("__pycache__"),
+        )
         copied += 1
         print("  %-20s copied" % source.name)
 
