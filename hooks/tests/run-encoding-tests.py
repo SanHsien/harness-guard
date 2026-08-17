@@ -19,6 +19,7 @@ UTF-8 explicitly is what makes them pass.
 
 Expected result: 6 passed, 0 failed.
 """
+import ast
 import json
 import os
 import subprocess
@@ -55,13 +56,62 @@ def case(label, hook, payload, expect, args=(), env=None):
     return 0 if ok else 1
 
 
+def check_no_text_mode_reads():
+    """No hook may read stdin in text mode, and no helper may sit unused.
+
+    This one is static rather than behavioural, because of how the regression
+    actually happened on 2026-08-15: a change kept read_payload() in the file
+    but stopped calling it from main(), so grepping for "stdin.buffer" still
+    found a match while the hook had quietly gone back to locale decoding.
+    Presence of the helper proves nothing; only its use does.
+    """
+    failures = 0
+    for path in sorted(HOOKS.rglob("*.py")):
+        if "tests" in path.parts:
+            continue
+        rel = path.relative_to(HOOKS).as_posix()
+        # Parsed, not grepped: these files discuss `json.load(sys.stdin)` in
+        # their docstrings precisely because they must not call it.
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+
+        text_mode = False
+        defines_helper = False
+        calls_helper = False
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "read_payload":
+                defines_helper = True
+            if not isinstance(node, ast.Call):
+                continue
+            source = ast.unparse(node.func)
+            if source == "sys.stdin.read" or (
+                source == "json.load"
+                and node.args
+                and ast.unparse(node.args[0]) == "sys.stdin"
+            ):
+                text_mode = True
+            if source == "read_payload":
+                calls_helper = True
+
+        if text_mode:
+            print("FAIL %s reads stdin in text mode" % rel)
+            failures += 1
+        elif defines_helper and not calls_helper:
+            print("FAIL %s defines read_payload() but never calls it" % rel)
+            failures += 1
+        else:
+            print("PASS %s reads its payload as bytes" % rel)
+    return failures
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
 
-    failures = 0
+    failures = check_no_text_mode_reads()
+    print()
     ledger = REPO / ".encoding-test-ledger"
     ledger_env = dict(ENV, CLAIM_GUARD_LEDGER_DIR=str(ledger))
 

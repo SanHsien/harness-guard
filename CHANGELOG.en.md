@@ -38,6 +38,18 @@ Entries marked `fork` are this fork's changes relative to
   Bash call, guarding nothing. Replaced by the single cross-platform file.
   **General rule: a flat install means hooks cannot import each other.**
 
+### Fixed (regression)
+
+- **`fork` Two hooks had reverted to text-mode stdin; restored, with a static check.** The
+  change that added Antigravity lifecycle support left `read_payload()` in the file but
+  stopped calling it from `main()`, so the helper was orphaned and the hooks quietly went
+  back to locale decoding. The encoding suite caught it, two cases red.
+  It also showed that grepping for `stdin.buffer` **proves nothing** — only that the string
+  is present. `hooks/tests/run-encoding-tests.py` now includes an AST check: any hook that
+  actually calls `sys.stdin.read()` / `json.load(sys.stdin)`, or defines `read_payload()`
+  without calling it, fails. Parsed rather than grepped, because these files mention both
+  calls in their docstrings precisely to explain why not to use them.
+
 ### Changed (documentation)
 
 - **`fork` The two new skills and `gemini-md-template/` are now in English**, matching the

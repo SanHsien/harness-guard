@@ -32,6 +32,16 @@
   裝完會 import 到自己：AttributeError，每次 Bash 呼叫 exit 1 且什麼都不擋。改用單一跨平台檔。
   **通則：平放安裝代表 hook 之間不可以互相 import。**
 
+### 修正（回歸）
+
+- **`fork` 兩支 hook 被改回文字模式讀 stdin，已修回並加靜態檢查。** 新增 Antigravity 生命週期
+  支援的那次改動，把 `read_payload()` 留在檔案裡但不再從 `main()` 呼叫——helper 成了孤兒，
+  hook 悄悄退回依 locale 解碼。編碼測試當場抓到（2 案紅燈）。
+  同時發現：用 grep 找 `stdin.buffer` **證明不了任何事**，那只證明字串存在。
+  `hooks/tests/run-encoding-tests.py` 因此加了一道 AST 靜態檢查：任何 hook 只要真的呼叫
+  `sys.stdin.read()`／`json.load(sys.stdin)`，或定義了 `read_payload()` 卻沒用，就紅燈。
+  （用 AST 不用 grep，因為這些檔案的 docstring 本來就會提到那兩個呼叫，正是為了說明不要用。）
+
 ### 變更（文件）
 
 - **`fork` 兩套新技能與 `gemini-md-template/` 改寫成英文**，與既有九套技能、`claude-md-template/`
