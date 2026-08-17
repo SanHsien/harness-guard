@@ -182,13 +182,20 @@ def select_skills(requested):
 
 
 def robust_rmtree(path):
-    """Remove a directory tree handling Windows read-only file/folder permissions."""
+    """Remove a directory tree, clearing the read-only bit Windows trips over.
+
+    A git checkout or an editor can leave files read-only, and `shutil.rmtree`
+    raises PermissionError on those rather than clearing the bit itself.
+
+    What this deliberately does not do is swallow the error. If the tree still
+    cannot be removed -- a file held open by another process is the usual
+    reason -- the exception propagates, because the caller has to know. A
+    half-removed skill folder that gets reported as installed is worse than a
+    loud failure.
+    """
     def _fix_permission(func, p):
-        try:
-            os.chmod(p, 0o777)
-            func(p)
-        except Exception:
-            pass
+        os.chmod(p, 0o777)
+        func(p)
 
     if sys.version_info >= (3, 12):
         shutil.rmtree(path, onexc=lambda func, p, _exc: _fix_permission(func, p))
@@ -203,6 +210,7 @@ def install_skills(args, target_skills_dir):
 
     print("\nskills -> %s" % target_skills_dir)
     copied = 0
+    failed = 0
     for source in sources:
         target = target_skills_dir / source.name
         if target.exists() and not args.force:
@@ -214,8 +222,18 @@ def install_skills(args, target_skills_dir):
         if target.exists():
             try:
                 robust_rmtree(target)
-            except Exception:
-                pass
+            except OSError as exc:
+                # Do not copy over the remains. Merging a new version into an
+                # old folder leaves files that no longer exist upstream, and
+                # printing "copied" over that is a false completion claim --
+                # exactly what this kit exists to prevent.
+                print("  %-20s FAILED to replace: %s" % (source.name, exc))
+                print("  %-20s left as it was; close whatever holds a file open "
+                      "in that folder and re-run" % "")
+                failed += 1
+                continue
+        # dirs_exist_ok covers the case where the directory removal succeeded but
+        # the entry lingers for a moment, which Windows does.
         shutil.copytree(
             source,
             target,
@@ -228,6 +246,10 @@ def install_skills(args, target_skills_dir):
     if copied and not args.dry_run:
         print("  note: checkpoint and neat-freak only produce accurate numbers "
               "once their reference tables match your filing structure.")
+    if failed:
+        print("\n%d skill folder(s) could not be replaced. Nothing was half-written, "
+              "but they are still the old version." % failed)
+        return 1
     return 0
 
 
@@ -273,8 +295,7 @@ def install_for_claude(args):
             planned.append((spec, source, target, command, state))
 
     if args.dry_run:
-        install_skills(args, claude_dir / "skills")
-        return 0
+        return install_skills(args, claude_dir / "skills")
 
     hooks_dir.mkdir(parents=True, exist_ok=True)
     for _spec, source, target, _command, _state in planned:
@@ -307,8 +328,9 @@ def install_for_claude(args):
     else:
         print("nothing new to register in settings.json")
 
-    install_skills(args, claude_dir / "skills")
-    return 0
+    # The exit code has to carry a skill that could not be replaced, or a
+    # caller chaining on `&&` proceeds as if everything installed.
+    return install_skills(args, claude_dir / "skills")
 
 
 def install_for_antigravity(args):

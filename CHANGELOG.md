@@ -47,6 +47,16 @@
   `{"exempt_path_substrings": [...]}`，優先於腳本內的常數；設定檔壞掉時回到內建預設（繼續擋），
   打錯字不該變成關掉護欄的方式。兩個平台版本各 5 案回歸測試，並納入 CI。
 
+### 修正（安裝器）
+
+- **Windows 唯讀檔導致的 `PermissionError` 已處理**：`robust_rmtree` 會清掉唯讀位元再刪。
+  git checkout 或編輯器留下的唯讀檔會讓 `shutil.rmtree` 直接噴錯。
+- **但刪不掉時不再假裝成功。** 原本的寫法把錯誤 `except Exception: pass` 吃掉，接著用
+  `dirs_exist_ok=True` 蓋上去：結果是舊版殘留檔留著、卻印出「copied」、exit 0。實測（檔案被
+  另一個行程開啟時）確認會發生。現在改成明確報 `FAILED to replace`、整個資料夾原封不動、
+  不印「Installation finished」、exit 1——exit code 也必須反映事實，否則 `&&` 串接會照樣往下走。
+  兩案回歸測試進 CI（唯讀→修好並替換；鎖住→報失敗不宣稱），並確認對修正前的版本會紅燈。
+
 ### 修正（回歸）
 
 - **`fork` 兩支 hook 被改回文字模式讀 stdin，已修回並加靜態檢查。** 新增 Antigravity 生命週期

@@ -59,6 +59,19 @@ Entries marked `fork` are this fork's changes relative to
   defaults, i.e. it keeps guarding, because a typo must not be a way to switch a guardrail
   off. Five regression cases per build, wired into CI.
 
+### Fixed (installer)
+
+- **Windows read-only files no longer break a reinstall**: `robust_rmtree` clears the
+  read-only bit before deleting, which `shutil.rmtree` refuses to do on its own.
+- **And when removal genuinely fails, it no longer pretends otherwise.** The first version
+  swallowed the error with `except Exception: pass` and then copied over the remains with
+  `dirs_exist_ok=True`, leaving files that no longer exist upstream while printing "copied"
+  and exiting 0. Reproduced with a file held open by another process. It now prints
+  `FAILED to replace`, leaves the folder untouched, omits "Installation finished", and exits
+  1 — the exit code has to carry it, or a caller chaining on `&&` proceeds regardless. Two
+  regression cases in CI (read-only gets fixed and replaced; undeletable is reported, not
+  claimed), verified to fail against the previous version.
+
 ### Fixed (regression)
 
 - **`fork` Two hooks had reverted to text-mode stdin; restored, with a static check.** The

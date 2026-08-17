@@ -1,4 +1,6 @@
 import os
+import platform
+import stat
 import subprocess
 import sys
 import tempfile
@@ -43,6 +45,82 @@ class InstallDryRunTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
             self.assertFalse((home / ".claude").exists())
             self.assertFalse((home / ".gemini").exists())
+
+
+class SkillReplacementTests(unittest.TestCase):
+    """Replacing an existing skill folder must either finish or say it did not.
+
+    A skill folder can hold files that resist deletion: read-only bits from a
+    checkout, or a file another process still has open. The first is fixable and
+    must be fixed. The second is not, and must be reported -- copying the new
+    version over the remains leaves files that no longer exist upstream while
+    printing "copied", which is the false completion claim this kit exists to
+    prevent.
+    """
+
+    def _install_over(self, prepare):
+        """Seed a stale skill folder, run --force, return (proc, stale_path)."""
+        tmp = tempfile.mkdtemp()
+        target = Path(tmp) / "skills" / "explain"
+        target.mkdir(parents=True)
+        (target / "SKILL.md").write_text("stale content", encoding="utf-8")
+        stale = target / "obsolete.md"
+        stale.write_text("no longer in the repo", encoding="utf-8")
+
+        handle = prepare(stale)
+        try:
+            proc = subprocess.run(
+                [
+                    sys.executable, str(INSTALLER),
+                    "--claude-dir", tmp,
+                    "--hooks", "",
+                    "--skills", "explain",
+                    "--force",
+                ],
+                cwd=str(REPO),
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=60,
+            )
+            return proc, stale, target
+        finally:
+            if handle is not None:
+                handle.close()
+            if stale.exists():
+                try:
+                    os.chmod(stale, stat.S_IWRITE)
+                except OSError:
+                    pass
+
+    def test_read_only_leftover_is_replaced(self):
+        def make_read_only(path):
+            os.chmod(path, stat.S_IREAD)
+            return None
+
+        proc, stale, target = self._install_over(make_read_only)
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        self.assertFalse(stale.exists(), "read-only leftover should have been removed")
+        self.assertNotIn(
+            "stale content",
+            (target / "SKILL.md").read_text(encoding="utf-8"),
+            "the skill should have been replaced with the repo version",
+        )
+
+    @unittest.skipUnless(
+        platform.system() == "Windows",
+        "only Windows refuses to delete a file another process holds open",
+    )
+    def test_undeletable_folder_is_reported_not_claimed(self):
+        proc, stale, target = self._install_over(
+            lambda path: open(path, "r+", encoding="utf-8")
+        )
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn("FAILED to replace", proc.stdout)
+        self.assertNotIn("copied", proc.stdout.split("FAILED to replace")[0][-40:])
+        self.assertNotIn("Installation finished", proc.stdout)
+        self.assertTrue(stale.exists(), "the folder should have been left alone")
 
 
 if __name__ == "__main__":
