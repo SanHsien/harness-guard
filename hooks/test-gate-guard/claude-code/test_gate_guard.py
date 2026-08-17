@@ -127,24 +127,54 @@ def verdict(command):
 
 
 def main():
-    try:  # a Windows console defaults to cp950; force UTF-8 so output survives
+    try:
         sys.stderr.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
     try:
-        payload = read_payload()
+        raw = sys.stdin.read()
+        payload = json.loads(raw) if raw.strip() else {}
     except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
-        return 0  # unreadable input is never a reason to get in the way
-    if payload.get("tool_name") != "Bash":
         return 0
-    command = (payload.get("tool_input") or {}).get("command", "")
+
+    tool_name = (
+        payload.get("tool_name")
+        or (payload.get("toolCall") or {}).get("name")
+        or ""
+    )
+    if tool_name not in ("Bash", "Exec", "exec", "shell", "run_command"):
+        if "toolCall" in payload:
+            sys.stdout.write(json.dumps({"decision": "allow"}))
+        return 0
+
+    tool_input = (
+        payload.get("tool_input")
+        or (payload.get("toolCall") or {}).get("args")
+        or {}
+    )
+    command = (
+        tool_input.get("command")
+        or tool_input.get("CommandLine")
+        or tool_input.get("cmd")
+        or ""
+    )
     if not command:
+        if "toolCall" in payload:
+            sys.stdout.write(json.dumps({"decision": "allow"}))
         return 0
 
     hit = verdict(command)
     if hit:
-        sys.stderr.write(MESSAGE.format(test=hit[0], git=hit[1]))
+        msg = MESSAGE.format(test=hit[0], git=hit[1])
+        if "toolCall" in payload:
+            sys.stdout.write(json.dumps({"decision": "deny", "reason": msg}, ensure_ascii=False))
+            return 0
+        sys.stderr.write(msg)
         return 2
+
+    if "toolCall" in payload:
+        sys.stdout.write(json.dumps({"decision": "allow"}))
     return 0
 
 

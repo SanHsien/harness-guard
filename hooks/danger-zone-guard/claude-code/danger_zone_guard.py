@@ -172,27 +172,53 @@ def inspect_command(command):
 def main():
     try:
         sys.stderr.reconfigure(encoding="utf-8")
+        sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
 
     try:
-        payload = read_payload()
+        raw = sys.stdin.read()
+        payload = json.loads(raw) if raw.strip() else {}
     except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
         return 0
 
-    if payload.get("tool_name") not in ("Bash", "Exec", "exec", "shell", "run_command"):
+    tool_name = (
+        payload.get("tool_name")
+        or (payload.get("toolCall") or {}).get("name")
+        or ""
+    )
+    if tool_name not in ("Bash", "Exec", "exec", "shell", "run_command"):
+        if "toolCall" in payload:
+            sys.stdout.write(json.dumps({"decision": "allow"}))
         return 0
 
-    tool_input = payload.get("tool_input") or {}
-    command = tool_input.get("command") or tool_input.get("CommandLine") or tool_input.get("cmd") or ""
+    tool_input = (
+        payload.get("tool_input")
+        or (payload.get("toolCall") or {}).get("args")
+        or {}
+    )
+    command = (
+        tool_input.get("command")
+        or tool_input.get("CommandLine")
+        or tool_input.get("cmd")
+        or ""
+    )
     if not command:
+        if "toolCall" in payload:
+            sys.stdout.write(json.dumps({"decision": "allow"}))
         return 0
 
     reason = inspect_command(command)
     if reason:
-        sys.stderr.write(MESSAGE_TEMPLATE.format(reason=reason, cmd=command.strip()[:200]))
+        msg = MESSAGE_TEMPLATE.format(reason=reason, cmd=command.strip()[:200])
+        if "toolCall" in payload:
+            sys.stdout.write(json.dumps({"decision": "deny", "reason": msg}, ensure_ascii=False))
+            return 0
+        sys.stderr.write(msg)
         return 2
 
+    if "toolCall" in payload:
+        sys.stdout.write(json.dumps({"decision": "allow"}))
     return 0
 
 

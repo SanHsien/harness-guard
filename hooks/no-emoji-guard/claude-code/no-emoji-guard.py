@@ -112,13 +112,16 @@ def find_emoji(text):
 def collect(tool_input):
     """Gather all the text content being written this call (field names vary by tool)."""
     parts = []
-    for key in ("content", "new_string", "prompt"):
+    for key in ("content", "new_string", "prompt", "CodeContent", "ReplacementContent"):
         v = tool_input.get(key)
         if isinstance(v, str):
             parts.append(v)
     for edit in tool_input.get("edits", []) or []:
         if isinstance(edit, dict) and isinstance(edit.get("new_string"), str):
             parts.append(edit["new_string"])
+    for chunk in tool_input.get("ReplacementChunks", []) or []:
+        if isinstance(chunk, dict) and isinstance(chunk.get("ReplacementContent"), str):
+            parts.append(chunk["ReplacementContent"])
     return "\n".join(parts)
 
 
@@ -128,22 +131,25 @@ def main():
     except Exception:
         sys.exit(0)
 
-    tool_input = payload.get("tool_input") or {}
-    path = tool_input.get("file_path") or ""
+    tool_input = payload.get("tool_input") or (payload.get("toolCall") or {}).get("args") or {}
+    path = tool_input.get("file_path") or tool_input.get("TargetFile") or tool_input.get("path") or ""
 
     # Transcripts and raw external input being archived as-is are not blocked
     if re.search(r"(逐字稿|transcript|/_archive/|\.srt$|\.vtt$)", path):
+        if "toolCall" in payload:
+            sys.stdout.write(json.dumps({"decision": "allow"}))
         sys.exit(0)
 
     # Exempt the whole subtree (see EXEMPT_PATH_SUBSTRINGS at the top of the file).
-    # The typical use case is an Obsidian vault: due-date/completion markers
-    # there are functional Tasks plugin syntax, not decoration, and stripping
-    # them would break to-do tracking.
     if any(s and s in path for s in EXEMPT_PATH_SUBSTRINGS):
+        if "toolCall" in payload:
+            sys.stdout.write(json.dumps({"decision": "allow"}))
         sys.exit(0)
 
     text = collect(tool_input)
     if not text:
+        if "toolCall" in payload:
+            sys.stdout.write(json.dumps({"decision": "allow"}))
         sys.exit(0)
 
     # Obsidian to-do lines (- [ ] / - [x]) in any file also get the above
@@ -157,6 +163,8 @@ def main():
 
     hits = find_emoji(text)
     if not hits:
+        if "toolCall" in payload:
+            sys.stdout.write(json.dumps({"decision": "allow"}))
         sys.exit(0)
 
     uniq = []
@@ -164,13 +172,19 @@ def main():
         if ch not in uniq:
             uniq.append(ch)
 
-    sys.stderr.write(
+    msg = (
         "NO-EMOJI GUARD: this write contains %d emoji%s -- %s\n"
         "Global rule: no emoji in documents, slides, code comments, or commit messages.\n"
         "Remove them and rewrite. For status symbols, use typographic marks (checkmark, X, arrows) or plain text (done/todo/note) instead.\n"
         "Exemptions (transcripts, raw external files being archived) are auto-allowed and this write is not one of them.\n"
         % (len(hits), " (%d unique after dedup)" % len(uniq) if len(uniq) != len(hits) else "", " ".join(uniq))
     )
+
+    if "toolCall" in payload:
+        sys.stdout.write(json.dumps({"decision": "deny", "reason": msg}, ensure_ascii=False))
+        sys.exit(0)
+
+    sys.stderr.write(msg)
     sys.exit(2)
 
 
