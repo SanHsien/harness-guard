@@ -86,6 +86,16 @@ python scripts/install.py --agent all --hooks all --skills all
 
 安裝程式會盡量**合併而不是覆蓋**既有設定；Claude Code 正式寫入前會備份 `settings.json`。既有同名 skill 預設不覆蓋，除非明確使用 `--force`。
 
+但 hook 腳本本身是**整支覆蓋**的，所以「直接改腳本裡的設定」會在下次安裝時被洗掉，而且是往「又開始擋了」的方向洗，不會有任何提示。要能撐過重裝的設定放在腳本旁邊的 JSON 檔，安裝程式永遠不碰那些檔案：
+
+```jsonc
+// ~/.claude/hooks/no-emoji-guard.json
+{ "enabled": false }                                  // 保持安裝但關閉
+{ "exempt_path_substrings": ["/my-notes/"] }          // 只放行特定資料夾
+```
+
+`.lint-gate.json` 也是同樣的道理，只是它放在專案根目錄。設定檔壞掉時一律回到內建預設（也就是繼續擋），因為打錯字不該變成一種悄悄關掉護欄的方式。
+
 ## 驗證安裝
 
 Claude Code hook 安裝後，重新啟動 agent，再跑：

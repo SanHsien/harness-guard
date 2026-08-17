@@ -39,6 +39,17 @@ Entries marked `fork` are this fork's changes relative to
   Bash call, guarding nothing. Replaced by the single cross-platform file.
   **General rule: a flat install means hooks cannot import each other.**
 
+### Added (settings that survive a reinstall)
+
+- **`fork` no-emoji-guard settings now live in `no-emoji-guard.json` beside the script.**
+  Prompted by a real incident: the installer copies hook scripts over the top, which turned
+  the guard back on for someone who had deliberately switched it off, silently. It now reads
+  `{"enabled": false}` — installed and registered but off, one word to switch back, effective
+  immediately with no restart — and `{"exempt_path_substrings": [...]}`, both taking
+  precedence over the in-script constant. A malformed config falls back to the built-in
+  defaults, i.e. it keeps guarding, because a typo must not be a way to switch a guardrail
+  off. Five regression cases per build, wired into CI.
+
 ### Fixed (regression)
 
 - **`fork` Two hooks had reverted to text-mode stdin; restored, with a static check.** The

@@ -43,6 +43,9 @@ jobs:
       - name: Test UTF-8 and locale handling
         run: python hooks/tests/run-encoding-tests.py
 
+      - name: Test no-emoji-guard settings persistence
+        run: python hooks/no-emoji-guard/tests/run-config-tests.py
+
       - name: Test installer contracts
         run: python -m unittest discover -s tests -p "test_*.py"
 

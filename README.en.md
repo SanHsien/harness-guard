@@ -86,6 +86,16 @@ python scripts/install.py --agent all --hooks all --skills all
 
 The installer is designed to **merge rather than replace** existing configuration. Claude Code settings are backed up before a real write, and existing same-name skill folders are left untouched unless `--force` is explicitly requested.
 
+Hook scripts themselves are copied over the top, so a setting edited inside a script is lost on the next install — silently, and in the direction of "blocking again". Settings that must survive a reinstall go in a JSON file beside the script, which the installer never writes:
+
+```jsonc
+// ~/.claude/hooks/no-emoji-guard.json
+{ "enabled": false }                          // installed and registered, but off
+{ "exempt_path_substrings": ["/my-notes/"] }  // exempt one subtree
+```
+
+`.lint-gate.json` works the same way, per project. A malformed config falls back to the built-in defaults — that is, it keeps guarding — because a typo must not be a way to quietly switch a guardrail off.
+
 ## Verify the installation
 
 After installing Claude Code hooks, restart the agent and run:

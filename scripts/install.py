@@ -351,6 +351,12 @@ def main():
     if not args.dry_run:
         print("\nInstallation finished.")
         print("Run `python scripts/verify-install.py` to verify.")
+        print(
+            "\nNote: this copies hook scripts over the top of any existing ones, so "
+            "settings edited inside a script are lost.\nPer-hook settings that must "
+            "survive a reinstall go in a JSON file beside the script, which this "
+            "installer never writes\n(no-emoji-guard.json, .lint-gate.json)."
+        )
     return 0
 
 
