@@ -33,6 +33,12 @@
   裝完會 import 到自己：AttributeError，每次 Bash 呼叫 exit 1 且什麼都不擋。改用單一跨平台檔。
   **通則：平放安裝代表 hook 之間不可以互相 import。**
 
+### 變更（上游）
+
+- **編碼修正已送回上游並被接受**（[upstream#2](https://github.com/agentcrew-academy/harness-starter-kit/pull/2)）。
+  上游接著補上 stdout／stderr 也要設成 UTF-8——hook 可能正確擋下、卻在印自己的訊息時
+  因為 locale 編碼炸掉，使用者看到 traceback 而不是原因。該改法已拉回本 fork 的全部九支 hook。
+
 ### 新增（設定持久化）
 
 - **`fork` no-emoji-guard 的設定改放腳本旁的 `no-emoji-guard.json`，重裝洗不掉。**

@@ -4,7 +4,13 @@
 
 上游那套寫給 macOS 與 Linux，在 Windows 上有三個安裝步驟會失敗，而且三個都不會說。
 這份 fork 補上 Windows 支援、兩個攔截工具、跨 agent 安裝，以及可再現性：換一台電腦，
-一行指令裝出同一套環境。改動不回貢上游，但保留單向拉取。
+一行指令裝出同一套環境。
+
+**回貢的判準：修的是上游的 bug 就送回去，這裡獨創的東西就留在這裡。**
+上游的 hook 在非 UTF-8 locale 下會靜靜失效，那是他們的 bug，已送
+[upstream#2](https://github.com/agentcrew-academy/harness-starter-kit/pull/2) 並被接受；
+他們後續還補上 stdout 的部分，也拉回本 fork 了。反過來說，Windows 版建置、第四與第五個攔截工具、
+安裝器與驗證器都是本 fork 的產物，不是在修上游的東西，就不必送去佔他們的審查時間。
 
 逐版改了什麼看 [`CHANGELOG.md`](CHANGELOG.md)。本檔只講與上游的差異、怎麼同步。
 

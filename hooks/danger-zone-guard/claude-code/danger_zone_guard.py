@@ -38,6 +38,16 @@ import json
 import re
 import sys
 
+# stdout and stderr take the locale codec too. Where that is not UTF-8, a hook
+# blocks correctly and then dies with UnicodeEncodeError while printing its own
+# message, so the user sees a traceback instead of the reason.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
+
 # 1. Catastrophic recursive deletion.
 # The prefix accepts a command position only -- start of input, or just after a
 # separator -- so that `echo rm -rf /` (an argument, not a command) is not a
@@ -170,12 +180,6 @@ def inspect_command(command):
 
 
 def main():
-    try:
-        sys.stderr.reconfigure(encoding="utf-8")
-        sys.stdout.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):
-        pass
-
     try:
         payload = read_payload()
     except (json.JSONDecodeError, ValueError, UnicodeDecodeError):

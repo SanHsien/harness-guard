@@ -32,6 +32,16 @@ import sys
 import time
 from pathlib import Path
 
+# stdout and stderr take the locale codec too. Where that is not UTF-8, a hook
+# blocks correctly and then dies with UnicodeEncodeError while printing its own
+# message, so the user sees a traceback instead of the reason.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
+
 LEDGER_DIR = Path(
     os.environ.get("CLAIM_GUARD_LEDGER_DIR")
     or Path.home() / ".cache" / "claude-guard-hooks"

@@ -39,6 +39,15 @@ Entries marked `fork` are this fork's changes relative to
   Bash call, guarding nothing. Replaced by the single cross-platform file.
   **General rule: a flat install means hooks cannot import each other.**
 
+### Changed (upstream)
+
+- **The encoding fix went upstream and was merged**
+  ([upstream#2](https://github.com/agentcrew-academy/harness-starter-kit/pull/2)). Upstream then
+  added the other half: stdout and stderr need forcing to UTF-8 as well, or a hook blocks
+  correctly and then dies with UnicodeEncodeError while printing its own message, leaving the
+  user with a traceback instead of a reason. That improvement is pulled back into all nine
+  hooks here.
+
 ### Added (settings that survive a reinstall)
 
 - **`fork` no-emoji-guard settings now live in `no-emoji-guard.json` beside the script.**

@@ -50,6 +50,16 @@ import re
 import subprocess
 import sys
 
+# stdout and stderr take the locale codec too. Where that is not UTF-8, a hook
+# blocks correctly and then dies with UnicodeEncodeError while printing its own
+# message, so the user sees a traceback instead of the reason.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8")
+    except (AttributeError, ValueError):
+        pass
+
+
 DEFAULT_FAIL = r"[1-9][0-9]* (error|ERROR)"
 TIMEOUT_SECONDS = int(os.environ.get("LINT_TIMEOUT", "120"))
 PROJECT_CONFIG = ".lint-gate.json"
@@ -80,11 +90,6 @@ def parse_args(argv):
 
 
 def main():
-    try:
-        sys.stderr.reconfigure(encoding="utf-8")
-    except (AttributeError, ValueError):
-        pass
-
     args = parse_args(sys.argv[1:])
 
     raw = sys.stdin.buffer.read().decode("utf-8", "replace")
