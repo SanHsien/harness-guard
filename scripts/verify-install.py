@@ -203,17 +203,44 @@ def check_antigravity():
 # -- live fire -------------------------------------------------------------
 
 
-def exempts_everything(hook, probe_path):
+def switched_off(hook, probe_path):
+    """Is this copy of no-emoji-guard deliberately not guarding this path?
+
+    Being switched off is a legitimate state -- installed, registered, and
+    allowing everything -- so reporting it as a failure would be a false alarm.
+    Three ways to end up there, in the order the hook itself resolves them.
+    Returns a reason string, or None if the guard should be blocking.
+    """
+    config_path = hook.parent / "no-emoji-guard.json"
+    try:
+        with open(config_path, encoding="utf-8") as fh:
+            config = json.load(fh)
+    except (OSError, ValueError, UnicodeDecodeError):
+        config = {}
+    if not isinstance(config, dict):
+        config = {}
+
+    if config.get("enabled") is False:
+        return '"enabled": false in %s' % config_path
+
+    exempt = config.get("exempt_path_substrings")
+    if isinstance(exempt, list) and any(
+        isinstance(s, str) and s and s in probe_path for s in exempt
+    ):
+        return "the probe path is exempt via %s" % config_path
+
     try:
         text = hook.read_text(encoding="utf-8")
     except OSError:
-        return False
+        return None
     match = re.search(r"^EXEMPT_PATH_SUBSTRINGS\s*=\s*\[(.*?)\]", text, re.MULTILINE | re.DOTALL)
     if not match:
-        return False
+        return None
     entries = re.findall(r"""["']((?:\\.|[^"'\\])*)["']""", match.group(1))
-    return any(entry and entry.encode().decode("unicode_escape") in probe_path
-               for entry in entries)
+    if any(entry and entry.encode().decode("unicode_escape") in probe_path
+           for entry in entries):
+        return "EXEMPT_PATH_SUBSTRINGS in the script exempts the probe path"
+    return None
 
 
 def check_no_emoji_guard():
@@ -222,12 +249,13 @@ def check_no_emoji_guard():
         note("no-emoji-guard", "not installed, skipped")
         return
     probe = str(SCRATCH / "a.md")
-    if exempts_everything(hook, probe):
+    reason = switched_off(hook, probe)
+    if reason:
         note(
             "no-emoji-guard",
-            "installed and loaded, but EXEMPT_PATH_SUBSTRINGS currently exempts "
-            "every path, so it allows all writes. Empty that list in %s to switch "
-            "it on." % hook,
+            "installed and loaded, but switched off (%s), so it allows writes. "
+            "That is a setting, not a fault -- reverse it there to switch the "
+            "guard on." % reason,
         )
         return
     blocked = run_hook(
