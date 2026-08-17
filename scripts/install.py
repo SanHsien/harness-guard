@@ -5,19 +5,23 @@
     python scripts/install.py                                     # default hooks
     python scripts/install.py --hooks all --skills all            # full setup for Claude Code
     python scripts/install.py --agent antigravity --skills all    # install for Google Antigravity
-    python scripts/install.py --agent all --hooks all --skills all # install across supported agents
+    python scripts/install.py --agent all --hooks all --skills all # install across automated targets
 
 What it does:
 
-  1. Works out the platform and target agent (Claude Code, Antigravity, Codex).
-     Picks the right build of each hook. On Windows that means the Python builds --
-     the shell builds need `jq`, and without `jq` they exit 0, which means "allow."
-  2. Copies hook scripts flat into the agent's hook directory.
-  3. Merges registrations into the settings file (e.g. ~/.claude/settings.json).
+  1. Works out the platform and automated target (Claude Code or Antigravity).
+     Claude Code gets the platform-appropriate hook build. On Windows that means
+     Python builds where required -- the shell builds need `jq`, and without
+     `jq` they exit 0, which means "allow."
+  2. Copies Claude Code hook scripts flat into its hook directory.
+  3. Merges Claude Code registrations into ~/.claude/settings.json.
      Merge, not overwrite: existing hooks are kept, and re-running does not duplicate.
-  4. Backs up settings before touching it, writes atomically, and validates JSON.
-  5. With --skills, copies skill folders into the agent's skills directory.
+  4. Backs up Claude Code settings before touching them, writes atomically, and validates JSON.
+  5. With --skills, copies skill folders into the selected agent's skills directory.
      Existing folders of the same name are left alone unless you pass --force.
+
+Codex hook implementations and an example configuration are included in this repo,
+but Codex registration is not automated by this installer yet.
 """
 import argparse
 import json
@@ -289,7 +293,8 @@ def install_for_antigravity(args):
     gemini_dir = Path.home() / ".gemini"
     skills_target = gemini_dir / "config" / "skills"
     print("target   : %s" % skills_target)
-    skills_target.mkdir(parents=True, exist_ok=True)
+    if not args.dry_run:
+        skills_target.mkdir(parents=True, exist_ok=True)
     return install_skills(args, skills_target)
 
 
@@ -299,7 +304,7 @@ def main():
         "--agent",
         default="claude",
         choices=["claude", "antigravity", "all"],
-        help="Target agent ecosystem (default: claude)",
+        help="Automated target: claude, antigravity, or all (default: claude)",
     )
     parser.add_argument(
         "--hooks",

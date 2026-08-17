@@ -12,6 +12,7 @@ Entries marked `fork` are this fork's changes relative to
 
 ### Fixed
 
+- **`fork` `--dry-run --agent antigravity/all` is now truly side-effect free.** The installer previously created `~/.gemini/config/skills/` even while claiming that dry-run would write nothing. Directory creation now happens only during a real install, with a cross-platform regression test protecting the contract.
 - **`fork` Every hook now reads its payload as bytes, so the Chinese triggers actually fire.**
   All nine hooks used `json.load(sys.stdin)`, which decodes with whatever encoding the locale
   hands the process. On a Traditional Chinese Windows install (cp950), claim-evidence-guard was
@@ -69,6 +70,7 @@ Entries marked `fork` are this fork's changes relative to
 
 ### Added
 
+- **`fork` Cross-platform CI**: Linux / Windows × Python 3.11 / 3.14 run core Python compilation, danger-zone/test-gate/encoding regressions, the installer dry-run contract test, and a full dry-run plan.
 - **`fork` danger-zone-guard** (fifth interceptor hook): blocks recursive deletion of root or
   home, deletion of `.git`, force pushes to protected branches, and credential exfiltration.
   25 regression cases across both builds.
@@ -96,6 +98,8 @@ Entries marked `fork` are this fork's changes relative to
 
 ### Changed
 
+- **`fork` README is now product- and support-matrix-first**: Claude Code, Codex, Antigravity / Gemini, and Cursor hook / skill / installer capabilities are stated separately; `--agent all` is no longer described as automatically registering Codex or Cursor.
+- **`fork` `AGENTS.md` is reduced to installation safety invariants plus repository maintenance rules**: the nontechnical-user installation contract remains, while repo work now follows branch → PR → CI → merge and documentation-only cleanup does not mechanically require a changelog or release.
 - **`fork` `AGENTS.md` rewritten as the single source of truth** for any AI agent;
   `CLAUDE.md` reduced to a thin Claude Code specific patch.
 - **`fork` Documentation language flipped**: Traditional Chinese is primary, English mirrors
