@@ -81,8 +81,36 @@ def main():
             "shell",
             lambda p: '"block"' in p.stdout,
         )
+    total += check_cursor_payload()
     print("total failures:", total)
     return 1 if total else 0
+
+
+def check_cursor_payload():
+    print("-- Cursor beforeShellExecution payload (%s)" % CLAUDE_HOOK.name)
+    failures = 0
+    for should_block, command in CASES:
+        payload = json.dumps({
+            "hook_event_name": "beforeShellExecution",
+            "cursor_version": "1.0",
+            "command": command,
+        })
+        proc = subprocess.run(
+            [sys.executable, str(CLAUDE_HOOK)],
+            input=payload,
+            capture_output=True,
+            text=True,
+        )
+        blocked = '"permission": "deny"' in proc.stdout or proc.returncode == 2
+        ok = blocked == should_block
+        failures += not ok
+        shown = command.replace("\n", "\\n")[:56]
+        print(
+            "%s expected=%-5s got=%-5s %s"
+            % ("PASS" if ok else "FAIL", should_block, blocked, shown)
+        )
+    print("failures: %d\n" % failures)
+    return failures
 
 
 if __name__ == "__main__":

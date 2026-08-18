@@ -20,7 +20,7 @@
 
 | | |
 |---|---|
-| `scripts/install.py` | 一行裝完：判平台與目標 agent、**合併**而非覆蓋設定檔、先備份、原子寫入、寫完讀回驗證、可重跑 |
+| `scripts/install.py` | 一行裝完：判平台與目標 agent、**合併**而非覆蓋設定檔、先備份、原子寫入、寫完讀回驗證、可重跑；支援 Claude Code、Antigravity skills、Cursor、Codex |
 | `scripts/verify-install.py` | 實際執行每支已安裝的 hook 並檢查回應，不是讀設定檔宣布沒問題 |
 | `hooks/test-gate-guard/` | 擋掉單條指令用 `;`（而非 `&&`）串接測試與 `git commit`／`git push` |
 | `hooks/danger-zone-guard/` | 擋掉根目錄／家目錄遞迴刪除、刪 `.git`、保護分支強推、憑證外洩 |
@@ -28,6 +28,7 @@
 | `hooks/tests/run-encoding-tests.py` | 非 UTF-8 locale 下的回歸測試——中文 payload 曾讓每支 hook 靜靜失效 |
 | `.lint-gate.json` | lint-gate 專案級開關：全域註冊一次，各專案自己決定要不要跑、跑什麼 |
 | Antigravity／Gemini 支援 | `docs/antigravity-install.md`、`gemini-md-template/`、`install.py` 多 agent 目標 |
+| Cursor／Codex 安裝器 | `install.py --agent cursor|codex`；Cursor 寫扁平 `hooks.json`，Codex 合併進既有 `hooks.json` 並用絕對路徑 |
 | 兩套新技能 | `verification-protocol`、`task-orchestrator` |
 | `AGENTS.md` | 改寫為單一真相源，任何 agent 讀這份就夠；`CLAUDE.md` 縮成 Claude Code 薄補丁 |
 | 文件語言 | 繁體中文為主，英文放 `*.en.md` 鏡像 |

@@ -48,11 +48,11 @@ They are optional workflows, not required dependencies of the five guardrail hoo
 | Agent / environment | Hooks | Skills / rules | Installation status |
 |---|---|---|---|
 | **Claude Code** | all five hooks; Windows selects Python builds where needed | `~/.claude/skills/` + CLAUDE rule templates | automated by `install.py` |
-| **OpenAI Codex** | Codex hook implementations and `codex-hooks-example.json` are included | skills can be integrated manually | **manual integration today; `install.py` does not register Codex hooks** |
+| **OpenAI Codex** | all five hooks; Windows uses Python builds and absolute interpreter paths | `~/.codex/skills/` | `install.py --agent codex` |
 | **Google Antigravity / Gemini** | no equivalent hook registration in this repo today | skills + `GEMINI.md` templates | `install.py --agent antigravity` installs skills |
-| **Cursor / `.agents` ecosystem** | no dedicated hook installer | `.agents/skills/` and rule files are available | manual / agent-specific integration |
+| **Cursor** | all five hooks, written to `~/.cursor/hooks.json` in Cursor's flat format | `~/.cursor/skills/`; also merged into `~/.agents/skills/` when that directory already exists | `install.py --agent cursor` |
 
-Accordingly, `--agent all` currently means the automated **Claude Code + Antigravity** paths. It does not mean Codex or Cursor hooks are automatically registered.
+Accordingly, `--agent all` currently means **Claude Code + Antigravity + Cursor + Codex**. Cursor's `stop` event cannot veto a finished turn, so claim-guard and lint-gate follow up there instead of blocking.
 
 ## Quick start
 
@@ -77,7 +77,25 @@ python scripts/install.py --dry-run --agent antigravity --skills all
 python scripts/install.py --agent antigravity --skills all
 ```
 
-### Both automated targets
+### Cursor
+
+```bash
+python scripts/install.py --dry-run --agent cursor --hooks all --skills all
+python scripts/install.py --agent cursor --hooks all --skills all
+```
+
+User-level Cursor hooks go in `~/.cursor/hooks.json`. Shell guards use `beforeShellExecution`; the emoji guard uses `preToolUse` (`Write`). See [`docs/cursor-install.en.md`](docs/cursor-install.en.md).
+
+### OpenAI Codex
+
+```bash
+python scripts/install.py --dry-run --agent codex --hooks all --skills all
+python scripts/install.py --agent codex --hooks all --skills all
+```
+
+The installer **merges** into an existing `~/.codex/hooks.json` and uses absolute `python` / `python3` paths, so Windows does not silently fail on `python3 ~/.codex/hooks/...`. `config.toml` needs `hooks = true`. Codex will ask you to trust a newly registered hook on first run.
+
+### All automated targets
 
 ```bash
 python scripts/install.py --dry-run --agent all --hooks all --skills all
@@ -106,7 +124,7 @@ python scripts/verify-install.py
 
 The verifier does more than inspect configuration: it feeds synthetic payloads into installed hooks and checks their actual allow / block behavior. Exit code `0` means the items it checked passed.
 
-It primarily verifies Claude Code hooks and the Antigravity skills directory. **It is not currently a Codex hook installation verifier.**
+It primarily verifies Claude Code hooks and the Antigravity skills directory, and live-fires Cursor / Codex hooks when those installs are present.
 
 ## Windows
 

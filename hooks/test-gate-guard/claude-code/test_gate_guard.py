@@ -136,50 +136,88 @@ def verdict(command):
     return None
 
 
+SHELL_TOOLS = ("Bash", "Exec", "exec", "shell", "run_command", "Shell")
+
+
+def is_cursor(payload):
+    return bool(payload.get("cursor_version") or payload.get("hook_event_name"))
+
+
+def extract_tool_name(payload):
+    event = payload.get("hook_event_name") or ""
+    if event in ("beforeShellExecution", "afterShellExecution"):
+        return "Shell"
+    return (
+        payload.get("tool_name")
+        or (payload.get("toolCall") or {}).get("name")
+        or ""
+    )
+
+
+def extract_command(payload):
+    event = payload.get("hook_event_name") or ""
+    if event in ("beforeShellExecution", "afterShellExecution"):
+        return payload.get("command") or ""
+    tool_input = (
+        payload.get("tool_input")
+        or (payload.get("toolCall") or {}).get("args")
+        or {}
+    )
+    if isinstance(tool_input, str):
+        return tool_input
+    if not isinstance(tool_input, dict):
+        tool_input = {}
+    return (
+        tool_input.get("command")
+        or tool_input.get("CommandLine")
+        or tool_input.get("cmd")
+        or payload.get("command")
+        or ""
+    )
+
+
+def allow(payload):
+    if "toolCall" in payload:
+        sys.stdout.write(json.dumps({"decision": "allow"}))
+    elif is_cursor(payload):
+        sys.stdout.write(json.dumps({"permission": "allow"}))
+    return 0
+
+
+def deny(payload, msg):
+    if is_cursor(payload):
+        sys.stdout.write(json.dumps({
+            "permission": "deny",
+            "agent_message": msg,
+            "user_message": msg,
+        }, ensure_ascii=False))
+        return 2
+    if "toolCall" in payload:
+        sys.stdout.write(json.dumps({"decision": "deny", "reason": msg}, ensure_ascii=False))
+        return 0
+    sys.stderr.write(msg)
+    return 2
+
+
 def main():
     try:
         payload = read_payload()
     except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
         return 0
 
-    tool_name = (
-        payload.get("tool_name")
-        or (payload.get("toolCall") or {}).get("name")
-        or ""
-    )
-    if tool_name not in ("Bash", "Exec", "exec", "shell", "run_command"):
-        if "toolCall" in payload:
-            sys.stdout.write(json.dumps({"decision": "allow"}))
-        return 0
-
-    tool_input = (
-        payload.get("tool_input")
-        or (payload.get("toolCall") or {}).get("args")
-        or {}
-    )
-    command = (
-        tool_input.get("command")
-        or tool_input.get("CommandLine")
-        or tool_input.get("cmd")
-        or ""
-    )
+    tool_name = extract_tool_name(payload)
+    command = extract_command(payload)
+    if not tool_name and command:
+        tool_name = "Shell"
+    if tool_name not in SHELL_TOOLS:
+        return allow(payload)
     if not command:
-        if "toolCall" in payload:
-            sys.stdout.write(json.dumps({"decision": "allow"}))
-        return 0
+        return allow(payload)
 
     hit = verdict(command)
     if hit:
-        msg = MESSAGE.format(test=hit[0], git=hit[1])
-        if "toolCall" in payload:
-            sys.stdout.write(json.dumps({"decision": "deny", "reason": msg}, ensure_ascii=False))
-            return 0
-        sys.stderr.write(msg)
-        return 2
-
-    if "toolCall" in payload:
-        sys.stdout.write(json.dumps({"decision": "allow"}))
-    return 0
+        return deny(payload, MESSAGE.format(test=hit[0], git=hit[1]))
+    return allow(payload)
 
 
 if __name__ == "__main__":

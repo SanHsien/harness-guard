@@ -8,6 +8,21 @@
 
 ---
 
+## 2026-08-18
+
+### 新增
+
+- **`fork` `install.py --agent cursor` 與 `--agent codex`。** Cursor 寫入扁平的 `~/.cursor/hooks.json`（`version: 1` + event → `[{command}]`），shell 守衛掛在 `beforeShellExecution`，emoji 掛在 `preToolUse`。Codex 合併進既有 `~/.codex/hooks.json`，Windows 使用 Python 版與絕對路徑，避免 `python3 ~/.codex/hooks/...` 無聲失敗。`--agent all` 現在包含這兩個 target。
+- **`fork` docs/cursor-install.md**（+ `.en.md`）：事件對照，以及 Cursor `stop` 不能否決、只能 follow-up 的限制。
+
+### 變更
+
+- **`fork` Python hook 讀 Cursor payload。** `beforeShellExecution` 的指令在頂層 `command`，工具名是 `Shell`。擋下時回 `{"permission":"deny"}`；Claude Code 的 `exit 2` + stderr 與 Codex 的 `decision` JSON 維持不變。
+- **`fork` Cursor `stop` 上的 claim-guard / lint-gate 改 follow-up。** Cursor 不能在回合結束後 veto，硬擋會假裝有保護。沒有 `last_assistant_message` 時 claim-evidence 仍 fail-open（與既有契約相同）。
+- **`fork` lint-gate 的專案目錄也可來自 payload `cwd` / `workspace_roots`。** Cursor 使用者層 hook 的行程 cwd 是 `~/.cursor`，不能只用 `os.getcwd()`。
+
+---
+
 ## 2026-08-15
 
 ### 修正

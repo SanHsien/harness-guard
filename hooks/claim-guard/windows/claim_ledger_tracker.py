@@ -42,10 +42,21 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 
-LEDGER_DIR = Path(
-    os.environ.get("CLAIM_GUARD_LEDGER_DIR")
-    or Path.home() / ".cache" / "claude-guard-hooks"
-)
+def default_ledger_dir():
+    env = os.environ.get("CLAIM_GUARD_LEDGER_DIR")
+    if env:
+        return Path(env)
+    here = Path(__file__).resolve().as_posix().lower()
+    if "/.codex/" in here or here.endswith("/.codex/hooks/claim_ledger_tracker.py"):
+        return Path.home() / ".cache" / "codex-guard-hooks"
+    if "/.cursor/" in here:
+        return Path.home() / ".cache" / "cursor-guard-hooks"
+    return Path.home() / ".cache" / "claude-guard-hooks"
+
+
+LEDGER_DIR = default_ledger_dir()
+SHELL_TOOLS = ("Bash", "Exec", "exec", "shell", "run_command", "Shell")
+SEARCH_TOOLS = ("Grep", "Glob", "grep_search", "GlobTool")
 
 # Verification-type commands: tests, builds, status and health checks, diffs,
 # live runs. The first group is carried over from the shell version unchanged;
@@ -114,33 +125,67 @@ def append(path, line):
         os.fsync(fh.fileno())
 
 
+def session_id(payload):
+    sid = (
+        payload.get("session_id")
+        or payload.get("conversation_id")
+        or payload.get("turn_id")
+        or "default"
+    )
+    return re.sub(r"[^A-Za-z0-9._-]", "_", str(sid))[:80] or "default"
+
+
+def extract_tool_name(payload):
+    event = payload.get("hook_event_name") or ""
+    if event in ("beforeShellExecution", "afterShellExecution"):
+        return "Shell"
+    return payload.get("tool_name") or (payload.get("toolCall") or {}).get("name") or ""
+
+
+def extract_command(payload):
+    event = payload.get("hook_event_name") or ""
+    if event in ("beforeShellExecution", "afterShellExecution"):
+        return payload.get("command") or ""
+    tool_input = payload.get("tool_input") or (payload.get("toolCall") or {}).get("args") or {}
+    if isinstance(tool_input, str):
+        return tool_input
+    if not isinstance(tool_input, dict):
+        return payload.get("command") or ""
+    return (
+        tool_input.get("command")
+        or tool_input.get("CommandLine")
+        or tool_input.get("cmd")
+        or payload.get("command")
+        or ""
+    )
+
+
 def main():
     try:
         payload = read_payload()
     except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
         return 0  # unreadable input is never a reason to get in the way
 
-    tool = payload.get("tool_name") or ""
-    sid = payload.get("session_id") or "default"
-    # A session id becomes part of a filename, so refuse anything that could
-    # walk out of the ledger directory.
-    sid = re.sub(r"[^A-Za-z0-9._-]", "_", str(sid))[:80] or "default"
+    tool = extract_tool_name(payload)
+    command = extract_command(payload)
+    if not tool and command:
+        tool = "Shell"
+    sid = session_id(payload)
 
     verify_ledger = LEDGER_DIR / (sid + ".verify")
     search_ledger = LEDGER_DIR / (sid + ".search")
 
-    if tool in ("Grep", "Glob"):
+    if tool in SEARCH_TOOLS:
         append(search_ledger, tool)
         return 0
 
-    if tool == "Bash":
-        cmd = (payload.get("tool_input") or {}).get("command") or ""
-        if not cmd:
+    if tool in SHELL_TOOLS:
+        if not command:
             return 0
-        if VERIFY_CMD.search(cmd):
-            append(verify_ledger, cmd[:120])
-        if SEARCH_CMD.search(cmd):
-            append(search_ledger, cmd[:120])
+        if VERIFY_CMD.search(command):
+            append(verify_ledger, command[:120])
+        if SEARCH_CMD.search(command):
+            append(search_ledger, command[:120])
 
     return 0
 

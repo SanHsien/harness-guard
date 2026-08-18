@@ -48,11 +48,11 @@ Harness Guard 專注在幾個容易造成實際損失的情境：
 | Agent / 環境 | Hooks | Skills / Rules | 安裝方式 |
 |---|---|---|---|
 | **Claude Code** | 5 個 hook；Windows 會選 Python 版本 | `~/.claude/skills/` + CLAUDE 規則範本 | `install.py` 自動安裝 |
-| **OpenAI Codex** | repo 提供 Codex hook 實作與 `codex-hooks-example.json` | skills 可手動整合 | **目前需手動整合；`install.py` 尚未自動註冊 Codex** |
+| **OpenAI Codex** | 5 個 hook；Windows 用 Python 版並寫入絕對路徑 | `~/.codex/skills/` | `install.py --agent codex` |
 | **Google Antigravity / Gemini** | 本 repo 目前不提供等價 hook 註冊 | skills + `GEMINI.md` 範本 | `install.py --agent antigravity` 可安裝 skills |
-| **Cursor / `.agents` 生態** | 無專用 hook installer | `.agents/skills/` 與規則檔可用 | 手動／依 agent 能力整合 |
+| **Cursor** | 5 個 hook，寫入 `~/.cursor/hooks.json`（Cursor 扁平格式） | `~/.cursor/skills/`；若本機已有 `~/.agents/skills/` 也會一併合併 | `install.py --agent cursor` |
 
-因此 `--agent all` 目前代表 **Claude Code + Antigravity 的自動化安裝路徑**，不代表 Codex / Cursor 已自動註冊 hook。
+因此 `--agent all` 目前代表 **Claude Code + Antigravity + Cursor + Codex**。Cursor 的 `stop` 不能否決已結束的回合，所以 claim-guard / lint-gate 在 Cursor 上改為 follow-up，不是 veto。
 
 ## 快速開始
 
@@ -77,7 +77,25 @@ python scripts/install.py --dry-run --agent antigravity --skills all
 python scripts/install.py --agent antigravity --skills all
 ```
 
-### 自動化支援的兩個環境一起處理
+### Cursor
+
+```bash
+python scripts/install.py --dry-run --agent cursor --hooks all --skills all
+python scripts/install.py --agent cursor --hooks all --skills all
+```
+
+Cursor 使用者層 hook 寫在 `~/.cursor/hooks.json`。shell 攔截走 `beforeShellExecution`；emoji 攔截走 `preToolUse`（`Write`）。細節見 [`docs/cursor-install.md`](docs/cursor-install.md)。
+
+### OpenAI Codex
+
+```bash
+python scripts/install.py --dry-run --agent codex --hooks all --skills all
+python scripts/install.py --agent codex --hooks all --skills all
+```
+
+安裝器會**合併**進既有的 `~/.codex/hooks.json`，並使用絕對路徑的 `python`／`python3`，避免 Windows 上 `python3 ~/.codex/hooks/...` 那種無聲失敗。`config.toml` 需要 `hooks = true`；新 hook 第一次執行時 Codex 會要求信任。
+
+### 目前所有自動化環境一起處理
 
 ```bash
 python scripts/install.py --dry-run --agent all --hooks all --skills all
@@ -106,7 +124,7 @@ python scripts/verify-install.py
 
 這支工具不只讀設定檔，而會對已安裝 hook 餵合成 payload，確認它真的執行並產生預期的 allow / block 行為。exit code `0` 才代表它檢查到的項目通過。
 
-它主要驗證 Claude Code hook 與 Antigravity skills 目錄；**目前不是 Codex hook 安裝驗證器**。
+它主要驗證 Claude Code hook 與 Antigravity skills 目錄，並在本機已安裝時檢查 Cursor / Codex 的設定檔與 live-fire 行為。
 
 ## Windows
 

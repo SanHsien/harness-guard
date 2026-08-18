@@ -98,6 +98,8 @@ def main():
     except ValueError:
         payload = {}
 
+    is_cursor = bool(payload.get("cursor_version") or payload.get("hook_event_name"))
+
     # Do not delete this block. It asks "is this stop happening because I
     # already blocked it once this turn?" If so, let it through. Without it, an
     # error that cannot be fixed loops forever: try to end, blocked, try to
@@ -105,7 +107,13 @@ def main():
     if payload.get("stop_hook_active") is True:
         return 0
 
-    project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+    roots = payload.get("workspace_roots") or []
+    project_dir = (
+        os.environ.get("CLAUDE_PROJECT_DIR")
+        or payload.get("cwd")
+        or (roots[0] if roots else None)
+        or os.getcwd()
+    )
     if not os.path.isdir(project_dir):
         return 0
 
@@ -141,10 +149,15 @@ def main():
     fail_pattern = str(config.get("fail") or args.fail or "").strip() or DEFAULT_FAIL
     if re.search(fail_pattern, out, re.MULTILINE):
         failing = [ln for ln in out.splitlines() if re.search(fail_pattern, ln)][:20]
-        sys.stderr.write(
+        msg = (
             "Pre-completion check failed (%s). Fix it before ending this turn:\n%s\n"
             % (lint_cmd, "\n".join(failing) or out[:2000])
         )
+        if is_cursor:
+            # Cursor `stop` cannot veto. Follow up so the agent still sees the failure.
+            sys.stdout.write(json.dumps({"followup_message": msg}, ensure_ascii=False))
+            return 0
+        sys.stderr.write(msg)
         return 2
 
     return 0

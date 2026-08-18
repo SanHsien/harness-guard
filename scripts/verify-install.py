@@ -31,6 +31,8 @@ from pathlib import Path
 IS_WINDOWS = platform.system() == "Windows"
 CLAUDE_DIR = Path(os.environ.get("CLAUDE_CONFIG_DIR") or Path.home() / ".claude")
 GEMINI_DIR = Path.home() / ".gemini"
+CURSOR_DIR = Path.home() / ".cursor"
+CODEX_DIR = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
 SETTINGS = CLAUDE_DIR / "settings.json"
 HOOKS_DIR = CLAUDE_DIR / "hooks"
 
@@ -198,6 +200,137 @@ def check_antigravity():
         record(True, "Antigravity global skills directory", "%d skills installed (%s)" % (len(installed), ", ".join(installed[:4])))
     else:
         note("Antigravity skills", "not yet populated under %s" % skills_dir)
+
+
+def check_cursor_config():
+    section("Cursor hooks.json")
+    path = CURSOR_DIR / "hooks.json"
+    if not path.exists():
+        note("hooks.json", "does not exist yet at %s (skipped)" % path)
+        return
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
+        record(False, "Cursor hooks.json is valid JSON", str(exc))
+        return
+    record(True, "Cursor hooks.json is valid JSON", str(path))
+    record(data.get("version") == 1, "Cursor hooks.json has version 1")
+    hooks = data.get("hooks") or {}
+    record(
+        bool(hooks.get("beforeShellExecution")),
+        "Cursor has beforeShellExecution guards",
+        "%d entries" % len(hooks.get("beforeShellExecution") or []),
+    )
+    for event, entries in hooks.items():
+        for entry in entries or []:
+            if not isinstance(entry, dict):
+                continue
+            command = entry.get("command") or ""
+            if IS_WINDOWS and re.match(r"^\s*bash\s", command):
+                record(False, "no bare `bash` in a Windows Cursor hook command", command[:70])
+
+
+def check_codex_config():
+    section("Codex hooks.json")
+    path = CODEX_DIR / "hooks.json"
+    if not path.exists():
+        note("hooks.json", "does not exist yet at %s (skipped)" % path)
+        return
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
+        record(False, "Codex hooks.json is valid JSON", str(exc))
+        return
+    record(True, "Codex hooks.json is valid JSON", str(path))
+    commands = list(collect_commands(data.get("hooks")))
+    record(bool(commands), "at least one Codex hook is registered", "%d found" % len(commands))
+    for command in commands:
+        if IS_WINDOWS and re.match(r"^\s*bash\s", command):
+            record(
+                False,
+                "no bare `bash` in a Windows Codex hook command",
+                command[:70] + " -- resolves to WSL",
+            )
+        if IS_WINDOWS and "python3 ~/" in command.replace("\\", "/"):
+            record(
+                False,
+                "Codex hook command uses python3 with a tilde path",
+                command[:70] + " -- that combination fails open on Windows",
+            )
+
+
+def find_hook_in(directory, *names):
+    for name in names:
+        path = directory / name
+        if path.exists():
+            return path
+    return None
+
+
+def check_cursor_live_fire():
+    hooks_dir = CURSOR_DIR / "hooks"
+    if not hooks_dir.exists():
+        note("Cursor hooks", "not installed, skipped")
+        return
+    section("Live fire (Cursor payload shape)")
+    test_gate = find_hook_in(hooks_dir, "test_gate_guard.py")
+    danger = find_hook_in(hooks_dir, "danger_zone_guard.py")
+    if test_gate:
+        chained = run_hook(
+            test_gate,
+            {
+                "hook_event_name": "beforeShellExecution",
+                "cursor_version": "1.0",
+                "command": "pytest ; git push",
+            },
+        )
+        gated = run_hook(
+            test_gate,
+            {
+                "hook_event_name": "beforeShellExecution",
+                "cursor_version": "1.0",
+                "command": "pytest && git push",
+            },
+        )
+        if chained and gated:
+            record(
+                '"permission": "deny"' in (chained.stdout or "") or chained.returncode == 2,
+                "Cursor test-gate-guard blocks `pytest ; git push`",
+            )
+            record(
+                '"permission": "deny"' in (chained.stdout or ""),
+                "Cursor test-gate-guard returns permission deny JSON",
+            )
+            record(gated.returncode == 0, "Cursor test-gate-guard allows `pytest && git push`")
+        else:
+            record(False, "Cursor test-gate-guard runs")
+    if danger:
+        destructive = run_hook(
+            danger,
+            {
+                "hook_event_name": "beforeShellExecution",
+                "cursor_version": "1.0",
+                "command": "rm -rf /",
+            },
+        )
+        safe = run_hook(
+            danger,
+            {
+                "hook_event_name": "beforeShellExecution",
+                "cursor_version": "1.0",
+                "command": "rm -rf dist/",
+            },
+        )
+        if destructive and safe:
+            record(
+                '"permission": "deny"' in (destructive.stdout or "") or destructive.returncode == 2,
+                "Cursor danger-zone-guard blocks `rm -rf /`",
+            )
+            record(safe.returncode == 0, "Cursor danger-zone-guard allows `rm -rf dist/`")
+        else:
+            record(False, "Cursor danger-zone-guard runs")
 
 
 # -- live fire -------------------------------------------------------------
@@ -410,7 +543,11 @@ def check_danger_zone_guard():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--agent", default="all", choices=["claude", "antigravity", "all"])
+    parser.add_argument(
+        "--agent",
+        default="all",
+        choices=["claude", "antigravity", "cursor", "codex", "all"],
+    )
     _args = parser.parse_args()
 
     try:
@@ -420,15 +557,24 @@ def main():
 
     print("Verifying the harness installation...")
     jq = check_environment()
-    check_settings(jq)
-    check_antigravity()
+    if _args.agent in ("claude", "all"):
+        check_settings(jq)
+    if _args.agent in ("antigravity", "all"):
+        check_antigravity()
+    if _args.agent in ("cursor", "all"):
+        check_cursor_config()
+    if _args.agent in ("codex", "all"):
+        check_codex_config()
 
-    section("Live fire (each installed hook is run with a synthetic payload)")
-    check_no_emoji_guard()
-    check_claim_guard()
-    check_lint_gate()
-    check_test_gate()
-    check_danger_zone_guard()
+    if _args.agent in ("claude", "all"):
+        section("Live fire (each installed hook is run with a synthetic payload)")
+        check_no_emoji_guard()
+        check_claim_guard()
+        check_lint_gate()
+        check_test_gate()
+        check_danger_zone_guard()
+    if _args.agent in ("cursor", "all"):
+        check_cursor_live_fire()
 
     failed = [r for r in results if not r[0]]
     section("Result")

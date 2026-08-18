@@ -156,6 +156,10 @@ def find_emoji(text):
 
 def collect(tool_input):
     """Gather all the text content being written this call (field names vary by tool)."""
+    if isinstance(tool_input, str):
+        return tool_input
+    if not isinstance(tool_input, dict):
+        return ""
     parts = []
     for key in ("content", "new_string", "prompt", "CodeContent", "ReplacementContent"):
         v = tool_input.get(key)
@@ -170,6 +174,33 @@ def collect(tool_input):
     return "\n".join(parts)
 
 
+def is_cursor(payload):
+    return bool(payload.get("cursor_version") or payload.get("hook_event_name"))
+
+
+def allow_payload(payload):
+    if "toolCall" in payload:
+        sys.stdout.write(json.dumps({"decision": "allow"}))
+    elif is_cursor(payload):
+        sys.stdout.write(json.dumps({"permission": "allow"}))
+    sys.exit(0)
+
+
+def deny_payload(payload, msg):
+    if is_cursor(payload):
+        sys.stdout.write(json.dumps({
+            "permission": "deny",
+            "agent_message": msg,
+            "user_message": msg,
+        }, ensure_ascii=False))
+        sys.exit(2)
+    if "toolCall" in payload:
+        sys.stdout.write(json.dumps({"decision": "deny", "reason": msg}, ensure_ascii=False))
+        sys.exit(0)
+    sys.stderr.write(msg)
+    sys.exit(2)
+
+
 def main():
     try:
         payload = read_payload()
@@ -178,34 +209,34 @@ def main():
 
     config = load_config()
     if config.get("enabled") is False:
-        if "toolCall" in payload:
-            sys.stdout.write(json.dumps({"decision": "allow"}))
-        sys.exit(0)
+        allow_payload(payload)
 
     exempt = config.get("exempt_path_substrings")
     if not isinstance(exempt, list) or not all(isinstance(s, str) for s in exempt):
         exempt = EXEMPT_PATH_SUBSTRINGS
 
     tool_input = payload.get("tool_input") or (payload.get("toolCall") or {}).get("args") or {}
-    path = tool_input.get("file_path") or tool_input.get("TargetFile") or tool_input.get("path") or ""
+    if not isinstance(tool_input, dict):
+        tool_input = {}
+    path = (
+        tool_input.get("file_path")
+        or tool_input.get("TargetFile")
+        or tool_input.get("path")
+        or payload.get("file_path")
+        or ""
+    )
 
     # Transcripts and raw external input being archived as-is are not blocked
     if re.search(r"(逐字稿|transcript|/_archive/|\.srt$|\.vtt$)", path):
-        if "toolCall" in payload:
-            sys.stdout.write(json.dumps({"decision": "allow"}))
-        sys.exit(0)
+        allow_payload(payload)
 
     # Exempt the whole subtree (config file first, then the list at the top).
     if any(s and s in path for s in exempt):
-        if "toolCall" in payload:
-            sys.stdout.write(json.dumps({"decision": "allow"}))
-        sys.exit(0)
+        allow_payload(payload)
 
     text = collect(tool_input)
     if not text:
-        if "toolCall" in payload:
-            sys.stdout.write(json.dumps({"decision": "allow"}))
-        sys.exit(0)
+        allow_payload(payload)
 
     # Obsidian to-do lines (- [ ] / - [x]) in any file also get the above
     # Tasks plugin markers exempted
@@ -218,9 +249,7 @@ def main():
 
     hits = find_emoji(text)
     if not hits:
-        if "toolCall" in payload:
-            sys.stdout.write(json.dumps({"decision": "allow"}))
-        sys.exit(0)
+        allow_payload(payload)
 
     uniq = []
     for ch, _ in hits:
@@ -235,12 +264,7 @@ def main():
         % (len(hits), " (%d unique after dedup)" % len(uniq) if len(uniq) != len(hits) else "", " ".join(uniq))
     )
 
-    if "toolCall" in payload:
-        sys.stdout.write(json.dumps({"decision": "deny", "reason": msg}, ensure_ascii=False))
-        sys.exit(0)
-
-    sys.stderr.write(msg)
-    sys.exit(2)
+    deny_payload(payload, msg)
 
 
 if __name__ == "__main__":

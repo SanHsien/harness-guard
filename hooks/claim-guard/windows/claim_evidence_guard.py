@@ -41,10 +41,19 @@ for _stream in (sys.stdout, sys.stderr):
         pass
 
 
-LEDGER_DIR = Path(
-    os.environ.get("CLAIM_GUARD_LEDGER_DIR")
-    or Path.home() / ".cache" / "claude-guard-hooks"
-)
+def default_ledger_dir():
+    env = os.environ.get("CLAIM_GUARD_LEDGER_DIR")
+    if env:
+        return Path(env)
+    here = Path(__file__).resolve().as_posix().lower()
+    if "/.codex/" in here:
+        return Path.home() / ".cache" / "codex-guard-hooks"
+    if "/.cursor/" in here:
+        return Path.home() / ".cache" / "cursor-guard-hooks"
+    return Path.home() / ".cache" / "claude-guard-hooks"
+
+
+LEDGER_DIR = default_ledger_dir()
 
 VERIFY_TRIGGERS = re.compile(
     r"verified|confirmed|all passing|tests? pass|build passes|all green"
@@ -113,8 +122,60 @@ def cleanup(*paths):
             pass
 
 
-def block(reason, *ledgers):
+def is_cursor(payload):
+    return bool(payload.get("cursor_version") or payload.get("hook_event_name"))
+
+
+def session_id(payload):
+    sid = (
+        payload.get("session_id")
+        or payload.get("conversation_id")
+        or payload.get("turn_id")
+        or "default"
+    )
+    return re.sub(r"[^A-Za-z0-9._-]", "_", str(sid))[:80] or "default"
+
+
+def last_message(payload):
+    last = payload.get("last_assistant_message") or payload.get("agent_message") or ""
+    if isinstance(last, str) and last.strip():
+        return last
+    path = payload.get("transcript_path")
+    if not path:
+        return ""
+    try:
+        data = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return ""
+    if len(data) > 512000:
+        data = data[-512000:]
+    found = ""
+    for line in data.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            continue
+        role = str(obj.get("role") or obj.get("type") or "")
+        text = obj.get("content") or obj.get("text") or obj.get("message") or ""
+        if isinstance(text, list):
+            text = "".join(
+                (part.get("text") or "") if isinstance(part, dict) else str(part)
+                for part in text
+            )
+        if role.lower() in ("assistant", "ai", "model") and isinstance(text, str):
+            found = text
+    return found
+
+
+def block(payload, reason, *ledgers):
     cleanup(*ledgers)
+    if is_cursor(payload):
+        # Cursor `stop` cannot veto a finished turn. It can only follow up.
+        sys.stdout.write(json.dumps({"followup_message": reason}, ensure_ascii=False))
+        return 0
     sys.stdout.write(json.dumps({"decision": "block", "reason": reason}))
     return 0
 
@@ -125,8 +186,7 @@ def main():
     except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
         return 0
 
-    sid = payload.get("session_id") or "default"
-    sid = re.sub(r"[^A-Za-z0-9._-]", "_", str(sid))[:80] or "default"
+    sid = session_id(payload)
     verify_ledger = LEDGER_DIR / (sid + ".verify")
     search_ledger = LEDGER_DIR / (sid + ".search")
 
@@ -136,15 +196,15 @@ def main():
         cleanup(verify_ledger, search_ledger)
         return 0
 
-    last = payload.get("last_assistant_message") or ""
+    last = last_message(payload)
     if not last:
         return 0
 
     if VERIFY_TRIGGERS.search(last) and not has_records(verify_ledger):
-        return block(VERIFY_BLOCK, verify_ledger, search_ledger)
+        return block(payload, VERIFY_BLOCK, verify_ledger, search_ledger)
 
     if NEG_TRIGGERS.search(last) and not has_records(search_ledger):
-        return block(SEARCH_BLOCK, verify_ledger, search_ledger)
+        return block(payload, SEARCH_BLOCK, verify_ledger, search_ledger)
 
     cleanup(verify_ledger, search_ledger)
     return 0

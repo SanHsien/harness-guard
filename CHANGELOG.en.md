@@ -8,6 +8,21 @@ Entries marked `fork` are this fork's changes relative to
 
 ---
 
+## 2026-08-18
+
+### Added
+
+- **`fork` `install.py --agent cursor` and `--agent codex`.** Cursor gets a flat `~/.cursor/hooks.json` (`version: 1`, event → `[{command}]`), with shell guards on `beforeShellExecution` and the emoji guard on `preToolUse`. Codex merges into an existing `~/.codex/hooks.json`; Windows uses the Python builds and absolute interpreter paths, so `python3 ~/.codex/hooks/...` cannot fail open. `--agent all` now includes both targets.
+- **`fork` `docs/cursor-install.md`** (plus `.en.md`): event mapping, and the limit that Cursor `stop` can only follow up, not veto.
+
+### Changed
+
+- **`fork` The Python hooks now read Cursor payloads.** `beforeShellExecution` puts the command at the top-level `command` field and names the tool `Shell`. A block returns `{"permission":"deny"}`. Claude Code still uses `exit 2` + stderr; Codex still uses `decision` JSON.
+- **`fork` claim-guard and lint-gate follow up on Cursor `stop`.** Cursor cannot veto a finished turn, so a hard block would be fake protection. claim-evidence still fails open when there is no `last_assistant_message`, matching the existing contract.
+- **`fork` lint-gate also takes the project directory from payload `cwd` / `workspace_roots`.** A user-level Cursor hook's process cwd is `~/.cursor`, so `os.getcwd()` alone is the wrong tree.
+
+---
+
 ## 2026-08-15
 
 ### Fixed

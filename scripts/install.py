@@ -5,23 +5,26 @@
     python scripts/install.py                                     # default hooks
     python scripts/install.py --hooks all --skills all            # full setup for Claude Code
     python scripts/install.py --agent antigravity --skills all    # install for Google Antigravity
-    python scripts/install.py --agent all --hooks all --skills all # install across automated targets
+    python scripts/install.py --agent cursor --hooks all --skills all
+    python scripts/install.py --agent codex --hooks all --skills all
+    python scripts/install.py --agent all --hooks all --skills all
 
 What it does:
 
-  1. Works out the platform and automated target (Claude Code or Antigravity).
-     Claude Code gets the platform-appropriate hook build. On Windows that means
-     Python builds where required -- the shell builds need `jq`, and without
-     `jq` they exit 0, which means "allow."
+  1. Works out the platform and automated target (Claude Code, Antigravity,
+     Cursor, or Codex). Claude Code gets the platform-appropriate hook build.
+     On Windows that means Python builds where required -- the shell builds
+     need `jq`, and without `jq` they exit 0, which means "allow."
   2. Copies Claude Code hook scripts flat into its hook directory.
   3. Merges Claude Code registrations into ~/.claude/settings.json.
      Merge, not overwrite: existing hooks are kept, and re-running does not duplicate.
   4. Backs up Claude Code settings before touching them, writes atomically, and validates JSON.
   5. With --skills, copies skill folders into the selected agent's skills directory.
      Existing folders of the same name are left alone unless you pass --force.
-
-Codex hook implementations and an example configuration are included in this repo,
-but Codex registration is not automated by this installer yet.
+  6. `--agent cursor` writes ~/.cursor/hooks.json in Cursor's flat format and
+     copies Python hooks to ~/.cursor/hooks/. `--agent codex` merges into
+     ~/.codex/hooks.json with absolute interpreter paths.
+  7. `--agent all` is Claude Code + Antigravity + Cursor + Codex.
 """
 import argparse
 import json
@@ -111,6 +114,120 @@ HOOKS = {
 
 DEFAULT_HOOKS = "claim-guard,test-gate-guard,danger-zone-guard"
 
+# Cursor uses a flat hooks.json (version + event -> [{command}]), not the
+# Claude Code nested matcher groups. Event names are also different, and
+# `stop` cannot veto -- the Python hooks already degrade to follow-up there.
+CURSOR_HOOKS = {
+    "claim-guard": [
+        {
+            "source": "hooks/claim-guard/windows/claim_ledger_tracker.py",
+            "event": "postToolUse",
+            "timeout": 10,
+        },
+        {
+            "source": "hooks/claim-guard/windows/claim_evidence_guard.py",
+            "event": "stop",
+            "timeout": 15,
+        },
+    ],
+    "test-gate-guard": [
+        {
+            "source": "hooks/test-gate-guard/claude-code/test_gate_guard.py",
+            "event": "beforeShellExecution",
+            "timeout": 10,
+        },
+    ],
+    "danger-zone-guard": [
+        {
+            "source": "hooks/danger-zone-guard/claude-code/danger_zone_guard.py",
+            "event": "beforeShellExecution",
+            "timeout": 10,
+        },
+    ],
+    "lint-gate": [
+        {
+            "source": "hooks/lint-gate/windows/lint_gate.py",
+            "event": "stop",
+            "timeout": 60,
+        },
+    ],
+    "no-emoji-guard": [
+        {
+            "source": "hooks/no-emoji-guard/claude-code/no-emoji-guard.py",
+            "event": "preToolUse",
+            "matcher": "Write",
+            "timeout": 10,
+        },
+    ],
+}
+
+CODEX_HOOKS = {
+    "claim-guard": [
+        {
+            "source": {
+                "windows": "hooks/claim-guard/windows/claim_ledger_tracker.py",
+                "posix": "hooks/claim-guard/codex/claim-ledger-tracker.sh",
+            },
+            "event": "PostToolUse",
+            "matcher": "Bash|Grep|Glob|exec|shell",
+            "timeout": 10,
+        },
+        {
+            "source": {
+                "windows": "hooks/claim-guard/windows/claim_evidence_guard.py",
+                "posix": "hooks/claim-guard/codex/claim-evidence-guard.sh",
+            },
+            "event": "Stop",
+            "matcher": None,
+            "timeout": 15,
+        },
+    ],
+    "test-gate-guard": [
+        {
+            "source": {
+                "windows": "hooks/test-gate-guard/claude-code/test_gate_guard.py",
+                "posix": "hooks/test-gate-guard/codex/test_gate_guard.py",
+            },
+            "event": "PreToolUse",
+            "matcher": "exec|shell|exec_command|Bash",
+            "timeout": 10,
+        },
+    ],
+    "danger-zone-guard": [
+        {
+            "source": {
+                "windows": "hooks/danger-zone-guard/claude-code/danger_zone_guard.py",
+                "posix": "hooks/danger-zone-guard/codex/danger_zone_guard.py",
+            },
+            "event": "PreToolUse",
+            "matcher": "exec|shell|exec_command|Bash",
+            "timeout": 10,
+        },
+    ],
+    "lint-gate": [
+        {
+            "source": {
+                "windows": "hooks/lint-gate/windows/lint_gate.py",
+                "posix": "hooks/lint-gate/codex/lint-gate.sh",
+            },
+            "event": "Stop",
+            "matcher": None,
+            "timeout": 60,
+        },
+    ],
+    "no-emoji-guard": [
+        {
+            "source": {
+                "windows": "hooks/no-emoji-guard/claude-code/no-emoji-guard.py",
+                "posix": "hooks/no-emoji-guard/codex/no-emoji-guard.py",
+            },
+            "event": "PreToolUse",
+            "matcher": "apply_patch|Write|Edit|MultiEdit",
+            "timeout": 10,
+        },
+    ],
+}
+
 
 def build_command(installed_path):
     """The command line for an installed hook script."""
@@ -138,6 +255,26 @@ def already_registered(settings, event, command):
             if hook.get("command") == command:
                 return True
     return False
+
+
+def already_registered_cursor(settings, event, command):
+    for entry in settings.get("hooks", {}).get(event) or []:
+        if isinstance(entry, dict) and entry.get("command") == command:
+            return True
+    return False
+
+
+def register_cursor(settings, spec, command):
+    """Add one Cursor hook. Cursor uses a flat event -> [{command}] list."""
+    settings.setdefault("version", 1)
+    hooks = settings.setdefault("hooks", {})
+    entries = hooks.setdefault(spec["event"], [])
+    definition = {"command": command}
+    if spec.get("timeout"):
+        definition["timeout"] = spec["timeout"]
+    if spec.get("matcher"):
+        definition["matcher"] = spec["matcher"]
+    entries.append(definition)
 
 
 def register(settings, spec, command):
@@ -333,6 +470,184 @@ def install_for_claude(args):
     return install_skills(args, claude_dir / "skills")
 
 
+def selected_hook_names(args, catalog):
+    selected = list(catalog) if args.hooks == "all" else [
+        name.strip() for name in args.hooks.split(",") if name.strip()
+    ]
+    unknown = [name for name in selected if name not in catalog]
+    if unknown:
+        print("Unknown hook(s): %s" % ", ".join(unknown))
+        print("Available: %s" % ", ".join(catalog))
+        return None
+    return selected
+
+
+def backup_json(path, backup_root):
+    if not path.exists():
+        return None
+    backup_root.mkdir(parents=True, exist_ok=True)
+    backup = backup_root / ("%s.bak-%s" % (path.name, time.strftime("%Y%m%d-%H%M%S")))
+    shutil.copyfile(path, backup)
+    print("backed up %s to %s" % (path.name, backup))
+    return backup
+
+
+def write_json_atomic(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    with open(tmp, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+    os.replace(tmp, path)
+
+
+def install_for_cursor(args):
+    cursor_dir = Path(args.cursor_dir)
+    hooks_dir = cursor_dir / "hooks"
+    settings_path = cursor_dir / "hooks.json"
+
+    selected = selected_hook_names(args, CURSOR_HOOKS)
+    if selected is None:
+        return 2
+
+    print("\n=== Cursor Installation ===")
+    print("target   : %s" % cursor_dir)
+    print("hooks    : %s" % (", ".join(selected) if selected else "(none)"))
+    print("note     : Cursor `stop` cannot veto a finished turn; claim-guard "
+          "and lint-gate follow up instead of blocking")
+
+    try:
+        settings = load_settings(settings_path)
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
+        print("hooks.json could not be read: %s" % exc)
+        return 1
+
+    planned = []
+    for name in selected:
+        for spec in CURSOR_HOOKS[name]:
+            source = REPO / spec["source"]
+            if not source.exists():
+                print("SKIP %s -- missing %s" % (name, source))
+                continue
+            target = hooks_dir / source.name
+            command = build_command(target)
+            state = "already registered" if already_registered_cursor(
+                settings, spec["event"], command
+            ) else "will register"
+            print("%-20s %-22s %s" % (name, spec["event"], command))
+            print("%-20s %-22s %s" % ("", "", state))
+            planned.append((spec, source, target, command, state))
+
+    skill_targets = [cursor_dir / "skills"]
+    agents_skills = Path.home() / ".agents" / "skills"
+    if agents_skills.exists():
+        skill_targets.append(agents_skills)
+    if args.dry_run:
+        rc = 0
+        for target_skills_dir in skill_targets:
+            result = install_skills(args, target_skills_dir)
+            if result:
+                rc = result
+        return rc
+
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    for _spec, source, target, _command, _state in planned:
+        shutil.copyfile(source, target)
+        if not IS_WINDOWS:
+            os.chmod(target, 0o755)
+    print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
+
+    backup_json(settings_path, cursor_dir / "backups")
+
+    added = 0
+    for spec, _source, _target, command, state in planned:
+        if state == "already registered":
+            continue
+        register_cursor(settings, spec, command)
+        added += 1
+
+    if added:
+        write_json_atomic(settings_path, settings)
+        print("registered %d hook(s); hooks.json re-read and valid" % added)
+    else:
+        print("nothing new to register in hooks.json")
+
+    rc = 0
+    for target_skills_dir in skill_targets:
+        target_skills_dir.mkdir(parents=True, exist_ok=True)
+        result = install_skills(args, target_skills_dir)
+        if result:
+            rc = result
+    return rc
+
+
+def install_for_codex(args):
+    codex_dir = Path(args.codex_dir)
+    hooks_dir = codex_dir / "hooks"
+    settings_path = codex_dir / "hooks.json"
+    key = "windows" if IS_WINDOWS else "posix"
+
+    selected = selected_hook_names(args, CODEX_HOOKS)
+    if selected is None:
+        return 2
+
+    print("\n=== OpenAI Codex Installation ===")
+    print("target   : %s" % codex_dir)
+    print("hooks    : %s" % (", ".join(selected) if selected else "(none)"))
+    print("note     : confirm config.toml has hooks = true; Codex asks to trust a new hook on first run")
+
+    try:
+        settings = load_settings(settings_path)
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
+        print("hooks.json could not be read: %s" % exc)
+        return 1
+
+    planned = []
+    for name in selected:
+        for spec in CODEX_HOOKS[name]:
+            source = REPO / spec["source"][key]
+            if not source.exists():
+                print("SKIP %s -- missing %s" % (name, source))
+                continue
+            target = hooks_dir / source.name
+            command = build_command(target)
+            state = "already registered" if already_registered(
+                settings, spec["event"], command
+            ) else "will register"
+            print("%-20s %-12s %s" % (name, spec["event"], command))
+            print("%-20s %-12s %s" % ("", "", state))
+            planned.append((spec, source, target, command, state))
+
+    if args.dry_run:
+        return install_skills(args, codex_dir / "skills")
+
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    for _spec, source, target, _command, _state in planned:
+        shutil.copyfile(source, target)
+        if not IS_WINDOWS:
+            os.chmod(target, 0o755)
+    print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
+
+    backup_json(settings_path, codex_dir / "backups")
+
+    added = 0
+    for spec, _source, _target, command, state in planned:
+        if state == "already registered":
+            continue
+        register(settings, spec, command)
+        added += 1
+
+    if added:
+        write_json_atomic(settings_path, settings)
+        print("registered %d hook(s); hooks.json re-read and valid" % added)
+    else:
+        print("nothing new to register in hooks.json")
+
+    skills_dir = codex_dir / "skills"
+    skills_dir.mkdir(parents=True, exist_ok=True)
+    return install_skills(args, skills_dir)
+
+
 def install_for_antigravity(args):
     print("\n=== Google Antigravity (AGY) Installation ===")
     gemini_dir = Path.home() / ".gemini"
@@ -348,8 +663,8 @@ def main():
     parser.add_argument(
         "--agent",
         default="claude",
-        choices=["claude", "antigravity", "all"],
-        help="Automated target: claude, antigravity, or all (default: claude)",
+        choices=["claude", "antigravity", "cursor", "codex", "all"],
+        help="Automated target: claude, antigravity, cursor, codex, or all (default: claude)",
     )
     parser.add_argument(
         "--hooks",
@@ -371,6 +686,14 @@ def main():
         "--claude-dir",
         default=os.environ.get("CLAUDE_CONFIG_DIR") or str(Path.home() / ".claude"),
     )
+    parser.add_argument(
+        "--cursor-dir",
+        default=str(Path.home() / ".cursor"),
+    )
+    parser.add_argument(
+        "--codex-dir",
+        default=os.environ.get("CODEX_HOME") or str(Path.home() / ".codex"),
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -390,6 +713,14 @@ def main():
             return rc
     if args.agent in ("antigravity", "all"):
         rc = install_for_antigravity(args)
+        if rc != 0:
+            return rc
+    if args.agent in ("cursor", "all"):
+        rc = install_for_cursor(args)
+        if rc != 0:
+            return rc
+    if args.agent in ("codex", "all"):
+        rc = install_for_codex(args)
         if rc != 0:
             return rc
 

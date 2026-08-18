@@ -88,6 +88,31 @@ def test_codex_build():
     return failures
 
 
+def test_cursor_payload():
+    print("-- Cursor beforeShellExecution payload (danger_zone_guard.py)")
+    failures = 0
+    for cmd, should_block, label in CASES:
+        proc = subprocess.run(
+            [sys.executable, str(CLAUDE_HOOK)],
+            input=json.dumps({
+                "hook_event_name": "beforeShellExecution",
+                "cursor_version": "1.0",
+                "command": cmd,
+            }),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        got_block = '"permission": "deny"' in proc.stdout or proc.returncode == 2
+        ok = got_block == should_block
+        status = "PASS" if ok else "FAIL"
+        if not ok:
+            failures += 1
+        print("%-4s expected=%-5s got=%-5s %s" % (status, should_block, got_block, label))
+    print("failures: %d\n" % failures)
+    return failures
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -96,7 +121,8 @@ def main():
 
     claude_failures = test_claude_build()
     codex_failures = test_codex_build()
-    total = claude_failures + codex_failures
+    cursor_failures = test_cursor_payload()
+    total = claude_failures + codex_failures + cursor_failures
     print("total failures: %d" % total)
     return 1 if total else 0
 

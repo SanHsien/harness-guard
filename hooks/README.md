@@ -25,7 +25,8 @@ Install whichever one matches the tool you use. If you use both, install both �
 ## How to configure it
 
 - Claude Code → merge into `~/.claude/settings.json`; the example is `settings-example.json` at the repo root
-- Codex → merge into `~/.codex/hooks.json`; the example is `codex-hooks-example.json`, and `~/.codex/config.toml` also needs `hooks = true`
+- Codex → `install.py --agent codex` merges into `~/.codex/hooks.json` (example: `codex-hooks-example.json`); `~/.codex/config.toml` also needs `hooks = true`
+- Cursor → `install.py --agent cursor` writes a flat `~/.cursor/hooks.json`; see [`../docs/cursor-install.md`](../docs/cursor-install.md)
 
 ## Where the two actually differ
 
