@@ -168,7 +168,7 @@ def main():
         payload = read_payload()
     except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
         if codex:
-            sys.stdout.write("{}" + chr(10))
+            sys.stdout.write("{}\n")
         return 0  # unreadable input is never a reason to get in the way
 
     tool = extract_tool_name(payload)
@@ -183,13 +183,13 @@ def main():
     if tool in SEARCH_TOOLS:
         append(search_ledger, tool)
         if codex:
-            sys.stdout.write("{}" + chr(10))
+            sys.stdout.write("{}\n")
         return 0
 
     if tool in SHELL_TOOLS:
         if not command:
             if codex:
-                sys.stdout.write("{}" + chr(10))
+                sys.stdout.write("{}\n")
             return 0
         if VERIFY_CMD.search(command):
             append(verify_ledger, command[:120])
@@ -197,7 +197,7 @@ def main():
             append(search_ledger, command[:120])
 
     if codex:
-        sys.stdout.write("{}" + chr(10))
+        sys.stdout.write("{}\n")
     return 0
 
 

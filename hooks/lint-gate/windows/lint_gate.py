@@ -106,7 +106,7 @@ CURSOR_EVENTS = frozenset({
 def allow(args):
     """Codex treats an empty response as an anomaly; every other caller ignores it."""
     if getattr(args, "codex", False):
-        sys.stdout.write("{}" + chr(10))
+        sys.stdout.write("{}\n")
     return 0
 
 
