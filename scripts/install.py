@@ -168,6 +168,10 @@ CODEX_HOOKS = {
                 "windows": "hooks/claim-guard/windows/claim_ledger_tracker.py",
                 "posix": "hooks/claim-guard/codex/claim-ledger-tracker.sh",
             },
+            # The Windows build is the Claude-protocol one; --codex makes it
+            # answer in Codex's JSON instead. The posix build is already a
+            # Codex build and needs no flag.
+            "args_windows": ("--codex",),
             "event": "PostToolUse",
             "matcher": "Bash|Grep|Glob|exec|shell",
             "timeout": 10,
@@ -185,7 +189,7 @@ CODEX_HOOKS = {
     "test-gate-guard": [
         {
             "source": {
-                "windows": "hooks/test-gate-guard/claude-code/test_gate_guard.py",
+                "windows": "hooks/test-gate-guard/codex/test_gate_guard.py",
                 "posix": "hooks/test-gate-guard/codex/test_gate_guard.py",
             },
             "event": "PreToolUse",
@@ -196,7 +200,7 @@ CODEX_HOOKS = {
     "danger-zone-guard": [
         {
             "source": {
-                "windows": "hooks/danger-zone-guard/claude-code/danger_zone_guard.py",
+                "windows": "hooks/danger-zone-guard/codex/danger_zone_guard.py",
                 "posix": "hooks/danger-zone-guard/codex/danger_zone_guard.py",
             },
             "event": "PreToolUse",
@@ -210,6 +214,7 @@ CODEX_HOOKS = {
                 "windows": "hooks/lint-gate/windows/lint_gate.py",
                 "posix": "hooks/lint-gate/codex/lint-gate.sh",
             },
+            "args_windows": ("--codex",),
             "event": "Stop",
             "matcher": None,
             "timeout": 60,
@@ -218,7 +223,7 @@ CODEX_HOOKS = {
     "no-emoji-guard": [
         {
             "source": {
-                "windows": "hooks/no-emoji-guard/claude-code/no-emoji-guard.py",
+                "windows": "hooks/no-emoji-guard/codex/no-emoji-guard.py",
                 "posix": "hooks/no-emoji-guard/codex/no-emoji-guard.py",
             },
             "event": "PreToolUse",
@@ -229,12 +234,13 @@ CODEX_HOOKS = {
 }
 
 
-def build_command(installed_path):
+def build_command(installed_path, extra_args=()):
     """The command line for an installed hook script."""
     quoted = '"%s"' % installed_path
+    suffix = ("".join(" " + a for a in extra_args)) if extra_args else ""
     if installed_path.suffix == ".py":
         interpreter = "python" if IS_WINDOWS else "python3"
-        return "%s %s" % (interpreter, quoted)
+        return "%s %s%s" % (interpreter, quoted, suffix)
     if IS_WINDOWS:
         git_bash = Path(r"C:\Program Files\Git\bin\bash.exe")
         if git_bash.exists():
@@ -610,7 +616,7 @@ def install_for_codex(args):
                 print("SKIP %s -- missing %s" % (name, source))
                 continue
             target = hooks_dir / source.name
-            command = build_command(target)
+            command = build_command(target, spec.get("args_windows", ()) if IS_WINDOWS else ())
             state = "already registered" if already_registered(
                 settings, spec["event"], command
             ) else "will register"

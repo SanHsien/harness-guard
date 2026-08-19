@@ -161,9 +161,14 @@ def extract_command(payload):
 
 
 def main():
+    # Codex treats an empty response as an anomaly. This hook only ever
+    # records, so its answer is always "allow" -- it just has to say so.
+    codex = "--codex" in sys.argv
     try:
         payload = read_payload()
     except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
+        if codex:
+            sys.stdout.write("{}" + chr(10))
         return 0  # unreadable input is never a reason to get in the way
 
     tool = extract_tool_name(payload)
@@ -177,16 +182,22 @@ def main():
 
     if tool in SEARCH_TOOLS:
         append(search_ledger, tool)
+        if codex:
+            sys.stdout.write("{}" + chr(10))
         return 0
 
     if tool in SHELL_TOOLS:
         if not command:
+            if codex:
+                sys.stdout.write("{}" + chr(10))
             return 0
         if VERIFY_CMD.search(command):
             append(verify_ledger, command[:120])
         if SEARCH_CMD.search(command):
             append(search_ledger, command[:120])
 
+    if codex:
+        sys.stdout.write("{}" + chr(10))
     return 0
 
 

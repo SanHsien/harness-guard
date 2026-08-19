@@ -122,8 +122,20 @@ def cleanup(*paths):
             pass
 
 
+# Cursor's own event names. `hook_event_name` alone does not identify Cursor:
+# Claude Code sends it too (capitalised -- "Stop", "PreToolUse"), so treating
+# its presence as "this is Cursor" made the Stop guards emit a Cursor
+# follow-up instead of blocking, on the platform they mainly protect.
+CURSOR_EVENTS = frozenset({
+    "beforeShellExecution", "afterShellExecution", "beforeReadFile",
+    "afterFileEdit", "beforeSubmitPrompt", "beforeMCPExecution", "stop",
+})
+
+
 def is_cursor(payload):
-    return bool(payload.get("cursor_version") or payload.get("hook_event_name"))
+    if payload.get("cursor_version"):
+        return True
+    return payload.get("hook_event_name") in CURSOR_EVENTS
 
 
 def session_id(payload):

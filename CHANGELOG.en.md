@@ -74,6 +74,26 @@ Entries marked `fork` are this fork's changes relative to
   defaults, i.e. it keeps guarding, because a typo must not be a way to switch a guardrail
   off. Five regression cases per build, wired into CI.
 
+### Fixed (cross-agent protocols)
+
+- **Cursor support mistook Claude Code for Cursor, and the two Stop guards stopped blocking.**
+  The check was `payload.get("hook_event_name")`, but Claude Code sends that field too
+  (capitalised: `Stop`, `PreToolUse`). So claim-evidence-guard and lint-gate -- precisely the
+  two whose job is refusing to let a turn end -- answered with Cursor follow-up JSON and
+  returned 0, which Claude Code does not act on. The existing suites missed it because their
+  synthetic payloads omit the field. Detection is now `cursor_version`, or one of Cursor's own
+  event names (lowercase `stop`, `beforeShellExecution`, and so on).
+- **Codex on Windows was given the claude-code builds, which speak the wrong protocol.**
+  test-gate, danger-zone and no-emoji already have pure-Python codex builds that run fine on
+  Windows; they simply were not selected, so a block exited 2 with no JSON for Codex to read.
+  Now pointed at the codex builds.
+- **lint-gate and claim-ledger-tracker have no jq-free codex build**, so the installer registers
+  the Windows build with `--codex` and it answers in Codex's JSON (`{}` to allow,
+  `decision: block` to stop). Without the flag, Claude Code behaviour is unchanged.
+- Added `hooks/tests/run-agent-protocol-tests.py` (12 cases, in CI): realistic payloads for all
+  three agents, asserting each hook answers in the right protocol. Verified to fail (2 cases)
+  against the version before this fix.
+
 ### Fixed (installer)
 
 - **Windows read-only files no longer break a reinstall**: `robust_rmtree` clears the

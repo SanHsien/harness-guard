@@ -62,6 +62,23 @@
   `{"exempt_path_substrings": [...]}`，優先於腳本內的常數；設定檔壞掉時回到內建預設（繼續擋），
   打錯字不該變成關掉護欄的方式。兩個平台版本各 5 案回歸測試，並納入 CI。
 
+### 修正（跨 agent 協定）
+
+- **Cursor 支援誤把 Claude Code 認成 Cursor，兩支 Stop 守衛因此不再攔截。**
+  判斷式是 `payload.get("hook_event_name")`，但那個欄位 Claude Code 也會送（大寫的 `Stop`、
+  `PreToolUse`）。於是 claim-evidence-guard 與 lint-gate——正好是「不准結束回合」那兩支——
+  改印 Cursor 的 follow-up JSON 並回傳 0，在它們主要保護的平台上等於不再擋。
+  既有測試抓不到，因為合成 payload 沒有 `hook_event_name`。
+  改為只認 `cursor_version` 或 Cursor 自己的事件名（小寫 `stop`、`beforeShellExecution` 等）。
+- **Codex 在 Windows 上裝到的是 claude-code 版 hook，協定不對。** test-gate、danger-zone、
+  no-emoji 三支本來就有純 Python 的 codex 版，Windows 完全能跑，只是沒被選用；結果攔截時
+  exit 2 且不印 JSON，Codex 讀不到。已改指向 codex 版。
+- **lint-gate 與 claim-ledger-tracker 沒有免 jq 的 codex 版**，改由安裝器加 `--codex` 參數，
+  讓 Windows 版用 Codex 的 JSON 協定回應（放行印 `{}`、攔截印 `decision: block`）；
+  不加參數時 Claude Code 行為完全不變。
+- 新增 `hooks/tests/run-agent-protocol-tests.py`（12 案，已進 CI）：用**貼近真實**的 payload
+  驗證每支 hook 對三種 agent 各自回應正確的協定。已確認對修正前的版本會紅燈（2 案）。
+
 ### 修正（安裝器）
 
 - **Windows 唯讀檔導致的 `PermissionError` 已處理**：`robust_rmtree` 會清掉唯讀位元再刪。

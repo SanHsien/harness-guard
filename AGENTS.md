@@ -165,6 +165,8 @@ python scripts/verify-install.py
 python hooks/danger-zone-guard/tests/run-tests.py
 python hooks/test-gate-guard/tests/run-tests.py
 python hooks/tests/run-encoding-tests.py
+python hooks/tests/run-agent-protocol-tests.py
+python hooks/no-emoji-guard/tests/run-config-tests.py
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
@@ -174,6 +176,9 @@ python -m unittest discover -s tests -p "test_*.py"
 - 改 Windows 行為要由 Windows CI 或實機驗證；不要用單一平台結果代替跨平台結論。
 - 改安裝器時優先測 dry-run、merge、不覆蓋與重跑冪等性。
 - 改 hook 行為要補能重現該案例的 regression test。
+- **測試用的 payload 要貼近真實**。合成 payload 少一個欄位，就可能讓整組測試對真實情境失效——
+  Cursor 支援誤判 Claude Code 那次，就是因為測試 payload 沒有 `hook_event_name`。
+- **不要用單一欄位是否存在來判斷呼叫端是哪個 agent**；用該 agent 專有的欄位或事件名。
 
 ### 文件分工
 

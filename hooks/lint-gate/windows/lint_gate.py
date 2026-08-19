@@ -85,8 +85,29 @@ def parse_args(argv):
     parser.add_argument("--cmd", default=os.environ.get("LINT_CMD", ""))
     parser.add_argument("--fail", dest="fail", default=os.environ.get("FAIL_PATTERN", ""))
     parser.add_argument("--pass", dest="passing", default=os.environ.get("PASS_PATTERN", ""))
+    # Codex reads JSON on stdout and treats silence as an anomaly, so the
+    # installer passes this when it registers the Windows build there.
+    parser.add_argument("--codex", action="store_true")
     args, _unknown = parser.parse_known_args(argv)
     return args
+
+
+# Cursor's own event names. `hook_event_name` alone does not identify Cursor:
+# Claude Code sends it too (capitalised -- "Stop", "PreToolUse"), so treating
+# its presence as "this is Cursor" made the Stop guards emit a Cursor
+# follow-up instead of blocking, on the platform they mainly protect.
+CURSOR_EVENTS = frozenset({
+    "beforeShellExecution", "afterShellExecution", "beforeReadFile",
+    "afterFileEdit", "beforeSubmitPrompt", "beforeMCPExecution", "stop",
+})
+
+
+
+def allow(args):
+    """Codex treats an empty response as an anomaly; every other caller ignores it."""
+    if getattr(args, "codex", False):
+        sys.stdout.write("{}" + chr(10))
+    return 0
 
 
 def main():
@@ -98,14 +119,14 @@ def main():
     except ValueError:
         payload = {}
 
-    is_cursor = bool(payload.get("cursor_version") or payload.get("hook_event_name"))
+    is_cursor = bool(payload.get("cursor_version")) or payload.get("hook_event_name") in CURSOR_EVENTS
 
     # Do not delete this block. It asks "is this stop happening because I
     # already blocked it once this turn?" If so, let it through. Without it, an
     # error that cannot be fixed loops forever: try to end, blocked, try to
     # end, blocked.
     if payload.get("stop_hook_active") is True:
-        return 0
+        return allow(args)
 
     roots = payload.get("workspace_roots") or []
     project_dir = (
@@ -115,13 +136,13 @@ def main():
         or os.getcwd()
     )
     if not os.path.isdir(project_dir):
-        return 0
+        return allow(args)
 
     # A project that opts in overrides whatever the global registration says.
     config = project_config(project_dir)
     lint_cmd = str(config.get("cmd") or args.cmd or "").strip()
     if not lint_cmd:
-        return 0
+        return allow(args)
 
     try:
         proc = subprocess.run(
@@ -132,7 +153,7 @@ def main():
             timeout=TIMEOUT_SECONDS,
         )
     except (subprocess.TimeoutExpired, OSError):
-        return 0  # a check tool that hangs or cannot start must not trap the turn
+        return allow(args)  # a hanging or missing checker must not trap the turn
 
     out = (proc.stdout + proc.stderr).decode("utf-8", "replace")
 
@@ -140,11 +161,11 @@ def main():
     # always lets the turn through. A broken checker must never leave someone
     # unable to finish.
     if not out.strip():
-        return 0
+        return allow(args)
 
     pass_pattern = str(config.get("pass") or args.passing or "").strip()
     if pass_pattern and re.search(pass_pattern, out, re.MULTILINE):
-        return 0
+        return allow(args)
 
     fail_pattern = str(config.get("fail") or args.fail or "").strip() or DEFAULT_FAIL
     if re.search(fail_pattern, out, re.MULTILINE):
@@ -157,10 +178,13 @@ def main():
             # Cursor `stop` cannot veto. Follow up so the agent still sees the failure.
             sys.stdout.write(json.dumps({"followup_message": msg}, ensure_ascii=False))
             return 0
+        if args.codex:
+            sys.stdout.write(json.dumps({"decision": "block", "reason": msg}, ensure_ascii=False))
+            return 0
         sys.stderr.write(msg)
         return 2
 
-    return 0
+    return allow(args)
 
 
 if __name__ == "__main__":
