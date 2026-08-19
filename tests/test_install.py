@@ -220,3 +220,40 @@ class CursorAndCodexInstallTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StaleRegistrationTests(unittest.TestCase):
+    """Re-registering the same script with new arguments must replace, not add.
+
+    Adding `--codex` to two hooks turned their commands into new strings, so
+    the installer registered them alongside the old ones. Both then ran on
+    every event, one of them with the behaviour the flag exists to change.
+    Observed on a real machine on 2026-08-20.
+    """
+
+    def _codex_config(self, tmp):
+        return json.loads((Path(tmp) / "hooks.json").read_text(encoding="utf-8"))
+
+    def test_same_script_different_args_replaces(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex = Path(tmp)
+            stale = str(codex / "hooks" / "lint_gate.py")
+            (codex / "hooks.json").write_text(json.dumps({"hooks": {"Stop": [{"hooks": [
+                {"type": "command", "command": 'python "%s"' % stale, "timeout": 60},
+                {"type": "command", "command": "the-user-own-hook"},
+            ]}]}}), encoding="utf-8")
+
+            for _ in range(2):  # also proves a second run stays idempotent
+                subprocess.run(
+                    [sys.executable, str(INSTALLER), "--codex-dir", str(codex),
+                     "--agent", "codex", "--hooks", "lint-gate"],
+                    cwd=str(REPO), capture_output=True, text=True, timeout=60,
+                )
+
+            config = self._codex_config(codex)
+            commands = [h["command"] for e in config["hooks"]["Stop"]
+                        for h in e.get("hooks", [])]
+            lint = [c for c in commands if "lint_gate.py" in c]
+            self.assertEqual(len(lint), 1, commands)
+            self.assertTrue(lint[0].endswith("--codex"), lint)
+            self.assertIn("the-user-own-hook", commands)

@@ -74,6 +74,19 @@ Entries marked `fork` are this fork's changes relative to
   defaults, i.e. it keeps guarding, because a typo must not be a way to switch a guardrail
   off. Five regression cases per build, wired into CI.
 
+### Fixed (installer: duplicate registrations)
+
+- **The same script re-registered with new arguments was added, not replaced.** Adding
+  `--codex` changed the command string, and matching was done on the whole string, so the new
+  registration landed beside the old one: lint-gate and claim-ledger-tracker each ran twice per
+  event on Codex, one of those runs with the behaviour the flag exists to change. Seen on a real
+  machine on 2026-08-20.
+  Matching is now on the **script path**: an older registration of the same script is removed
+  before the new one is written. The cleanup runs unconditionally rather than only when
+  something is being added, and a run that only removes still writes the file -- otherwise the
+  removal never lands. Other hooks in the same config are untouched. Regression test included,
+  running the installer twice to pin idempotency.
+
 ### Fixed (cross-agent protocols)
 
 - **Cursor support mistook Claude Code for Cursor, and the two Stop guards stopped blocking.**

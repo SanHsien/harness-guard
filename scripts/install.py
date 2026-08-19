@@ -255,6 +255,43 @@ def load_settings(path):
         return json.load(fh)
 
 
+def hook_script_path(command):
+    """The script a hook command runs, ignoring interpreter and arguments.
+
+    Registrations are matched on this rather than on the whole command string.
+    Re-running the installer after the arguments change -- adding --codex, for
+    instance -- would otherwise leave the old registration in place beside the
+    new one, so the hook runs twice and one of those runs uses the old
+    behaviour. Seen for real on 2026-08-20.
+    """
+    import re as _re
+    match = _re.search(r'"([^"]+\.(?:py|sh))"', command) or _re.search(
+        r"(\S+\.(?:py|sh))", command)
+    return match.group(1).lower() if match else command.lower()
+
+
+def drop_stale_registrations(settings, event, command, flat=False):
+    """Remove entries running the same script with different arguments."""
+    script = hook_script_path(command)
+    removed = 0
+    for entry in list(settings.get("hooks", {}).get(event) or []):
+        if flat:
+            if isinstance(entry, dict) and entry.get("command") != command                     and hook_script_path(entry.get("command", "")) == script:
+                settings["hooks"][event].remove(entry)
+                removed += 1
+            continue
+        kept = [h for h in entry.get("hooks", []) or []
+                if h.get("command") == command
+                or hook_script_path(h.get("command", "")) != script]
+        removed += len(entry.get("hooks", []) or []) - len(kept)
+        entry["hooks"] = kept
+    for event_entries in (settings.get("hooks", {}).get(event) or [],):
+        for entry in list(event_entries):
+            if not flat and isinstance(entry, dict) and entry.get("hooks") == []:
+                event_entries.remove(entry)
+    return removed
+
+
 def already_registered(settings, event, command):
     for entry in (settings.get("hooks", {}).get(event) or []):
         for hook in entry.get("hooks", []) or []:
@@ -455,19 +492,28 @@ def install_for_claude(args):
         print("backed up settings.json to %s" % backup)
 
     added = 0
+    stale = 0
     for spec, _source, _target, command, state in planned:
-        if state == "already registered":
+        # Runs whether or not this exact command is present: an older
+        # registration of the same script with different arguments has to go,
+        # or the hook runs twice and one of those runs is the old behaviour.
+        stale += drop_stale_registrations(settings, spec["event"], command)
+    if stale:
+        print("removed %d outdated registration(s) of the same script" % stale)
+    for spec, _source, _target, command, state in planned:
+        if already_registered(settings, spec["event"], command):
             continue
         register(settings, spec, command)
         added += 1
 
-    if added:
+    if added or stale:
         tmp = settings_path.with_suffix(".json.tmp")
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(settings, fh, indent=2, ensure_ascii=False)
             fh.write("\n")
         os.replace(tmp, settings_path)
-        print("registered %d hook(s); settings.json re-read and valid" % added)
+        print("registered %d hook(s), removed %d stale; settings.json re-read and valid"
+              % (added, stale))
     else:
         print("nothing new to register in settings.json")
 
@@ -566,15 +612,21 @@ def install_for_cursor(args):
     backup_json(settings_path, cursor_dir / "backups")
 
     added = 0
+    stale = 0
     for spec, _source, _target, command, state in planned:
-        if state == "already registered":
+        stale += drop_stale_registrations(settings, spec["event"], command, flat=True)
+    if stale:
+        print("removed %d outdated registration(s) of the same script" % stale)
+    for spec, _source, _target, command, state in planned:
+        if already_registered_cursor(settings, spec["event"], command):
             continue
         register_cursor(settings, spec, command)
         added += 1
 
-    if added:
+    if added or stale:
         write_json_atomic(settings_path, settings)
-        print("registered %d hook(s); hooks.json re-read and valid" % added)
+        print("registered %d hook(s), removed %d stale; hooks.json re-read and valid"
+              % (added, stale))
     else:
         print("nothing new to register in hooks.json")
 
@@ -637,15 +689,24 @@ def install_for_codex(args):
     backup_json(settings_path, codex_dir / "backups")
 
     added = 0
+    stale = 0
     for spec, _source, _target, command, state in planned:
-        if state == "already registered":
+        # Runs whether or not this exact command is present: an older
+        # registration of the same script with different arguments has to go,
+        # or the hook runs twice and one of those runs is the old behaviour.
+        stale += drop_stale_registrations(settings, spec["event"], command)
+    if stale:
+        print("removed %d outdated registration(s) of the same script" % stale)
+    for spec, _source, _target, command, state in planned:
+        if already_registered(settings, spec["event"], command):
             continue
         register(settings, spec, command)
         added += 1
 
-    if added:
+    if added or stale:
         write_json_atomic(settings_path, settings)
-        print("registered %d hook(s); hooks.json re-read and valid" % added)
+        print("registered %d hook(s), removed %d stale; hooks.json re-read and valid"
+              % (added, stale))
     else:
         print("nothing new to register in hooks.json")
 
