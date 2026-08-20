@@ -17,6 +17,9 @@
 
 ### 變更
 
+- **`fork` Codex skill 安裝位置對齊現行契約。** `install.py --agent codex` 現在寫入 `~/.agents/skills/`，不再建立新的 legacy `~/.codex/skills/`；既有 legacy 內容保留。Codex 文件與 verifier 也明確區分腳本 live-fire 與 `/hooks` trust 檢查。
+- **`fork` Codex 安裝驗證改為真實 payload live-fire。** verifier 現在會執行 5 種已註冊的 Codex hooks，缺少腳本會失敗，不再只驗 `hooks.json`。no-emoji-guard 也補讀真實 `apply_patch` payload 的 `tool_input.command`，只掃新增行並保留 transcript / `.srt` 路徑豁免，避免註冊正常卻 fail-open，或反過來攔住 emoji 移除。
+- **`fork` POSIX hook 安裝會正規化為 LF。** 即使從 Windows CRLF checkout 在 WSL 執行安裝器，複製到 agent 目錄的 `.sh` 也不會因 `set: invalid option` 而失效；`.gitattributes` 同步固定 shell scripts 使用 LF。
 - **`fork` Python hook 讀 Cursor payload。** `beforeShellExecution` 的指令在頂層 `command`，工具名是 `Shell`。擋下時回 `{"permission":"deny"}`；Claude Code 的 `exit 2` + stderr 與 Codex 的 `decision` JSON 維持不變。
 - **`fork` Cursor `stop` 上的 claim-guard / lint-gate 改 follow-up。** Cursor 不能在回合結束後 veto，硬擋會假裝有保護。沒有 `last_assistant_message` 時 claim-evidence 仍 fail-open（與既有契約相同）。
 - **`fork` lint-gate 的專案目錄也可來自 payload `cwd` / `workspace_roots`。** Cursor 使用者層 hook 的行程 cwd 是 `~/.cursor`，不能只用 `os.getcwd()`。

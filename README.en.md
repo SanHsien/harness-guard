@@ -48,7 +48,7 @@ They are optional workflows, not required dependencies of the five guardrail hoo
 | Agent / environment | Hooks | Skills / rules | Installation status |
 |---|---|---|---|
 | **Claude Code** | all five hooks; Windows selects Python builds where needed | `~/.claude/skills/` + CLAUDE rule templates | automated by `install.py` |
-| **OpenAI Codex** | all five hooks; Windows uses Python builds and absolute interpreter paths | `~/.codex/skills/` | `install.py --agent codex` |
+| **OpenAI Codex** | all five hooks; Windows uses Python builds and absolute interpreter paths | `~/.agents/skills/` | `install.py --agent codex` |
 | **Google Antigravity / Gemini** | no equivalent hook registration in this repo today | skills + `GEMINI.md` templates | `install.py --agent antigravity` installs skills |
 | **Cursor** | all five hooks, written to `~/.cursor/hooks.json` in Cursor's flat format | `~/.cursor/skills/`; also merged into `~/.agents/skills/` when that directory already exists | `install.py --agent cursor` |
 
@@ -93,7 +93,9 @@ python scripts/install.py --dry-run --agent codex --hooks all --skills all
 python scripts/install.py --agent codex --hooks all --skills all
 ```
 
-The installer **merges** into an existing `~/.codex/hooks.json` and uses absolute `python` / `python3` paths, so Windows does not silently fail on `python3 ~/.codex/hooks/...`. `config.toml` needs `hooks = true`. Codex will ask you to trust a newly registered hook on first run.
+The installer **merges** into an existing `~/.codex/hooks.json` and uses absolute `python` / `python3` paths, so Windows does not silently fail on `python3 ~/.codex/hooks/...`. Skills go to Codex's current user-level location, `~/.agents/skills/`; existing legacy copies under `~/.codex/skills/` are not deleted or moved automatically.
+
+Hooks are enabled by default. If you previously disabled them, set `[features].hooks = true` in `config.toml`. After adding or changing a registration, run `/hooks` in Codex to inspect and trust the current definition. `verify-install.py` live-fires the scripts directly, but it cannot replace the TUI trust check.
 
 ### All automated targets
 

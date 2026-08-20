@@ -48,7 +48,7 @@ Harness Guard 專注在幾個容易造成實際損失的情境：
 | Agent / 環境 | Hooks | Skills / Rules | 安裝方式 |
 |---|---|---|---|
 | **Claude Code** | 5 個 hook；Windows 會選 Python 版本 | `~/.claude/skills/` + CLAUDE 規則範本 | `install.py` 自動安裝 |
-| **OpenAI Codex** | 5 個 hook；Windows 用 Python 版並寫入絕對路徑 | `~/.codex/skills/` | `install.py --agent codex` |
+| **OpenAI Codex** | 5 個 hook；Windows 用 Python 版並寫入絕對路徑 | `~/.agents/skills/` | `install.py --agent codex` |
 | **Google Antigravity / Gemini** | 本 repo 目前不提供等價 hook 註冊 | skills + `GEMINI.md` 範本 | `install.py --agent antigravity` 可安裝 skills |
 | **Cursor** | 5 個 hook，寫入 `~/.cursor/hooks.json`（Cursor 扁平格式） | `~/.cursor/skills/`；若本機已有 `~/.agents/skills/` 也會一併合併 | `install.py --agent cursor` |
 
@@ -93,7 +93,9 @@ python scripts/install.py --dry-run --agent codex --hooks all --skills all
 python scripts/install.py --agent codex --hooks all --skills all
 ```
 
-安裝器會**合併**進既有的 `~/.codex/hooks.json`，並使用絕對路徑的 `python`／`python3`，避免 Windows 上 `python3 ~/.codex/hooks/...` 那種無聲失敗。`config.toml` 需要 `hooks = true`；新 hook 第一次執行時 Codex 會要求信任。
+安裝器會**合併**進既有的 `~/.codex/hooks.json`，並使用絕對路徑的 `python`／`python3`，避免 Windows 上 `python3 ~/.codex/hooks/...` 那種無聲失敗。skills 依 Codex 現行使用者層契約安裝到 `~/.agents/skills/`；既有的 legacy `~/.codex/skills/` 不會自動刪除或搬移。
+
+Hooks 預設啟用；若曾關閉，請在 `config.toml` 設定 `[features].hooks = true`。新增或修改註冊後，在 Codex 執行 `/hooks` 檢視並信任目前定義。`verify-install.py` 會直接 live-fire 腳本，但不能代替 TUI 的 trust 檢查。
 
 ### 目前所有自動化環境一起處理
 

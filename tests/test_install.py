@@ -8,9 +8,24 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from scripts import install as installer_module
+
 
 REPO = Path(__file__).resolve().parent.parent
 INSTALLER = REPO / "scripts" / "install.py"
+VERIFIER = REPO / "scripts" / "verify-install.py"
+
+
+class HookCopyTests(unittest.TestCase):
+    def test_shell_hook_is_normalized_to_lf(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "source.sh"
+            target = Path(tmp) / "target.sh"
+            source.write_bytes(b"#!/usr/bin/env bash\r\nset -u\r\nprintf ok\r\n")
+
+            installer_module.copy_hook_file(source, target)
+
+            self.assertNotIn(b"\r\n", target.read_bytes())
 
 
 class InstallDryRunTests(unittest.TestCase):
@@ -48,6 +63,7 @@ class InstallDryRunTests(unittest.TestCase):
             self.assertFalse((home / ".gemini").exists())
             self.assertFalse((home / ".cursor").exists())
             self.assertFalse((home / ".codex").exists())
+            self.assertFalse((home / ".agents").exists())
 
 
 class SkillReplacementTests(unittest.TestCase):
@@ -217,6 +233,75 @@ class CursorAndCodexInstallTests(unittest.TestCase):
             self.assertTrue(settings["hooks"]["PreToolUse"])
             self.assertTrue((codex_dir / "hooks" / "test_gate_guard.py").exists())
 
+    def test_codex_installs_skills_to_official_user_location(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            codex_dir = home / ".codex"
+
+            proc = self._run(home, [
+                "--agent", "codex",
+                "--codex-dir", str(codex_dir),
+                "--hooks", "",
+                "--skills", "explain",
+            ])
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertTrue(
+                (home / ".agents" / "skills" / "explain" / "SKILL.md").exists()
+            )
+            self.assertFalse(
+                (codex_dir / "skills" / "explain").exists(),
+                "new installs must not create the undocumented legacy location",
+            )
+
+    def test_all_agents_replaces_shared_skills_only_once(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            shared = home / ".agents" / "skills"
+            stale = shared / "explain" / "SKILL.md"
+            stale.parent.mkdir(parents=True)
+            stale.write_text("stale", encoding="utf-8")
+
+            proc = self._run(home, [
+                "--agent", "all",
+                "--claude-dir", str(home / ".claude"),
+                "--cursor-dir", str(home / ".cursor"),
+                "--codex-dir", str(home / ".codex"),
+                "--hooks", "",
+                "--skills", "explain",
+                "--force",
+            ])
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertNotEqual(stale.read_text(encoding="utf-8"), "stale")
+            self.assertEqual(
+                proc.stdout.count("skills -> %s" % shared),
+                1,
+                "--agent all must not replace the shared Codex skill twice",
+            )
+
+    def test_codex_preserves_legacy_skill_content(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            codex_dir = home / ".codex"
+            legacy = codex_dir / "skills" / "explain" / "SKILL.md"
+            legacy.parent.mkdir(parents=True)
+            legacy.write_text("user legacy copy", encoding="utf-8")
+
+            proc = self._run(home, [
+                "--agent", "codex",
+                "--codex-dir", str(codex_dir),
+                "--hooks", "",
+                "--skills", "explain",
+                "--force",
+            ])
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertEqual(legacy.read_text(encoding="utf-8"), "user legacy copy")
+            self.assertTrue(
+                (home / ".agents" / "skills" / "explain" / "SKILL.md").exists()
+            )
+
 class StaleRegistrationTests(unittest.TestCase):
     """Re-registering the same script with new arguments must replace, not add.
 
@@ -262,6 +347,69 @@ class StaleRegistrationTests(unittest.TestCase):
             else:
                 self.assertNotIn("--legacy", lint[0])
             self.assertIn("the-user-own-hook", commands)
+
+
+class CodexVerifierTests(unittest.TestCase):
+    def _installed_codex(self, home):
+        codex_dir = home / ".codex"
+        env = dict(os.environ)
+        env["HOME"] = str(home)
+        env["USERPROFILE"] = str(home)
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(INSTALLER),
+                "--agent", "codex",
+                "--codex-dir", str(codex_dir),
+                "--hooks", "all",
+                "--skills", "none",
+            ],
+            cwd=str(REPO),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        return codex_dir, env
+
+    def _verify(self, env):
+        return subprocess.run(
+            [sys.executable, str(VERIFIER), "--agent", "codex"],
+            cwd=str(REPO),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+
+    def test_codex_hooks_are_live_fired(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            _codex_dir, env = self._installed_codex(Path(tmp))
+
+            proc = self._verify(env)
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("Live fire (Codex payload shape)", proc.stdout)
+            self.assertIn("Codex claim-guard blocks", proc.stdout)
+            self.assertIn("Codex lint-gate blocks", proc.stdout)
+            self.assertIn("Codex test-gate-guard blocks", proc.stdout)
+            self.assertIn("Codex danger-zone-guard blocks", proc.stdout)
+            self.assertIn("Codex no-emoji-guard blocks", proc.stdout)
+
+    def test_codex_registered_missing_hook_fails_verification(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_dir, env = self._installed_codex(Path(tmp))
+            (codex_dir / "hooks" / "test_gate_guard.py").unlink()
+
+            proc = self._verify(env)
+
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("FAIL Codex test-gate-guard script exists", proc.stdout)
 
 
 if __name__ == "__main__":

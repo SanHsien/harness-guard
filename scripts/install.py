@@ -23,7 +23,8 @@ What it does:
      Existing folders of the same name are left alone unless you pass --force.
   6. `--agent cursor` writes ~/.cursor/hooks.json in Cursor's flat format and
      copies Python hooks to ~/.cursor/hooks/. `--agent codex` merges into
-     ~/.codex/hooks.json with absolute interpreter paths.
+     ~/.codex/hooks.json with absolute interpreter paths and installs user
+     skills into the shared ~/.agents/skills location Codex documents.
   7. `--agent all` is Claude Code + Antigravity + Cursor + Codex.
 """
 import argparse
@@ -383,6 +384,14 @@ def robust_rmtree(path):
         shutil.rmtree(path, onerror=lambda func, p, _excinfo: _fix_permission(func, p))
 
 
+def copy_hook_file(source, target):
+    """Copy a hook and keep POSIX shell scripts executable across CRLF checkouts."""
+    if source.suffix == ".sh":
+        target.write_bytes(source.read_bytes().replace(b"\r\n", b"\n"))
+        return
+    shutil.copyfile(source, target)
+
+
 def install_skills(args, target_skills_dir):
     sources = select_skills(args.skills)
     if not sources:
@@ -479,7 +488,7 @@ def install_for_claude(args):
 
     hooks_dir.mkdir(parents=True, exist_ok=True)
     for _spec, source, target, _command, _state in planned:
-        shutil.copyfile(source, target)
+        copy_hook_file(source, target)
         if not IS_WINDOWS:
             os.chmod(target, 0o755)
     print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
@@ -592,7 +601,11 @@ def install_for_cursor(args):
 
     skill_targets = [cursor_dir / "skills"]
     agents_skills = Path.home() / ".agents" / "skills"
-    if agents_skills.exists():
+    # In `all` mode Codex owns the shared user-level target later in this run.
+    # Letting Cursor replace it here as well makes --force delete and copy the
+    # same skill twice. Cursor-only installs still merge into an existing
+    # shared directory for users who already rely on that layout.
+    if args.agent != "all" and agents_skills.exists():
         skill_targets.append(agents_skills)
     if args.dry_run:
         rc = 0
@@ -604,7 +617,7 @@ def install_for_cursor(args):
 
     hooks_dir.mkdir(parents=True, exist_ok=True)
     for _spec, source, target, _command, _state in planned:
-        shutil.copyfile(source, target)
+        copy_hook_file(source, target)
         if not IS_WINDOWS:
             os.chmod(target, 0o755)
     print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
@@ -652,7 +665,8 @@ def install_for_codex(args):
     print("\n=== OpenAI Codex Installation ===")
     print("target   : %s" % codex_dir)
     print("hooks    : %s" % (", ".join(selected) if selected else "(none)"))
-    print("note     : confirm config.toml has hooks = true; Codex asks to trust a new hook on first run")
+    print("note     : hooks are enabled by default; if disabled, set [features].hooks = true")
+    print("note     : after a registration change, open /hooks to review and trust the current definition")
 
     try:
         settings = load_settings(settings_path)
@@ -676,12 +690,13 @@ def install_for_codex(args):
             print("%-20s %-12s %s" % ("", "", state))
             planned.append((spec, source, target, command, state))
 
+    skills_dir = Path.home() / ".agents" / "skills"
     if args.dry_run:
-        return install_skills(args, codex_dir / "skills")
+        return install_skills(args, skills_dir)
 
     hooks_dir.mkdir(parents=True, exist_ok=True)
     for _spec, source, target, _command, _state in planned:
-        shutil.copyfile(source, target)
+        copy_hook_file(source, target)
         if not IS_WINDOWS:
             os.chmod(target, 0o755)
     print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
@@ -710,7 +725,6 @@ def install_for_codex(args):
     else:
         print("nothing new to register in hooks.json")
 
-    skills_dir = codex_dir / "skills"
     skills_dir.mkdir(parents=True, exist_ok=True)
     return install_skills(args, skills_dir)
 
