@@ -217,11 +217,6 @@ class CursorAndCodexInstallTests(unittest.TestCase):
             self.assertTrue(settings["hooks"]["PreToolUse"])
             self.assertTrue((codex_dir / "hooks" / "test_gate_guard.py").exists())
 
-
-if __name__ == "__main__":
-    unittest.main()
-
-
 class StaleRegistrationTests(unittest.TestCase):
     """Re-registering the same script with new arguments must replace, not add.
 
@@ -237,23 +232,37 @@ class StaleRegistrationTests(unittest.TestCase):
     def test_same_script_different_args_replaces(self):
         with tempfile.TemporaryDirectory() as tmp:
             codex = Path(tmp)
-            stale = str(codex / "hooks" / "lint_gate.py")
+            if platform.system() == "Windows":
+                stale = str(codex / "hooks" / "lint_gate.py")
+                stale_command = 'python "%s"' % stale
+            else:
+                stale = str(codex / "hooks" / "lint-gate.sh")
+                stale_command = '"%s" --legacy' % stale
             (codex / "hooks.json").write_text(json.dumps({"hooks": {"Stop": [{"hooks": [
-                {"type": "command", "command": 'python "%s"' % stale, "timeout": 60},
+                {"type": "command", "command": stale_command, "timeout": 60},
                 {"type": "command", "command": "the-user-own-hook"},
             ]}]}}), encoding="utf-8")
 
             for _ in range(2):  # also proves a second run stays idempotent
-                subprocess.run(
+                proc = subprocess.run(
                     [sys.executable, str(INSTALLER), "--codex-dir", str(codex),
                      "--agent", "codex", "--hooks", "lint-gate"],
                     cwd=str(REPO), capture_output=True, text=True, timeout=60,
                 )
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
 
             config = self._codex_config(codex)
             commands = [h["command"] for e in config["hooks"]["Stop"]
                         for h in e.get("hooks", [])]
-            lint = [c for c in commands if "lint_gate.py" in c]
+            script_name = "lint_gate.py" if platform.system() == "Windows" else "lint-gate.sh"
+            lint = [c for c in commands if script_name in c]
             self.assertEqual(len(lint), 1, commands)
-            self.assertTrue(lint[0].endswith("--codex"), lint)
+            if platform.system() == "Windows":
+                self.assertTrue(lint[0].endswith("--codex"), lint)
+            else:
+                self.assertNotIn("--legacy", lint[0])
             self.assertIn("the-user-own-hook", commands)
+
+
+if __name__ == "__main__":
+    unittest.main()
