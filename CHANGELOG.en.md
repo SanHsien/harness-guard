@@ -17,6 +17,7 @@ Entries marked `fork` are this fork's changes relative to
 
 ### Changed
 
+- **`fork` `verification-protocol` adds bounded live validation.** UI, production, OAuth, deployment, and external-service checks now define a minimal evidence ledger and stop conditions first, use one uniquely named smoke entity, query narrowly, recover stale control once, resume after login, and stop when the required evidence is complete instead of consuming real data or quota on repeated checks.
 - **`fork` Codex skill installation now follows the current user-level contract.** `install.py --agent codex` writes to `~/.agents/skills/` instead of creating new legacy `~/.codex/skills/` copies; existing legacy content is preserved. Codex documentation and the verifier now distinguish script live-fire from the `/hooks` trust check.
 - **`fork` Codex installation verification now uses real payload live-fire.** The verifier executes all five registered Codex hook types and fails when a registered script is missing instead of checking only `hooks.json`. no-emoji-guard also reads the real `apply_patch` payload's `tool_input.command`, scans only added lines, and preserves transcript / `.srt` path exemptions, closing a registered-but-fail-open path without blocking emoji removal.
 - **`fork` POSIX hook installs normalize line endings to LF.** Even when the installer runs in WSL from a Windows CRLF checkout, copied `.sh` hooks no longer fail with `set: invalid option`; `.gitattributes` also pins shell scripts to LF.

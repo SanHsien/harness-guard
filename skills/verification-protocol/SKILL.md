@@ -1,6 +1,6 @@
 ---
 name: verification-protocol
-description: "Enforce modify-then-verify and zero-dummy standards. Use when modifying code, running tests, diagnosing test errors, validating builds, or ensuring genuine verification evidence before completion."
+description: "Enforce modify-then-verify, zero-dummy, and bounded live-validation standards. Use when modifying code, running tests, diagnosing failures, validating builds, or verifying UI, production, OAuth, deployment, and external-service behavior before completion."
 allowed-tools: Bash Agent Read
 ---
 
@@ -45,6 +45,15 @@ and what to do instead.
 Read the whole stack trace and the failing line first, then find the root cause, then
 make one precise change. Changing things to see what happens turns one known failure into
 several unknown ones, and it hides the original cause under the edits.
+
+## 4. Bound live and external verification
+
+UI, production, OAuth, deployment, and third-party checks can consume real accounts,
+tokens, data, or usage quota. Before starting one, read
+[`references/bounded-live-validation.md`](references/bounded-live-validation.md), define
+the minimum evidence and stop conditions, then stop as soon as they are met. A second
+smoke entity or repeated query is not extra confidence unless it proves a distinct
+requirement.
 
 ## The loop
 

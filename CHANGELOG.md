@@ -17,6 +17,7 @@
 
 ### 變更
 
+- **`fork` `verification-protocol` 新增有界 live validation。** UI、Production、OAuth、部署與外部服務驗證現在會先定義最小證據清冊與停止條件，限制為一筆唯一 smoke data、精準查詢、一次控制恢復與登入後原地續做，達標即停，避免重複驗證耗用真實資料與 quota。
 - **`fork` Codex skill 安裝位置對齊現行契約。** `install.py --agent codex` 現在寫入 `~/.agents/skills/`，不再建立新的 legacy `~/.codex/skills/`；既有 legacy 內容保留。Codex 文件與 verifier 也明確區分腳本 live-fire 與 `/hooks` trust 檢查。
 - **`fork` Codex 安裝驗證改為真實 payload live-fire。** verifier 現在會執行 5 種已註冊的 Codex hooks，缺少腳本會失敗，不再只驗 `hooks.json`。no-emoji-guard 也補讀真實 `apply_patch` payload 的 `tool_input.command`，只掃新增行並保留 transcript / `.srt` 路徑豁免，避免註冊正常卻 fail-open，或反過來攔住 emoji 移除。
 - **`fork` POSIX hook 安裝會正規化為 LF。** 即使從 Windows CRLF checkout 在 WSL 執行安裝器，複製到 agent 目錄的 `.sh` 也不會因 `set: invalid option` 而失效；`.gitattributes` 同步固定 shell scripts 使用 LF。
