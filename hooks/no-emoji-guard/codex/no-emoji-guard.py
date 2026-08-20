@@ -178,12 +178,12 @@ def main():
 
     exempt_path = r"(逐字稿|transcript|/_archive/|\.srt$|\.vtt$)"
 
-    if tool_name in {"Bash", "exec", "shell"}:
-        # codex exec mode runs apply_patch as a shell command, with the patch body in `command`.
-        # Only added lines are scanned -- scanning the whole diff would also block a patch that
-        # is removing emoji.
+    if tool_name in {"apply_patch", "Bash", "exec", "shell"}:
+        # Codex can call apply_patch directly or through unified exec. In both
+        # forms the patch body is in `command`. Only added lines are scanned --
+        # scanning the whole diff would also block a patch that removes emoji.
         command = tool_input.get("command") or ""
-        if "apply_patch" not in command:
+        if tool_name != "apply_patch" and "apply_patch" not in command:
             sys.exit(0)
         cwd = payload.get("cwd") or ""
         patch_paths = [
@@ -191,7 +191,7 @@ def main():
             for p in re.findall(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$", command, flags=re.M)
         ]
         if patch_paths and all(
-            re.search(exempt_path, p) or _exempt_subtree(p) for p in patch_paths
+            re.search(exempt_path, p) or _exempt_subtree(p, config) for p in patch_paths
         ):
             sys.exit(0)
         text = "\n".join(

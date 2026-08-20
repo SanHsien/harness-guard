@@ -28,7 +28,7 @@ Harness Guard 是 cross-agent AI coding guardrails kit。核心產品是：
 |---|---|
 | Claude Code | `install.py` 可安裝 hooks + skills；`verify-install.py` 可 live-fire 已安裝 hooks |
 | Google Antigravity / Gemini | `install.py --agent antigravity` 可安裝 skills；另有 `GEMINI.md` 範本 |
-| OpenAI Codex | `install.py --agent codex` 合併進 `~/.codex/hooks.json`（Windows 用 Python 版與絕對路徑） |
+| OpenAI Codex | `install.py --agent codex` 合併進 `~/.codex/hooks.json`，skills 寫入 `~/.agents/skills/`（Windows 用 Python 版與絕對路徑） |
 | Cursor | `install.py --agent cursor` 寫入 `~/.cursor/hooks.json`（扁平格式）與 `~/.cursor/hooks/` |
 
 `--agent all` 目前走 Claude Code + Antigravity + Cursor + Codex。Cursor 的 `stop` 不能否決已結束的回合；claim-guard 與 lint-gate 在那裡改為 follow-up。
@@ -116,7 +116,8 @@ python scripts/install.py --agent codex --hooks all --skills all
 - `lint-gate` 沒有檢查指令就沒有實際價值；Windows 可全域註冊後由專案 `.lint-gate.json` 啟用。
 - `no-emoji-guard` 是偏好型規則，不是安全必需品。
 - `danger-zone-guard` 只攔明確定義的危險模式；不要把它描述成一般 shell sandbox。
-- Codex hook 由 `install.py --agent codex` 合併進 `~/.codex/hooks.json`；Windows 必須用絕對路徑的 Python 版，不要註冊 `python3 ~/.codex/hooks/...`。
+- Codex hook 由 `install.py --agent codex` 合併進 `~/.codex/hooks.json`；Windows 必須用絕對路徑的 Python 版，不要註冊 `python3 ~/.codex/hooks/...`。Codex 使用者層 skills 寫入官方位置 `~/.agents/skills/`；不要再建立新的 `~/.codex/skills/`，也不要自動刪除使用者既有的 legacy 內容。
+- Codex hooks 預設啟用；若使用者曾關閉，設定 `[features].hooks = true`。註冊變更後要提醒使用者在 `/hooks` 檢視並信任目前定義；直接執行 hook 的 verifier 不能證明 TUI trust 狀態。
 - Cursor hook 由 `install.py --agent cursor` 寫入扁平的 `~/.cursor/hooks.json`。不要把 Claude Code 的 nested `hooks[].hooks[]` 結構寫進 Cursor。
 
 ## 規則檔範本：merge，不是覆蓋

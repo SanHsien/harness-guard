@@ -246,6 +246,11 @@ def check_codex_config():
     record(True, "Codex hooks.json is valid JSON", str(path))
     commands = list(collect_commands(data.get("hooks")))
     record(bool(commands), "at least one Codex hook is registered", "%d found" % len(commands))
+    note(
+        "Codex hook trust",
+        "this verifier runs hook files directly; use /hooks in Codex to confirm "
+        "the current definitions are reviewed and trusted",
+    )
     for command in commands:
         if IS_WINDOWS and re.match(r"^\s*bash\s", command):
             record(
@@ -267,6 +272,305 @@ def find_hook_in(directory, *names):
         if path.exists():
             return path
     return None
+
+
+def codex_blocks(proc):
+    """Return whether a Codex hook emitted a supported deny decision."""
+    if proc is None:
+        return False
+    if proc.returncode == 2:
+        return bool((proc.stderr or "").strip())
+    try:
+        data = json.loads(proc.stdout or "{}")
+    except (TypeError, ValueError):
+        return False
+    if data.get("decision") == "block":
+        return True
+    specific = data.get("hookSpecificOutput") or {}
+    return specific.get("permissionDecision") == "deny"
+
+
+def process_detail(*processes):
+    """Keep failed live-fire diagnostics useful without dumping unbounded output."""
+    parts = []
+    for proc in processes:
+        if proc is None:
+            parts.append("not run")
+            continue
+        stdout = (proc.stdout or "").strip().replace("\n", "\\n")[:160]
+        stderr = (proc.stderr or "").strip().replace("\n", "\\n")[:160]
+        parts.append("exit=%s stdout=%r stderr=%r" % (proc.returncode, stdout, stderr))
+    return " | ".join(parts)
+
+
+def check_codex_live_fire():
+    hooks_dir = CODEX_DIR / "hooks"
+    settings_path = CODEX_DIR / "hooks.json"
+    if not settings_path.exists():
+        note("Codex hooks", "not installed, skipped")
+        return
+    try:
+        with open(settings_path, encoding="utf-8") as fh:
+            commands = list(collect_commands(json.load(fh).get("hooks")))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return  # check_codex_config already records the parse failure
+
+    section("Live fire (Codex payload shape)")
+
+    def registered(*names):
+        return any(any(name in command for name in names) for command in commands)
+
+    def registered_command(*names):
+        return next(
+            (command for command in commands if any(name in command for name in names)),
+            "",
+        )
+
+    def registered_args(*names):
+        command = registered_command(*names)
+        return ("--codex",) if "--codex" in command else ()
+
+    tracker_names = ("claim_ledger_tracker.py", "claim-ledger-tracker.sh")
+    guard_names = ("claim_evidence_guard.py", "claim-evidence-guard.sh")
+    if registered(*tracker_names, *guard_names):
+        tracker = find_hook_in(hooks_dir, *tracker_names)
+        guard = find_hook_in(hooks_dir, *guard_names)
+        record(
+            bool(tracker and guard),
+            "Codex claim-guard is installed as a pair",
+            "installing only one silently disables the feature",
+        )
+        if tracker and guard:
+            empty = run_hook(
+                guard,
+                {
+                    "session_id": "verify-codex-claim-empty",
+                    "hook_event_name": "Stop",
+                    "last_assistant_message": "I ran the tests; all passing.",
+                },
+                args=registered_args(*guard_names),
+            )
+            logged = run_hook(
+                tracker,
+                {
+                    "session_id": "verify-codex-claim-logged",
+                    "hook_event_name": "PostToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "pytest -q"},
+                    "tool_response": {"exit_code": 0},
+                },
+                args=registered_args(*tracker_names),
+            )
+            after = run_hook(
+                guard,
+                {
+                    "session_id": "verify-codex-claim-logged",
+                    "hook_event_name": "Stop",
+                    "last_assistant_message": "I ran the tests; all passing.",
+                },
+                args=registered_args(*guard_names),
+            )
+            if empty is None or logged is None or after is None:
+                record(False, "Codex claim-guard runs")
+            else:
+                record(codex_blocks(empty), "Codex claim-guard blocks an unsupported test claim")
+                claim_allowed = (
+                    logged.returncode == 0
+                    and after.returncode == 0
+                    and not codex_blocks(after)
+                )
+                record(
+                    claim_allowed,
+                    "Codex claim-guard allows the claim after recording a test run",
+                    "" if claim_allowed else process_detail(logged, after),
+                )
+
+    lint_names = ("lint_gate.py", "lint-gate.sh")
+    if registered(*lint_names):
+        lint_gate = find_hook_in(hooks_dir, *lint_names)
+        if not lint_gate:
+            record(False, "Codex lint-gate script exists")
+        else:
+            fake_check = "%s -c \"print('found 3 errors')\"" % sys.executable
+            lint_env = {"LINT_CMD": fake_check, "FAIL_PATTERN": "[1-9][0-9]* errors?"}
+            lint_args = registered_args(*lint_names)
+            failing = run_hook(
+                lint_gate,
+                {
+                    "session_id": "verify-codex-lint",
+                    "hook_event_name": "Stop",
+                    "cwd": str(SCRATCH),
+                    "stop_hook_active": False,
+                },
+                env=lint_env,
+                args=lint_args,
+            )
+            loop = run_hook(
+                lint_gate,
+                {
+                    "session_id": "verify-codex-lint",
+                    "hook_event_name": "Stop",
+                    "cwd": str(SCRATCH),
+                    "stop_hook_active": True,
+                },
+                env=lint_env,
+                args=lint_args,
+            )
+            if failing is None or loop is None:
+                record(False, "Codex lint-gate runs")
+            else:
+                record(codex_blocks(failing), "Codex lint-gate blocks when its check fails")
+                loop_allowed = loop.returncode == 0 and not codex_blocks(loop)
+                record(
+                    loop_allowed,
+                    "Codex lint-gate avoids an infinite Stop loop",
+                    "" if loop_allowed else process_detail(loop),
+                )
+
+    test_names = ("test_gate_guard.py", "test-gate-guard.py")
+    if registered(*test_names):
+        test_gate = find_hook_in(hooks_dir, *test_names)
+        if not test_gate:
+            record(False, "Codex test-gate-guard script exists")
+        else:
+            chained = run_hook(
+                test_gate,
+                {
+                    "session_id": "verify-codex-test",
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "pytest ; git push"},
+                },
+            )
+            gated = run_hook(
+                test_gate,
+                {
+                    "session_id": "verify-codex-test",
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "pytest && git push"},
+                },
+            )
+            if chained is None or gated is None:
+                record(False, "Codex test-gate-guard runs")
+            else:
+                record(codex_blocks(chained), "Codex test-gate-guard blocks `pytest ; git push`")
+                record(
+                    gated.returncode == 0 and not codex_blocks(gated),
+                    "Codex test-gate-guard allows `pytest && git push`",
+                )
+
+    danger_names = ("danger_zone_guard.py", "danger-zone-guard.py")
+    if registered(*danger_names):
+        danger = find_hook_in(hooks_dir, *danger_names)
+        if not danger:
+            record(False, "Codex danger-zone-guard script exists")
+        else:
+            destructive = run_hook(
+                danger,
+                {
+                    "session_id": "verify-codex-danger",
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "rm -rf /"},
+                },
+            )
+            safe = run_hook(
+                danger,
+                {
+                    "session_id": "verify-codex-danger",
+                    "hook_event_name": "PreToolUse",
+                    "tool_name": "Bash",
+                    "tool_input": {"command": "rm -rf dist/"},
+                },
+            )
+            if destructive is None or safe is None:
+                record(False, "Codex danger-zone-guard runs")
+            else:
+                record(codex_blocks(destructive), "Codex danger-zone-guard blocks `rm -rf /`")
+                record(
+                    safe.returncode == 0 and not codex_blocks(safe),
+                    "Codex danger-zone-guard allows `rm -rf dist/`",
+                )
+
+    emoji_names = ("no-emoji-guard.py",)
+    if registered(*emoji_names):
+        emoji_guard = find_hook_in(hooks_dir, *emoji_names)
+        if not emoji_guard:
+            record(False, "Codex no-emoji-guard script exists")
+        else:
+            probe = str(SCRATCH / "codex-emoji-probe.md")
+            reason = switched_off(emoji_guard, probe)
+            if reason:
+                note(
+                    "Codex no-emoji-guard",
+                    "installed and loaded, but switched off (%s), so it allows writes" % reason,
+                )
+            else:
+                blocked = run_hook(
+                    emoji_guard,
+                    {
+                        "session_id": "verify-codex-emoji",
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "apply_patch",
+                        "tool_input": {
+                            "command": "*** Begin Patch\n*** Add File: codex-emoji-probe.md\n+ship it \U0001f680\n*** End Patch"
+                        },
+                        "cwd": str(SCRATCH),
+                    },
+                )
+                allowed = run_hook(
+                    emoji_guard,
+                    {
+                        "session_id": "verify-codex-emoji",
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "apply_patch",
+                        "tool_input": {
+                            "command": "*** Begin Patch\n*** Add File: codex-emoji-probe.md\n+ship it\n*** End Patch"
+                        },
+                        "cwd": str(SCRATCH),
+                    },
+                )
+                removal = run_hook(
+                    emoji_guard,
+                    {
+                        "session_id": "verify-codex-emoji",
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "apply_patch",
+                        "tool_input": {
+                            "command": "*** Begin Patch\n*** Update File: codex-emoji-probe.md\n@@\n-old \U0001f680\n+old\n*** End Patch"
+                        },
+                        "cwd": str(SCRATCH),
+                    },
+                )
+                exempt = run_hook(
+                    emoji_guard,
+                    {
+                        "session_id": "verify-codex-emoji",
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "apply_patch",
+                        "tool_input": {
+                            "command": "*** Begin Patch\n*** Update File: transcript.srt\n@@\n+raw \U0001f680\n*** End Patch"
+                        },
+                        "cwd": str(SCRATCH),
+                    },
+                )
+                if any(proc is None for proc in (blocked, allowed, removal, exempt)):
+                    record(False, "Codex no-emoji-guard runs")
+                else:
+                    record(codex_blocks(blocked), "Codex no-emoji-guard blocks an emoji write")
+                    record(
+                        allowed.returncode == 0 and not codex_blocks(allowed),
+                        "Codex no-emoji-guard allows a clean write",
+                    )
+                    record(
+                        removal.returncode == 0 and not codex_blocks(removal),
+                        "Codex no-emoji-guard allows removing an existing emoji",
+                    )
+                    record(
+                        exempt.returncode == 0 and not codex_blocks(exempt),
+                        "Codex no-emoji-guard allows an exempt patch path",
+                    )
 
 
 def check_cursor_live_fire():
@@ -575,6 +879,8 @@ def main():
         check_danger_zone_guard()
     if _args.agent in ("cursor", "all"):
         check_cursor_live_fire()
+    if _args.agent in ("codex", "all"):
+        check_codex_live_fire()
 
     failed = [r for r in results if not r[0]]
     section("Result")

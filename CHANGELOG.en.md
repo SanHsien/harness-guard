@@ -17,6 +17,9 @@ Entries marked `fork` are this fork's changes relative to
 
 ### Changed
 
+- **`fork` Codex skill installation now follows the current user-level contract.** `install.py --agent codex` writes to `~/.agents/skills/` instead of creating new legacy `~/.codex/skills/` copies; existing legacy content is preserved. Codex documentation and the verifier now distinguish script live-fire from the `/hooks` trust check.
+- **`fork` Codex installation verification now uses real payload live-fire.** The verifier executes all five registered Codex hook types and fails when a registered script is missing instead of checking only `hooks.json`. no-emoji-guard also reads the real `apply_patch` payload's `tool_input.command`, scans only added lines, and preserves transcript / `.srt` path exemptions, closing a registered-but-fail-open path without blocking emoji removal.
+- **`fork` POSIX hook installs normalize line endings to LF.** Even when the installer runs in WSL from a Windows CRLF checkout, copied `.sh` hooks no longer fail with `set: invalid option`; `.gitattributes` also pins shell scripts to LF.
 - **`fork` The Python hooks now read Cursor payloads.** `beforeShellExecution` puts the command at the top-level `command` field and names the tool `Shell`. A block returns `{"permission":"deny"}`. Claude Code still uses `exit 2` + stderr; Codex still uses `decision` JSON.
 - **`fork` claim-guard and lint-gate follow up on Cursor `stop`.** Cursor cannot veto a finished turn, so a hard block would be fake protection. claim-evidence still fails open when there is no `last_assistant_message`, matching the existing contract.
 - **`fork` lint-gate also takes the project directory from payload `cwd` / `workspace_roots`.** A user-level Cursor hook's process cwd is `~/.cursor`, so `os.getcwd()` alone is the wrong tree.

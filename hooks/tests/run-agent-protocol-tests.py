@@ -10,7 +10,7 @@ Three agents, three different ways of saying "no":
   Cursor        exit 0 plus JSON -- `permission: deny` before an action, or a
                 `followup_message`, because Cursor's stop cannot veto a turn
                 that already finished
-  Codex         exit 0 plus JSON -- `{}` to allow, {"decision": "block"} to stop
+  Codex         exit 0 plus deny JSON, or exit 2 plus a reason on stderr
 
 Why this suite exists. Cursor support identified the caller with
 `payload.get("hook_event_name")`, which Claude Code also sends. Every realistic
@@ -22,7 +22,7 @@ on. Registered, loaded, and no longer blocking anything.
 The existing suites missed it because their synthetic payloads omit
 `hook_event_name`. These use payloads shaped like the real thing.
 
-Expected: 12 passed, 0 failed.
+Expected: 15 passed, 0 failed.
 """
 import json
 import os
@@ -70,6 +70,16 @@ def speaks_codex(code, out):
     return code == 0 and out.startswith("{")
 
 
+def blocks_for_codex(code, out):
+    return code == 2 or (
+        code == 0 and ('"decision": "block"' in out or '"decision":"block"' in out)
+    )
+
+
+def allows_for_codex(code, _out):
+    return code == 0
+
+
 CASES = [
     # (label, hook path, payload, args, predicate)
     ("claim-evidence-guard blocks a Claude Stop",
@@ -112,6 +122,21 @@ CASES = [
     ("test-gate-guard speaks Codex",
      "test-gate-guard/codex/test_gate_guard.py",
      {"tool_name": "shell", "tool_input": {"command": "pytest ; git push"}}, (), speaks_codex),
+    ("no-emoji-guard blocks a Codex apply_patch",
+     "no-emoji-guard/codex/no-emoji-guard.py",
+     {"session_id": "p3", "hook_event_name": "PreToolUse", "tool_name": "apply_patch",
+     "tool_input": {"command": "*** Begin Patch\n+done \U0001F680\n*** End Patch"}},
+     (), blocks_for_codex),
+    ("no-emoji-guard allows removing an emoji",
+     "no-emoji-guard/codex/no-emoji-guard.py",
+     {"session_id": "p3", "hook_event_name": "PreToolUse", "tool_name": "apply_patch",
+      "tool_input": {"command": "*** Begin Patch\n*** Update File: a.md\n@@\n-old \U0001F680\n+old\n*** End Patch"}},
+     (), allows_for_codex),
+    ("no-emoji-guard allows an exempt patch path",
+     "no-emoji-guard/codex/no-emoji-guard.py",
+     {"session_id": "p3", "hook_event_name": "PreToolUse", "tool_name": "apply_patch",
+      "tool_input": {"command": "*** Begin Patch\n*** Update File: notes/transcript.srt\n@@\n+raw \U0001F680\n*** End Patch"}},
+     (), allows_for_codex),
     # Two hooks have no jq-free Codex build, so the installer registers the
     # Windows build with --codex and it answers in Codex's protocol instead.
     ("lint-gate speaks Codex with --codex",
