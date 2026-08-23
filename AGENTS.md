@@ -174,7 +174,16 @@ python -m unittest discover -s tests -p "test_*.py"
 
 另外：
 
-- 修改 Python 腳本後確認 syntax / compile。
+- **修改 Python 腳本後，要用「支援範圍裡最舊的版本」compile 一次，不是用手邊那一版。**
+  CI 的矩陣同時跑 **3.11 與 3.14**，而新語法通常是新版放寬的——只用新版驗，本機全綠、CI 才紅。
+  手邊沒有 3.11 時用 `uv`（不必另外安裝）：
+
+  ```bash
+  uv run --python 3.11 -m compileall scripts hooks skills/info-diet/scripts skills/review-loop/scripts
+  ```
+
+  已經踩過一次：f-string 運算式裡的反斜線（`f"...{x.replace('|', '\\|')}..."`）3.12 起才合法，
+  在 3.11 是 `SyntaxError`。這類差異 lint 不一定會講，compile 一定會。
 - 改 Windows 行為要由 Windows CI 或實機驗證；不要用單一平台結果代替跨平台結論。
 - 改安裝器時優先測 dry-run、merge、不覆蓋與重跑冪等性。
 - 改 hook 行為要補能重現該案例的 regression test。
