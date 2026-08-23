@@ -1,0 +1,86 @@
+NOTICE: what in here belongs to someone else
+================================
+
+This repo as a whole is under the MIT License (Copyright (c) 2026 Dustin Yuchen Teng),
+but a few pieces are adapted from other people's work. The original authors' licenses
+still apply, and their attribution is listed below.
+
+If you're going to use, modify, or sell any of this, keep this file attached. That's
+the one thing the MIT License actually requires of you.
+
+
+1. hooks/claim-guard/
+   claim-evidence-guard.sh, claim-ledger-tracker.sh
+--------------------------------------------------
+Adapted from four scripts in AlethiaQuizForge/no-hallucination. I merged them into two,
+changed where the ledger files live, and added Chinese trigger phrases.
+
+    Source: https://github.com/AlethiaQuizForge/no-hallucination
+    License: MIT License
+    Copyright (c) 2026 Markus Lien
+
+
+2. hooks/no-emoji-guard/no-emoji-guard.py
+-------------------------------------------
+I wrote the script myself. But the two long character-code tables inside it are
+parsed straight from Unicode's official data file — I didn't compile them myself.
+
+    Source: https://www.unicode.org/Public/UCD/latest/ucd/emoji/emoji-data.txt
+    License: Unicode License v3
+    Copyright (c) 1991-2025 Unicode, Inc. All rights reserved.
+
+
+3. skills/neat-freak/
+-----------------------
+Adapted from the skill of the same name in KKKKhazix/khazix-skills. The main file
+has been substantially rewritten and shrunk (originally 210 lines / 15KB, now 49
+lines / 2.2KB), and the whole process has been reworked: it now chains into
+checkpoint, runs through its own dedicated subagent, and adds a script that counts
+the current state up front. Two files in the references folder keep their
+upstream names.
+
+    Source: https://github.com/KKKKhazix/khazix-skills
+    License: MIT License
+    Copyright (c) 2026 数字生命卡兹克
+
+
+4. skills/polite/
+-------------------
+Translated and adapted from the empathetic-tone-basic and professional-tone-basic
+skills in hardikpthv/agent-skills, merged into one, with the added rule "never
+invent circumstances on the other person's behalf."
+
+    Source: https://github.com/hardikpthv/agent-skills
+    License: MIT License
+    Copyright (c) 2026 hardikpthv
+
+
+5. skills/first-principles/references/explore-unknowns/
+--------------------------------------------------------
+This module's "four-quadrant inventory" method comes from Thariq Shihipar's
+article, "A Field Guide to Fable: Finding Your Unknowns." The method is his;
+the credit is his.
+
+    Source: https://x.com/trq212
+
+One clarification: I couldn't determine who originally wrote the file I had on
+my computer, or under what license (there's no public skill project under that
+author's name, and I couldn't find matching content anywhere). So I rewrote, in
+my own words, the parts of the opening that were too close to the original
+phrasing, and I credit the source method directly at the top of the file. Ideas
+themselves aren't protected by copyright — specific wording is — so the approach
+here was: keep the idea, change the sentences, credit the source.
+
+If Thariq feels this still isn't right, I'll adjust it or take it down, on his
+say-so.
+
+
+6. skills/first-principles/ (main SKILL.md)
+--------------------------------------------
+The main file's structure is adapted from awesome-skills/first-principles-skill;
+I added Phase 0 ("Delete First," after Elon Musk's principle of questioning
+whether a requirement should exist at all). The file's own header declares the
+same origin.
+
+    Source: https://github.com/awesome-skills/first-principles-skill
+    License: MIT License

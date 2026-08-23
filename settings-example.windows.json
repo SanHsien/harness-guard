@@ -1,0 +1,67 @@
+{
+  "_comment": "Windows build. Merge the blocks you need into %USERPROFILE%\\.claude\\settings.json. Replace <you> with your Windows user name -- write full absolute paths, not ~. Restart Claude Code completely afterwards. See docs/windows-install.md for why these commands look different from the macOS/Linux example.",
+
+  "_why_python_not_bash": "A hook command starting with a bare `bash` resolves to C:\\Windows\\System32\\bash.exe, which is WSL: different filesystem, different home directory, so ~/.claude/hooks/x.sh does not exist there and the hook silently never runs. The Windows builds are Python, which has no such ambiguity and needs no jq.",
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\<you>\\.claude\\hooks\\no-emoji-guard.py\"",
+            "timeout": 10,
+            "statusMessage": "Scanning for emoji..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\<you>\\.claude\\hooks\\test_gate_guard.py\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\<you>\\.claude\\hooks\\danger_zone_guard.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\<you>\\.claude\\hooks\\claim_ledger_tracker.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\<you>\\.claude\\hooks\\claim_evidence_guard.py\"",
+            "timeout": 15
+          },
+          {
+            "type": "command",
+            "command": "python \"C:\\Users\\<you>\\.claude\\hooks\\lint_gate.py\" --cmd \"npm run lint\" --fail \"[1-9][0-9]* error\"",
+            "timeout": 60,
+            "statusMessage": "Running end-of-session checks..."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,57 @@
+name: Upstream check
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - scripts/check_upstream_updates.py
+      - scripts/upstream_baseline.json
+      - .github/workflows/upstream-check.yml
+  schedule:
+    # Weekly on Monday at 11:00 Asia/Taipei.
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: "utf-8"
+
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # Upstream is fetched by the checker itself; full history keeps
+          # `git log reviewed..upstream` valid.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.14"
+
+      - name: Check upstream for unreviewed commits
+        id: upstream
+        continue-on-error: true
+        run: python scripts/check_upstream_updates.py --strict
+
+      - name: Publish report
+        if: always()
+        run: cat upstream-review-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Require review when upstream changed
+        if: steps.upstream.outcome == 'failure'
+        run: |
+          echo "::error::Upstream has commits that have not been reviewed. See the workflow summary, then record the decision in FORK.md and advance scripts/upstream_baseline.json."
+          exit 1

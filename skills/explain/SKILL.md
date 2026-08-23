@@ -1,0 +1,51 @@
+---
+name: explain
+description: "Re-explain the previous reply or a specified topic in plain language a high-schooler could follow, no jargon. Triggers: /explain, plain English, I don't get it, ELI5, too much jargon."
+---
+
+# Explain — Say It So a Layperson Gets It
+
+When someone types `/explain` (with or without a topic), **re-explain** the subject to a standard of "**a high-schooler with no background in this could follow it right away**."
+
+## What to explain
+
+- **No topic given** (just `/explain`): explain **my own previous reply** — whatever the user didn't follow is that.
+- **Topic given** (`/explain how the quote was calculated`): explain that specific thing.
+- **File path given** (`/explain <file path>`): read that file first, then re-explain it following the rules below.
+- If it's unclear which part is meant, pick the part the user is most likely stuck on, and open with "I'm guessing you mean X — let me know if that's not it."
+
+## Hard rules (breaking these means the explanation failed)
+
+1. **Reply in the language the user is using, and re-explain it in plain language a high-schooler could follow — no jargon.**
+   - If a technical term genuinely has no good equivalent, or the original term is actually clearer than any translation (e.g., API, SaaS, PDF), you can keep the original term — but **immediately follow it with a plain-language explanation in parentheses** the first time it appears. Example: "API (a way for two pieces of software to talk to each other)."
+   - Only explain it the first time it shows up; after that you can use it directly.
+   - Don't drop jargon like "SOW," "addendum," "roster," "pipeline," or "enterprise" without explaining it — either use an everyday word instead, or add a parenthetical explanation.
+2. **No jargon, no abbreviations.** Say "spreadsheet" instead of "workbook file," say "pay part of it upfront" instead of "remit an initial installment."
+3. **Short sentences.** One idea per sentence — don't cram three concepts into one sentence.
+4. **Use comparisons and everyday examples.** Give an everyday analogy before anything abstract ("it's like...").
+5. **Lead with the conclusion / what it means for the reader**, then the details. What the user wants to know first is "what does this mean for me — good news or bad."
+6. **Don't pile on information.** Say less and say it clearly, rather than cramming in every detail. When something doesn't land, the usual cause is "too much," not "too little."
+7. **No emoji by default** (unless the existing conversation is already using them).
+
+## Suggested structure (adapt freely — not every explanation needs all four)
+
+1. **One-sentence summary**: what this actually is / what happened.
+2. **Plain-language breakdown**: 2–4 points, each with a comparison or example.
+3. **What it means for you**: good news or bad, whether you need to do anything, whether it costs money, any risk.
+4. **Offer to go deeper**: if there's a more detailed layer, ask whether the user wants it — don't dump everything at once.
+
+## Self-check (run through before sending)
+
+- Any jargon or foreign-language term left unexplained? → Fix it.
+- Any sentence that requires understanding another term first? → Break it apart and explain that first.
+- Could a high-schooler read this and repeat it back in their own words? → If not, simplify further.
+
+## Before / after example
+
+**Before (fails the bar)**:
+> I converted the SOW Addendum to a PDF and sent it to Sho — it's the quotation for the recorded course, with the fee folded into the Stage 2 balance.
+
+**After (passes the bar)**:
+> I put together a supplementary contract for you, saved it as a file that's ready to print and sign, and sent it to your client Sho.
+> It's about a pre-recorded online course you're offering him as an add-on — the document just spells out how much that course costs.
+> He won't be billed separately for it; it gets added to the balance he still owes from before.

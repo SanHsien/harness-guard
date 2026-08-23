@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # This kit ships no package manifest; the only machine-updatable dependency
+  # surface is the pinned actions inside .github/workflows.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Asia/Taipei"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "github-actions"
+    groups:
+      # init and analyze must run the exact same version -- a split bump fails
+      # with "Loaded a configuration file for version X, but running version Y",
+      # leaving both pull requests red. Group them so they move together.
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
