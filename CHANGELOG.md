@@ -10,6 +10,22 @@
 
 ## 2026-08-23
 
+### 修正
+
+- **CI 在 Python 3.11 編不過：f-string 運算式裡不能有反斜線（`fork`）。**
+  `scripts/check_upstream_updates.py` 的 `render_ticket_section()` 把跳脫寫在 f-string 裡
+  （`{ticket['title'].replace('|', '\\|')}`）。這在 3.12 以後合法，在 3.11 是 `SyntaxError`，
+  而 CI 的 `compileall` 矩陣同時跑 3.11 與 3.14——本機只有 3.14，所以寫的當下一切正常，紅燈只
+  出現在 CI。跳脫移到 f-string 外面先算成 `title`。本機用 uv 的 3.11.15 實跑
+  `python -m compileall scripts hooks skills/info-diet/scripts skills/review-loop/scripts`
+  確認 exit 0。
+
+- **Upstream check 工作流程沒有給 `gh` 任何憑證，於是每次都 fail closed（`fork`）。**
+  檢查器用 `gh pr list` / `gh issue list` 查上游，但 Actions 裡的 `gh` 沒有 `GH_TOKEN` 就不能
+  認證，兩個面向都回 `None`，檢查器照設計 fail closed（exit 2）。結果是紅燈寫著「無法列舉上游
+  PR 與 issue」——看起來像上游查不到，其實是 token 沒給。工作流程的 `env` 補上
+  `GH_TOKEN: ${{ github.token }}`。本機帶 token 實跑 `--strict` 確認 exit 0。
+
 ### 新增
 
 - **強推規則的放行標記 `# force-push-ok: <理由>`（`fork`）。** `danger-zone-guard` 對 main／master

@@ -10,6 +10,27 @@ Entries marked `fork` are this fork's changes relative to
 
 ## 2026-08-23
 
+### Fixed
+
+- **CI could not compile on Python 3.11: an f-string expression held a backslash
+  (`fork`).** `render_ticket_section()` in `scripts/check_upstream_updates.py` did the
+  escaping inside the f-string (`{ticket['title'].replace('|', '\\|')}`). That is legal
+  from 3.12 on and a `SyntaxError` on 3.11, and the CI `compileall` matrix runs both
+  3.11 and 3.14 -- the only local interpreter here is 3.14, so it looked fine while it
+  was written and went red only in CI. The escape now happens outside the f-string, in
+  a `title` local. Verified by running
+  `python -m compileall scripts hooks skills/info-diet/scripts skills/review-loop/scripts`
+  under uv's 3.11.15 for exit 0.
+
+- **The Upstream check workflow handed `gh` no credentials, so it failed closed every
+  run (`fork`).** The checker shells out to `gh pr list` / `gh issue list`, and `gh` in
+  Actions cannot authenticate without `GH_TOKEN`. Both axes came back `None` and the
+  checker failed closed by design (exit 2). The red run therefore read "could not
+  enumerate upstream pull requests and issues", which looks like an upstream lookup
+  problem and is actually a missing token. The workflow `env` now sets
+  `GH_TOKEN: ${{ github.token }}`. Verified by running `--strict` locally with a token
+  for exit 0.
+
 ### Added
 
 - **A `# force-push-ok: <reason>` escape hatch for the force-push rule (`fork`).**

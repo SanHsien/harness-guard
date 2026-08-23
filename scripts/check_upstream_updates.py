@@ -166,7 +166,11 @@ def render_ticket_section(
         [f"{len(tickets)} new item(s) to triage.", "", "| Item | Title |", "| --- | --- |"]
     )
     for ticket in tickets:
-        lines.append(f"| #{ticket['number']} | {ticket['title'].replace('|', '\\|')} |")
+        # The escape is computed outside the f-string: a backslash inside an
+        # f-string expression is a SyntaxError before Python 3.12, and CI
+        # compiles this file on 3.11.
+        title = ticket["title"].replace("|", "\\|")
+        lines.append(f"| #{ticket['number']} | {title} |")
     lines.extend(
         [
             "",
