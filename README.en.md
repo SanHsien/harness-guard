@@ -164,6 +164,19 @@ python -m unittest discover -s tests -p "test_*.py"
 
 Repository maintenance and installation rules live in [`AGENTS.md`](AGENTS.md). Release history lives in [`CHANGELOG.en.md`](CHANGELOG.en.md).
 
+## Related tools
+
+These four repositories each govern a different layer of AI coding. Use one on its own, or stack them:
+
+| Layer | Repo | What it does |
+| --- | --- | --- |
+| Dispatch decision | [agent-advisor](https://github.com/SanHsien/agent-advisor) | Risk-gated routing -- `solo`, `delegate`, `audit`, `full`: whether to delegate at all, and to whom |
+| Action interception | **Harness Guard (you are here)** | Agent runtime hooks that actually block dangerous commands, unevidenced claims, and commits over red tests |
+| Output quality | [ai-quality-gates](https://github.com/SanHsien/ai-quality-gates) | Executable specs and quantified thresholds: coverage, mutation, cyclomatic complexity, dependency structure, bounded loop policy |
+| Delivery lifecycle | [paulsha-cortex](https://github.com/SanHsien/paulsha-cortex) | Multi-agent lifecycle: Candidate -> Verify -> Independent Review -> Delivery -> CompletionRecord |
+
+Adjacent but a different layer: [opencodex](https://github.com/SanHsien/opencodex) is a provider proxy that decides which LLMs these agents can run on. It does not constrain agent behaviour.
+
 ## License
 
 MIT License — see [`LICENSE`](LICENSE). Original authors, fork provenance, and adapted work are listed in [`NOTICE`](NOTICE).
