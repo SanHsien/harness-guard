@@ -152,7 +152,7 @@ python scripts/verify-install.py
 
 ## 維護 repo 本身
 
-正常流程：**維護者的日常變更直接推 `origin/main`**，不開功能分支、不開維護 PR（主人 2026-08-22 指示）。
+正常流程：**維護者的日常變更直接推 `origin/main`**，不開功能分支、不開維護 PR（2026-08-22 起）。
 只有在需要他人審查、或改動風險高到值得先讓 CI 在 PR 上跑一輪時，才退回 **branch → PR → CI → merge**。
 
 不要為了「完整」新增與產品風險無關的治理流程。
@@ -206,7 +206,7 @@ python -m unittest discover -s tests -p "test_*.py"
 ## 對外邊界：PR 只打本 fork
 
 - **PR、push、release 一律指向 `SanHsien/harness-guard`。** 對上游 `agentcrew-academy/harness-starter-kit` 開 PR、push 或發 release
-  需要主人在當次對話明確同意回貢；「fork 一份」「建開發環境」「比照其他 repo」都不是同意。
+  需要維護者在當次對話明確同意回貢；「fork 一份」「建開發環境」「比照其他 repo」都不是同意。
 - 根因是機制不是粗心：`gh` 在 fork clone 的**預設 repo 就是上游**（`gh repo set-default --view` 會回
   `agentcrew-academy/harness-starter-kit`），裸跑 `gh pr create` 必然打上去。每個 clone 先跑一次
   `gh repo set-default SanHsien/harness-guard`。
