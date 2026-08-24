@@ -175,7 +175,7 @@ CODEX_HOOKS = {
             # Codex build and needs no flag.
             "args_windows": ("--codex",),
             "event": "PostToolUse",
-            "matcher": "Bash|Grep|Glob|exec|shell",
+            "matcher": "Bash|Grep|Glob|exec|exec_command|shell|shell_command",
             "timeout": 10,
         },
         {
@@ -195,7 +195,7 @@ CODEX_HOOKS = {
                 "posix": "hooks/test-gate-guard/codex/test_gate_guard.py",
             },
             "event": "PreToolUse",
-            "matcher": "exec|shell|exec_command|Bash",
+            "matcher": "exec|shell|exec_command|shell_command|Bash",
             "timeout": 10,
         },
     ],
@@ -206,7 +206,7 @@ CODEX_HOOKS = {
                 "posix": "hooks/danger-zone-guard/codex/danger_zone_guard.py",
             },
             "event": "PreToolUse",
-            "matcher": "exec|shell|exec_command|Bash",
+            "matcher": "exec|shell|exec_command|shell_command|Bash",
             "timeout": 10,
         },
     ],

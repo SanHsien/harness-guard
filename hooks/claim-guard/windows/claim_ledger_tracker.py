@@ -55,7 +55,16 @@ def default_ledger_dir():
 
 
 LEDGER_DIR = default_ledger_dir()
-SHELL_TOOLS = ("Bash", "Exec", "exec", "shell", "run_command", "Shell")
+SHELL_TOOLS = (
+    "Bash",
+    "Exec",
+    "exec",
+    "exec_command",
+    "shell",
+    "shell_command",
+    "run_command",
+    "Shell",
+)
 SEARCH_TOOLS = ("Grep", "Glob", "grep_search", "GlobTool")
 
 # Verification-type commands: tests, builds, status and health checks, diffs,

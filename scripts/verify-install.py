@@ -385,6 +385,43 @@ def check_codex_live_fire():
                     "" if claim_allowed else process_detail(logged, after),
                 )
 
+                alias_failures = []
+                for tool_name in ("exec_command", "shell_command"):
+                    alias_session = "verify-codex-claim-%s" % tool_name
+                    alias_logged = run_hook(
+                        tracker,
+                        {
+                            "session_id": alias_session,
+                            "hook_event_name": "PostToolUse",
+                            "tool_name": tool_name,
+                            "tool_input": {"cmd": "pytest -q"},
+                            "tool_response": {"exit_code": 0},
+                        },
+                        args=registered_args(*tracker_names),
+                    )
+                    alias_after = run_hook(
+                        guard,
+                        {
+                            "session_id": alias_session,
+                            "hook_event_name": "Stop",
+                            "last_assistant_message": "I ran the tests; all passing.",
+                        },
+                        args=registered_args(*guard_names),
+                    )
+                    if (
+                        alias_logged is None
+                        or alias_after is None
+                        or alias_logged.returncode != 0
+                        or alias_after.returncode != 0
+                        or codex_blocks(alias_after)
+                    ):
+                        alias_failures.append(tool_name)
+                record(
+                    not alias_failures,
+                    "Codex claim tracker accepts exec_command and shell_command",
+                    "" if not alias_failures else "failed: %s" % ", ".join(alias_failures),
+                )
+
     lint_names = ("lint_gate.py", "lint-gate.sh")
     if registered(*lint_names):
         lint_gate = find_hook_in(hooks_dir, *lint_names)
