@@ -311,7 +311,8 @@ def check_codex_live_fire():
         return
     try:
         with open(settings_path, encoding="utf-8") as fh:
-            commands = list(collect_commands(json.load(fh).get("hooks")))
+            hooks_block = json.load(fh).get("hooks") or {}
+            commands = list(collect_commands(hooks_block))
     except (OSError, ValueError, UnicodeDecodeError):
         return  # check_codex_config already records the parse failure
 
@@ -330,6 +331,17 @@ def check_codex_live_fire():
         command = registered_command(*names)
         return ("--codex",) if "--codex" in command else ()
 
+    def registered_matchers(*names):
+        matchers = []
+        for entries in hooks_block.values():
+            for entry in entries or []:
+                matcher = entry.get("matcher") or ""
+                for hook in entry.get("hooks", []) or []:
+                    command = hook.get("command") or ""
+                    if any(name in command for name in names):
+                        matchers.append(matcher)
+        return matchers
+
     tracker_names = ("claim_ledger_tracker.py", "claim-ledger-tracker.sh")
     guard_names = ("claim_evidence_guard.py", "claim-evidence-guard.sh")
     if registered(*tracker_names, *guard_names):
@@ -341,6 +353,19 @@ def check_codex_live_fire():
             "installing only one silently disables the feature",
         )
         if tracker and guard:
+            tracker_matchers = registered_matchers(*tracker_names)
+            required_aliases = {"exec_command", "shell_command"}
+            matcher_ok = any(
+                required_aliases.issubset(set(matcher.split("|")))
+                for matcher in tracker_matchers
+            )
+            record(
+                matcher_ok,
+                "Codex claim tracker matcher accepts exec_command and shell_command",
+                ""
+                if matcher_ok
+                else "matchers: %s" % (tracker_matchers or ["<missing>"]),
+            )
             empty = run_hook(
                 guard,
                 {

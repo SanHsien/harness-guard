@@ -396,10 +396,39 @@ class CodexVerifierTests(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
             self.assertIn("Live fire (Codex payload shape)", proc.stdout)
             self.assertIn("Codex claim-guard blocks", proc.stdout)
+            self.assertIn(
+                "PASS Codex claim tracker matcher accepts exec_command and shell_command",
+                proc.stdout,
+            )
             self.assertIn("Codex lint-gate blocks", proc.stdout)
             self.assertIn("Codex test-gate-guard blocks", proc.stdout)
             self.assertIn("Codex danger-zone-guard blocks", proc.stdout)
             self.assertIn("Codex no-emoji-guard blocks", proc.stdout)
+
+    def test_codex_claim_tracker_alias_matcher_is_verified(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_dir, env = self._installed_codex(Path(tmp))
+            hooks_path = codex_dir / "hooks.json"
+            with hooks_path.open(encoding="utf-8") as fh:
+                settings = json.load(fh)
+            for entry in settings["hooks"]["PostToolUse"]:
+                commands = [hook.get("command", "") for hook in entry.get("hooks", [])]
+                if any(
+                    "claim_ledger_tracker" in command
+                    or "claim-ledger-tracker" in command
+                    for command in commands
+                ):
+                    entry["matcher"] = "Bash|Grep|Glob|exec|shell"
+            with hooks_path.open("w", encoding="utf-8") as fh:
+                json.dump(settings, fh)
+
+            proc = self._verify(env)
+
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn(
+                "FAIL Codex claim tracker matcher accepts exec_command and shell_command",
+                proc.stdout,
+            )
 
     def test_codex_registered_missing_hook_fails_verification(self):
         with tempfile.TemporaryDirectory() as tmp:

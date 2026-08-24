@@ -19,6 +19,11 @@
   `scripts/verify-install.py` 也加入回歸測試，釘住已安裝 matcher 與 tracker allowlist 必須
   同時涵蓋它們。
 
+- **`review-loop` 的觸發說明把單次 final publication 也納入（`fork`）。** Frontmatter
+  現在只在已有或明確規劃第二輪回饋時觸發；多輪流程的最後發布仍會檢查，單次回覆與
+  single-pass final draft 則明確跳過。Script 路徑也改為相對目前 skill directory 解析，
+  不再 hard-code 另一個 agent 的安裝根目錄。
+
 ## 2026-08-23
 
 ### 修正

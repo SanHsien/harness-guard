@@ -1,6 +1,6 @@
 ---
 name: review-loop
-description: "Runs a multi-round human review loop over a long AI-written document (spec, plan, report, proposal) without drift between versions. Use whenever the user is reviewing a draft you produced and wants changes, says things like next version/v2/v3, I recorded my feedback/here's the transcript, revise this section, review section by section, review my draft, next revision — and whenever a document will go through more than one round of feedback. Also use before publishing a final version, to prove nothing agreed-on silently disappeared."
+description: "Runs a multi-round human review loop over a long AI-written document (spec, plan, report, proposal) without drift between versions. Use when a second feedback round exists or is explicitly planned, including next version/v2/v3, recorded feedback, section-by-section review, or the final publication step of that multi-round loop. Do not use for one-off replies or single-pass final drafts."
 ---
 
 # Review Loop
@@ -119,12 +119,12 @@ ship it with a plain-language summary of what changed (see below)
 
 ### Commands
 
-The first time, confirm the path is right -- wherever the skill is installed, the script lives under that install's `scripts/`.
+Resolve the script from the directory containing this `SKILL.md`; it lives at `scripts/review_loop.py` in the same skill folder. Do not hard-code another agent's install root. Use the Python executable available in the current environment.
 
 ```bash
-python3 ~/.claude/skills/review-loop/scripts/review_loop.py render spec.md   # produce the review page
-python3 ~/.claude/skills/review-loop/scripts/review_loop.py check  spec.md   # pre-publish gate, exits non-zero on problems
-python3 ~/.claude/skills/review-loop/scripts/review_loop.py apply  spec.md feedback.txt
+python "<skill-directory>/scripts/review_loop.py" render spec.md   # produce the review page
+python "<skill-directory>/scripts/review_loop.py" check  spec.md   # pre-publish gate, exits non-zero on problems
+python "<skill-directory>/scripts/review_loop.py" apply  spec.md feedback.txt
 ```
 
 Feedback format (the review page's "Copy" button produces exactly this):

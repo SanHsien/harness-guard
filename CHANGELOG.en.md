@@ -20,6 +20,13 @@ Entries marked `fork` are this fork's changes relative to
   payload, and `scripts/verify-install.py` requires installed matchers and tracker
   allowlists to cover them together.
 
+- **`review-loop` also triggered for a one-pass final publication (`fork`).** Its
+  frontmatter now activates only when a second feedback round exists or is explicitly
+  planned. The final publication of that multi-round loop remains covered, while
+  one-off replies and single-pass final drafts are excluded. Script commands now
+  resolve relative to the current skill directory instead of another agent's install
+  root.
+
 ## 2026-08-23
 
 ### Fixed
