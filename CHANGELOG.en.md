@@ -12,12 +12,13 @@ Entries marked `fork` are this fork's changes relative to
 
 ### Fixed
 
-- **The Codex Windows claim tracker missed newer shell tool aliases (`fork`).** Newer
+- **The Codex claim tracker missed newer shell tool aliases (`fork`).** Newer
   Codex rollouts can record commands as `exec_command` or `shell_command`; the old
-  tracker accepted only `exec`, `shell`, and `Bash`, so a command could run without
-  producing a claim ledger. The installer hook matchers and tracker now accept both
-  aliases, and `scripts/verify-install.py` adds a regression check that requires the
-  installed matcher and tracker allowlist to cover them together.
+  Windows tracker accepted only `exec`, `shell`, and `Bash`, while the POSIX tracker
+  accepted only `Bash`, so a command could run without producing a claim ledger.
+  Both trackers and the installer hook matchers now accept the aliases and `cmd`
+  payload, and `scripts/verify-install.py` requires installed matchers and tracker
+  allowlists to cover them together.
 
 ## 2026-08-23
 

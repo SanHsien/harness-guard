@@ -12,11 +12,12 @@
 
 ### 修正
 
-- **Codex Windows claim tracker 漏接新版 shell 工具別名（`fork`）。** 新版 Codex rollout
+- **Codex claim tracker 漏接新版 shell 工具別名（`fork`）。** 新版 Codex rollout
   會把命令記為 `exec_command` 或 `shell_command`；舊 tracker 只接受 `exec`、`shell` 與
-  `Bash`，因此命令確實執行後仍可能沒有 claim ledger。安裝器的 hook matcher 與 tracker
-  現在同步接受兩個別名，`scripts/verify-install.py` 也加入回歸測試，釘住已安裝 hook 的
-  matcher 與 tracker allowlist 必須同時涵蓋它們。
+  `Bash`，而 POSIX 版本更只接受 `Bash`，因此命令確實執行後仍可能沒有 claim ledger。
+  Windows／POSIX tracker 與安裝器 hook matcher 現在同步接受兩個別名及 `cmd` payload，
+  `scripts/verify-install.py` 也加入回歸測試，釘住已安裝 matcher 與 tracker allowlist 必須
+  同時涵蓋它們。
 
 ## 2026-08-23
 

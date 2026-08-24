@@ -19,8 +19,8 @@ case "$tool" in
     mkdir -p "$ledger_dir"
     printf '%s %s\n' "$(date +%H:%M:%S)" "$tool" >> "$search_ledger"
     ;;
-  Bash)
-    command_text="$(printf '%s' "$input" | jq -r '.tool_input.command // empty' 2>/dev/null)"
+  Bash|Exec|exec|exec_command|shell|shell_command|run_command|Shell)
+    command_text="$(printf '%s' "$input" | jq -r '.tool_input.command // .tool_input.CommandLine // .tool_input.cmd // .command // empty' 2>/dev/null)"
     if [ -n "$command_text" ]; then
       if printf '%s' "$command_text" | grep -qE '(--version|npm (run build|test)|pytest|jest|cargo test|go test|make test|uv run|vault-lint|visual-drift-lint|py_compile|bash -n|jq (-e |\.)|curl.*-[sI]|git[[:space:]]+(-C[[:space:]]+[^[:space:]]+[[:space:]]+)?(status|diff|log)|systemctl (status|is-active)|test -[fedrwx]|grep -[qcl]|wc -[lcw]|python3 (-c|-m)|node -e|pdfinfo|cmp -s|diff -r)'; then
         mkdir -p "$ledger_dir"
