@@ -2,6 +2,7 @@ version: 2
 updates:
   # This kit ships no package manifest; the only machine-updatable dependency
   # surface is the pinned actions inside .github/workflows.
+  # fleet-waiver: freshness -- no package manifest, so there are no declared floors to compare
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
