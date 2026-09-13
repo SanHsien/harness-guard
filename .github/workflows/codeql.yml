@@ -1,0 +1,46 @@
+name: CodeQL
+
+# This kit installs hooks into other people's agent configurations and runs
+# Python in their shells, so a flaw here reaches further than the repo does.
+# CI proves the hooks behave; this looks for the classes of bug tests do not
+# ask about -- injection, unsafe subprocess, path handling.
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "41 4 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Python security scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          languages: python
+          queries: security-extended
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@f205ea1c3313d32999d8d6a48b4f6530d4437b38 # v4.37.4
+        with:
+          category: "/language:python"

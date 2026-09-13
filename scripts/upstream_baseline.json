@@ -1,0 +1,10 @@
+{
+  "repo": "https://github.com/agentcrew-academy/harness-starter-kit.git",
+  "branch": "main",
+  "reviewed_through": "3baf40ea7143e421abfe13fff49de6164aa3ee7b",
+  "reviewed_date": "2026-08-23",
+  "notes": "2026-08-22 審視 3baf40e（phantom-pushback skill）：採用，skill 目錄原樣取用，README 的數量與清單改寫成本 fork 的雙語結構（中文為主檔、英文在 *.en.md）。先前：6de7c3a（UTF-8 stdout）已在 322a428 採用；8c0765a（停止追蹤 __pycache__）無需移植，本 fork 的 .gitignore 早已排除。決策記錄在 FORK.md。 2026-08-23：檢查器原本只看 commit，PR/issue 兩個水位欄位沒有程式讀——那兩個面向不是查過沒發現，是根本沒查。補上 --state all 的 PR/issue 收集與 fail-closed，首次實查到 PR #2（已合併且本 fork 已有該修正）與 issue #1（使用問題），水位推進到 2/1。",
+  "decision_log": "FORK.md",
+  "reviewed_pr_through": 2,
+  "reviewed_issue_through": 1
+}

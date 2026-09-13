@@ -1,0 +1,62 @@
+{
+  "_comment": "Merge the blocks you need into your ~/.claude/settings.json hooks object. If the same event name already exists, add to its hooks array — don't overwrite the whole section. Restart the session after registering for this to take effect.",
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/no-emoji-guard.py",
+            "statusMessage": "Scanning for emoji..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/test_gate_guard.py",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/danger_zone_guard.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+
+    "PostToolUse": [
+      {
+        "matcher": "Bash|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/claim-ledger-tracker.sh"
+          }
+        ]
+      }
+    ],
+
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/claim-evidence-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "LINT_CMD='npm run lint' FAIL_PATTERN='[1-9][0-9]* error' ~/.claude/hooks/lint-gate.sh",
+            "timeout": 30,
+            "statusMessage": "Running end-of-session checks..."
+          }
+        ]
+      }
+    ]
+  }
+}
