@@ -43,6 +43,10 @@ CASES = [
     ("sudo rm -rf /", True, "sudo prefix"),
     ("cd /tmp && rm -rf ~", True, "after && separator"),
     ("cd repo; rm -rf .git", True, "after ; separator"),
+    ("while true; do echo 1; done", True, "unbounded while true loop"),
+    ("for ((;;)); do echo 1; done", True, "unbounded for loop"),
+    ("while ($true) { Write-Output 1 }", True, "unbounded PowerShell while loop"),
+    ("for (;;) { Write-Output 1 }", True, "unbounded PowerShell for loop"),
     # Safe commands that must be allowed:
     ("rm -rf build/ dist/", False, "clean project build directories"),
     ("rm -rf node_modules", False, "remove local node_modules"),
@@ -55,6 +59,9 @@ CASES = [
     ('echo "rm -rf /" > note.txt', False, "quoted danger command as argument"),
     ('git commit -m "reverted that git push --force origin main"', False,
      "commit message describing a force push"),
+    ("echo 'while true; do echo 1; done'", False, "quoted loop example"),
+    ("while true; do check; break; done  # bounded-loop-ok: explicit break",
+     False, "bounded loop with stated reason"),
 ]
 
 

@@ -8,6 +8,18 @@
 
 ---
 
+## 2026-09-20
+
+### 修正
+
+- **完成宣稱的機器證據改為 fail-closed（`fork`）。** opt-in repo 的 Full summary 現在必須是
+  schema v1、`full` profile、綁定目前 Git HEAD，且所有 gates 都是 boolean true；第二次 Stop
+  不再繞過這項檢查。新增回歸測試並納入 CI。
+- **危險區 guard 會攔截無界限 Bash／PowerShell 迴圈（`fork`）。** 明確有界限的特殊情況可用
+  `# bounded-loop-ok: <理由>` 說明；引號內範例不會被誤判。
+- **Windows 安裝驗證可正確解析未加引號的絕對 Python hook 路徑（`fork`）。** 不再把含空白的
+  interpreter／script command 誤判成 hook 檔案缺失。
+
 ## 2026-08-24
 
 ### 修正

@@ -37,6 +37,9 @@ jobs:
       - name: Test danger-zone guard
         run: python hooks/danger-zone-guard/tests/run-tests.py
 
+      - name: Test claim evidence guard
+        run: python hooks/claim-guard/tests/run-tests.py
+
       - name: Test test-gate guard
         run: python hooks/test-gate-guard/tests/run-tests.py
 

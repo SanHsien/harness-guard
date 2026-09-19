@@ -39,29 +39,112 @@ SEARCH_LEDGER="$LEDGER_DIR/${SID}.search"
 
 cleanup() { rm -f "$VERIFY_LEDGER" "$SEARCH_LEDGER"; }
 
-# Second pass (already blocked once this turn): let it through and clear the ledger
 STOP_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false' 2>/dev/null)
-if [[ "$STOP_ACTIVE" == "true" ]]; then
-    cleanup
-    exit 0
-fi
-
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty' 2>/dev/null)
 [[ -z "$LAST_MSG" ]] && exit 0
+
+block_reason() {
+    jq -n --arg reason "$1" '{decision:"block",reason:$reason}'
+    exit 0
+}
+
+check_quality_summary_gate() {
+    local cwd repo_root parent
+    cwd=$(echo "$INPUT" | jq -r '.cwd // .working_directory // empty' 2>/dev/null)
+    [[ -n "$cwd" ]] || cwd=$PWD
+    repo_root=$cwd
+    while [[ "$repo_root" != "/" ]]; do
+        [[ -f "$repo_root/loop-policy.toml" || -e "$repo_root/.git" ]] && break
+        parent=$(dirname "$repo_root")
+        [[ "$parent" != "$repo_root" ]] || break
+        repo_root=$parent
+    done
+    [[ -f "$repo_root/loop-policy.toml" ]] || return 0
+    if ! command -v python3 >/dev/null 2>&1; then
+        printf '%s\n' "CLAIM-EVIDENCE GUARD: Python 3 is required to validate machine evidence."
+        return 0
+    fi
+    python3 - "$repo_root" <<'PY'
+import json
+import re
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+root = Path(sys.argv[1])
+policy_file = root / "loop-policy.toml"
+summary_file = root / "artifacts" / "quality-summary.json"
+try:
+    policy = tomllib.loads(policy_file.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"CLAIM-EVIDENCE GUARD: 'loop-policy.toml' is unreadable: {exc}")
+    raise SystemExit
+verification = policy.get("verification", {})
+if not isinstance(verification, dict) or verification.get("require_machine_evidence") is not True:
+    raise SystemExit
+if not summary_file.exists():
+    print("CLAIM-EVIDENCE GUARD: Target repository requires machine evidence, but "
+          "'artifacts/quality-summary.json' does not exist. Run Full verification first.")
+    raise SystemExit
+try:
+    data = json.loads(summary_file.read_text(encoding="utf-8"))
+except Exception as exc:
+    print(f"CLAIM-EVIDENCE GUARD: 'artifacts/quality-summary.json' is unreadable: {exc}")
+    raise SystemExit
+if not isinstance(data, dict):
+    print("CLAIM-EVIDENCE GUARD: Quality summary must be a JSON object.")
+    raise SystemExit
+if data.get("schema_version") != 1:
+    print("CLAIM-EVIDENCE GUARD: Quality summary schema_version must be 1.")
+    raise SystemExit
+if data.get("profile") != "full":
+    print("CLAIM-EVIDENCE GUARD: Quality summary profile must be 'full'.")
+    raise SystemExit
+gates = data.get("gates")
+if not isinstance(gates, dict) or not gates:
+    print("CLAIM-EVIDENCE GUARD: Quality summary gates must be a non-empty object.")
+    raise SystemExit
+if any(not isinstance(value, bool) for value in gates.values()):
+    print("CLAIM-EVIDENCE GUARD: Every quality summary gate must be boolean.")
+    raise SystemExit
+if data.get("passed") is not True or not all(gates.values()):
+    print("CLAIM-EVIDENCE GUARD: Quality summary indicates gate failure.")
+    raise SystemExit
+commit = data.get("commit")
+if not isinstance(commit, str) or re.fullmatch(r"(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})", commit) is None:
+    print("CLAIM-EVIDENCE GUARD: Quality summary commit must be a full Git object id.")
+    raise SystemExit
+head = subprocess.run(
+    ["git", "rev-parse", "--verify", "HEAD"],
+    cwd=root,
+    capture_output=True,
+    text=True,
+    check=False,
+)
+if head.returncode != 0 or not head.stdout.strip():
+    print("CLAIM-EVIDENCE GUARD: Current git HEAD could not be resolved.")
+elif head.stdout.strip().lower() != commit.lower():
+    print("CLAIM-EVIDENCE GUARD: Quality summary commit does not match current git HEAD.")
+PY
+}
 
 # A) Verification claims (English + Chinese)
 VERIFY_TRIGGERS='verified|confirmed|all passing|tests? pass|build passes|all green|works now|working now|deployed and verified|驗證通過|測試通過|驗證無誤|實測通過|實測有效|全數通過|建置通過|跑通|已驗證|確認無誤'
 if echo "$LAST_MSG" | grep -iqE "$VERIFY_TRIGGERS"; then
-    if [[ ! -s "$VERIFY_LEDGER" ]]; then
+    if [[ ! -s "$VERIFY_LEDGER" && "$STOP_ACTIVE" != "true" ]]; then
         cleanup
-        cat << 'EOF'
-{
-  "decision": "block",
-  "reason": "CLAIM-EVIDENCE GUARD: You claimed 'verified / tests pass / confirmed working', but this session's ledger has no record of any verification-type command (test, build, status, diff, live run). A completion claim is a factual claim — run the verification command first, then state the result; if it genuinely can't be verified automatically, rephrase as 'not yet verified, needs manual confirmation'."
-}
-EOF
-        exit 0
+        block_reason "CLAIM-EVIDENCE GUARD: You claimed verification or tests passed, but this session's ledger has no verification command. Verify it first or mark it as not yet verified."
     fi
+    QUALITY_ERROR=$(check_quality_summary_gate)
+    [[ -z "$QUALITY_ERROR" ]] || block_reason "$QUALITY_ERROR"
+fi
+
+# A second pass relaxes only the session-ledger requirement. Machine evidence
+# remains fail-closed until Full verification is current.
+if [[ "$STOP_ACTIVE" == "true" ]]; then
+    cleanup
+    exit 0
 fi
 
 # B) Negative existence assertions (English + Chinese)

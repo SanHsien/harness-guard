@@ -180,7 +180,7 @@ def check_settings(jq_present):
                 command[:70] + " -- it will exit quietly and protect nothing",
             )
 
-        match = re.search(r"([A-Za-z]:[\\/][^\"']+|~[\\/][^\s\"']+|[\\/][^\s\"']+)\.(sh|py)", command)
+        match = re.search(r"([A-Za-z]:[\\/][^\s\"']+|~[\\/][^\s\"']+|[\\/][^\s\"']+)\.(sh|py)", command)
         if match:
             raw = match.group(0)
             path = Path(os.path.expanduser(raw.replace("\\", "/")))

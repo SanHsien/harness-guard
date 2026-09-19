@@ -88,6 +88,16 @@ def read_payload():
     return json.loads(raw.decode("utf-8", "replace"))
 
 
+UNBOUNDED_RETRY = re.compile(
+    r"(?:(?:^|[|;&\n])\s*while\s+(?:true|:)\s*;"
+    r"|(?:^|[|;&\n])\s*for\s*\(\(\s*;\s*;\s*\)\)"
+    r"|(?:^|[|;&\n])\s*while\s*\(\s*\$true\s*\)"
+    r"|(?:^|[|;&\n])\s*for\s*\(\s*;\s*;\s*\))",
+    re.IGNORECASE,
+)
+BOUNDED_LOOP_OK = re.compile(r"#\s*bounded-loop-ok:\s*\S", re.IGNORECASE)
+
+
 def blank_heredocs(command):
     """Blank out heredoc bodies. Their contents are data being written."""
     chars = list(command)
@@ -133,7 +143,7 @@ def unquote(command):
     return command.replace('"', " ").replace("'", " ")
 
 
-def inspect_command(command):
+def inspect_command(command, repo_root=None):
     """Check command against dangerous patterns. Returns reason string or None."""
     without_heredocs = blank_heredocs(command)
 
@@ -154,6 +164,10 @@ def inspect_command(command):
     exfil_match = SECRET_EXFIL.search(as_commands)
     if exfil_match:
         return "Potential credential/secret transmission (`%s`)" % exfil_match.group(0).strip()
+
+    retry_match = UNBOUNDED_RETRY.search(as_commands)
+    if retry_match and not BOUNDED_LOOP_OK.search(command):
+        return "Unbounded retry / infinite loop construct detected (`%s`). Under loop-policy, iterations must be bounded." % retry_match.group(0).strip()
 
     return None
 

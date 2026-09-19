@@ -8,6 +8,21 @@ Entries marked `fork` are this fork's changes relative to
 
 ---
 
+## 2026-09-20
+
+### Fixed
+
+- **Machine evidence for completion claims now fails closed (`fork`).** An opted-in
+  repository's Full summary must use schema v1, profile `full`, bind the current Git
+  HEAD, and contain only boolean true gates. A second Stop pass no longer bypasses
+  this check. Regression coverage is included in CI.
+- **The danger-zone guard blocks unbounded Bash and PowerShell loops (`fork`).** A
+  deliberately bounded exception can state `# bounded-loop-ok: <reason>`, while loop
+  examples inside quoted text remain allowed.
+- **Windows install verification now parses unquoted absolute Python hook paths
+  correctly (`fork`).** Interpreter and script commands containing spaces are no
+  longer misreported as missing hook files.
+
 ## 2026-08-24
 
 ### Fixed
