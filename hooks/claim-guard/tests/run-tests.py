@@ -115,7 +115,7 @@ class QualitySummaryGateTests(unittest.TestCase):
         nested = self.root / "nested"
         (nested / "artifacts").mkdir(parents=True)
         resolved = GUARD.target_repo_root({"cwd": str(nested)})
-        self.assertEqual(resolved, self.root)
+        self.assertTrue(resolved.samefile(self.root))
 
 
 @unittest.skipIf(os.name == "nt", "POSIX shell guard integration runs on Linux CI")
