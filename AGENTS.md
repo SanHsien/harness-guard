@@ -69,6 +69,18 @@ Claude Code 使用 Python 版本；先讀 [`docs/windows-install.md`](docs/windo
 
 不要把依賴 `jq` 的 shell 版直接註冊到原生 Windows。缺 `jq` 時部分 shell hook 會 fail-open；裸 `bash` 也可能落到 WSL 而不是 Git Bash。
 
+Windows 的 `~` 在不同 shell 下展開結果不同，設定檔裡一律寫完整絕對路徑（`C:\Users\<你>\.claude\hooks\...`）。原因見 [`docs/windows-install.md`](docs/windows-install.md)。
+
+#### Claude Code 安裝路徑（本機安裝目標）
+
+| 東西 | 位置 |
+|---|---|
+| hook 腳本 | `~/.claude/hooks/`（平放，不保留 repo 的資料夾層次） |
+| hook 註冊 | `~/.claude/settings.json` 的 `hooks` 區塊 |
+| skills | `~/.claude/skills/`，各自保留自己的資料夾，不需註冊 |
+| 規則檔 | `~/.claude/CLAUDE.md`；可選規則檔放 `~/.claude/rules/` |
+| 設定範本 | macOS/Linux 用 `settings-example.json`；**Windows 用 `settings-example.windows.json`** |
+
 ### macOS / Linux
 
 Claude Code 可使用 repo 內的 POSIX / shell 實作；需要 `jq` 的 hook 必須先確認 `jq` 存在。
@@ -149,6 +161,16 @@ python scripts/verify-install.py
 - 停用單一 hook：從 agent 設定移除該註冊，重啟 agent。
 - 完整移除：移除設定註冊，再刪除對應 hook / skill 檔案。
 - 如果有安裝前備份，優先用備份協助比對，不盲目整份覆蓋回去。
+
+## 本 repo（dogfooding）用到的 hook 事件
+
+- `PreToolUse` + matcher `Write|Edit|MultiEdit` → no-emoji-guard
+- `PreToolUse` + matcher `Bash` → test-gate-guard、danger-zone-guard
+- `PostToolUse` + matcher `Bash|Grep|Glob` → claim-ledger-tracker
+- `Stop` → claim-evidence-guard、lint-gate
+
+放行是安靜結束（exit 0），攔截是 `exit 2` + 訊息寫 stderr；claim-evidence-guard 例外，
+它印 `{"decision":"block","reason":"..."}`。專案目錄從環境變數 `CLAUDE_PROJECT_DIR` 讀。
 
 ## 維護 repo 本身
 
