@@ -97,6 +97,7 @@ python scripts/verify-install.py
 | `3baf40e` feat(skills): add phantom-pushback | 2026-08-21 | **採用**。偵測「AI 虛構一個你沒說過的立場再來反駁你」的收尾段落，是上游原創、非修本 fork 改過的東西，與本 kit 的 guardrail 定位一致。skill 目錄原樣取用；README 的技能數與清單改寫進本 fork 的雙語結構。安裝器自動列舉 `skills/`，四個 agent target 的 dry-run 都確認會安裝。 |
 | `6de7c3a` fix(no-emoji-guard): UTF-8 stdout | 2026-08-20 | **採用**（322a428）。這是本 fork 送回上游的 encoding 修正的後續。 |
 | `8c0765a` chore: stop tracking `__pycache__` | 2026-08-20 | **無需移植**。本 fork 的 `.gitignore` 早已排除 `__pycache__/` 與 `*.py[cod]`。 |
+| `7b0df03` feat: sync kit with current personal harness | 2026-09-04 | **adoption pending: 大型功能同步，無法在本機驗證**。17 檔：新增第四個 hook `write-manifest`（僅 bash 版，Claude Code + Codex；本 fork 需另寫 `hooks/write-manifest/windows/` 並接進 installer、`settings-example.windows.json` 與 CI）、`claim-ledger-tracker` 加記 WebSearch/WebFetch、checkpoint lite mode 與 `stage-own-edits.sh`（依賴 write-manifest）、polite Mode C、explain document-mode、first-principles 0.4.0 精簡、asd-ste100 文件修正、README／AGENTS／CLAUDE 計數。這些多數互相依賴 write-manifest，逐項挑會拆散功能；README 需併入 `README.en.md` 再翻進中文主檔。重查條件：維護者決定採用 write-manifest 並補 Windows 版時，走 `git merge upstream/main` 並跑上列四組測試。 |
 
 審視後才推進 `scripts/upstream_baseline.json`；不要為了讓紅燈消失直接改 SHA。
 
