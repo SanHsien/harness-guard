@@ -66,3 +66,15 @@ requirement.
 
 Report the command and its real output. "Tests pass" without the command that produced
 that result is the claim this whole protocol exists to make unnecessary.
+
+## Do not repeat valid checks by habit
+
+After a relevant check passes, retain its actual command, exit code, output path,
+timestamp, and complete input state (HEAD plus changed/untracked input hashes).
+The primary may reuse worker evidence only after checking that inputs, dependencies,
+configuration, environment, and acceptance requirements match, and the repository
+does not require an independent rerun. HEAD alone does not bind uncommitted edits.
+Changed inputs, stale external state, missing logs, or failures require the narrowest
+relevant rerun. Independent checkers and mandatory delivery gates still run.
+Once requirements are satisfied, stop. Do not add model review or repeat live checks
+without a new change, failure, or unresolved concern.

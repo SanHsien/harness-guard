@@ -50,12 +50,21 @@ counts as evidence and what counts as a fake fix.
 Research is what fills a context window: greps that return two hundred lines, files read
 in full for the sake of three functions. Two habits:
 
-**Send the search out.** When a search will produce a lot of output, hand it to a subagent
-and ask for the conclusion — file paths, line numbers, and the answer — not the raw
-output. The main thread should receive the finding, not the transcript.
+**Bound the search first.** Use exact paths, filters, and local summaries. Delegate
+only when a bounded independent search replaces enough primary work to justify its
+briefing and integration cost, and the active Agent Advisor route permits it. Do not
+spawn an agent merely to trim output. Request findings and evidence paths, not logs.
 
 **Write down conclusions, not logs.** Record what you learned in a couple of lines. Pasting
 whole outputs into the main thread buys nothing that a summary and a path do not.
 
 Worked examples for two common shapes of task are in
 [`references/decomposition-playbook.md`](references/decomposition-playbook.md).
+
+## Avoid repeated work
+
+One worker remains the default maximum under Agent Advisor. No automatic advisor,
+parallel fan-out, or fresh model review outside the selected route. Keep stable
+instructions unchanged; send only needed files, interfaces, and known conclusions.
+Primary acceptance still checks the real diff and verification evidence. A worker's
+report alone is not proof. Follow `verification-protocol` for evidence reuse.
