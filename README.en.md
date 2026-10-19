@@ -178,6 +178,10 @@ These five repositories each govern a different layer of AI coding. Use one on i
 
 Adjacent but different layers: [agent-governance-toolkit](https://github.com/SanHsien/agent-governance-toolkit) governs autonomous agents once they are deployed -- policy enforcement, zero-trust identity, sandboxing, tamper-evident audit records -- not the coding agent that writes them. [opencodex](https://github.com/SanHsien/opencodex) is a provider proxy that decides which LLMs these agents can run on. It does not constrain agent behaviour.
 
+## Multi-agent pipeline
+
+This repo is part of the [agent-relay](https://github.com/SanHsien/agent-relay) multi-agent dispatch and verification pipeline (role: blocking hooks). Integration with agent-relay is planned (Phase 3). The protocol spec and the index of all related repos live in agent-relay.
+
 ## License
 
 MIT License — see [`LICENSE`](LICENSE). Original authors, fork provenance, and adapted work are listed in [`NOTICE`](NOTICE).
