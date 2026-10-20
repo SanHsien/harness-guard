@@ -13,8 +13,10 @@ also appended to ~/.agent-relay/touch-log.jsonl -- the per-machine check-in
 record of who touched what.
 
 Who "I" am: $AGENT_RELAY_HOLDER (agent-relay sets it for the workers it starts),
-else "manual:<agent>" from ~/.agent-relay/config.json -- the same default
-`relay claim` uses, so a person's own claims never block them.
+else "manual:<agent>@<host>" from ~/.agent-relay/config.json -- the same default
+`relay claim` uses, so a person's own claims never block them. Two interactive
+sessions on one machine share that identity; give each its own
+AGENT_RELAY_HOLDER if they must block each other.
 
 No agent-relay set up, no claims, a file outside any git repo, or any error:
 allow (exit 0). This is a coordination guard, not a sandbox; it only sees the
@@ -27,6 +29,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
@@ -41,10 +44,39 @@ def relay_home():
 
 
 def load_config():
-    try:
-        return json.loads((relay_home() / "config.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    """Same rules as agent_relay/config.py: config.json, then AGENT_RELAY_STORE / AGENT_RELAY_AGENT,
+    store defaulting to <home>/store. None when agent-relay is not set up at all."""
+    path = relay_home() / "config.json"
+    cfg = {}
+    if path.is_file():
+        try:
+            cfg = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+    elif not os.environ.get("AGENT_RELAY_STORE"):
         return None
+    if not isinstance(cfg, dict):
+        return None
+    if os.environ.get("AGENT_RELAY_STORE"):
+        cfg["store"] = os.environ["AGENT_RELAY_STORE"]
+    if os.environ.get("AGENT_RELAY_AGENT"):
+        cfg["agent"] = os.environ["AGENT_RELAY_AGENT"]
+    cfg.setdefault("store", str(relay_home() / "store"))
+    return cfg
+
+
+def holder(cfg):
+    """Same rule as agent_relay.locks.default_holder."""
+    return os.environ.get("AGENT_RELAY_HOLDER") or f"manual:{cfg.get('agent', '?')}@{socket.gethostname().lower()}"
+
+
+def live_claim(claim, stem, now):
+    try:
+        return (isinstance(claim, dict) and claim.get("schema") == "agent-relay/claim@1" and claim.get("id") == stem
+                and isinstance(claim.get("paths"), list) and all(isinstance(p, str) for p in claim["paths"])
+                and float(claim.get("expires", 0)) > now)
+    except (TypeError, ValueError):
+        return False
 
 
 def git(cwd, *args):
@@ -126,7 +158,7 @@ def decide(payload, cfg, now=None):
     rid = repo_id(Path(top))
     if not rid:
         return True, None
-    me = os.environ.get("AGENT_RELAY_HOLDER") or f"manual:{cfg.get('agent', '?')}"
+    me = holder(cfg)
     now = now or time.time()
     folder = Path(cfg["store"]) / "claims" / repo_key(rid)
     blockers = []
@@ -135,10 +167,9 @@ def decide(payload, cfg, now=None):
             claim = json.loads(claim_file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if (not isinstance(claim, dict) or claim.get("holder") == me
-                or float(claim.get("expires", 0)) <= now or claim.get("id") != claim_file.stem):
-            continue
-        if any(match_path(rel, p) for p in claim.get("paths") or []):
+        if not live_claim(claim, claim_file.stem, now) or claim.get("holder") == me:
+            continue  # a broken claim file is skipped, not allowed to switch the guard off
+        if any(match_path(rel, p) for p in claim["paths"]):
             blockers.append(claim)
     entry = {"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "holder": me, "repo": rid, "file": rel,
              "tool": payload.get("tool_name"), "decision": "deny" if blockers else "allow",

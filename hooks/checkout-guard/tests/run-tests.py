@@ -2,6 +2,7 @@
 """run-tests.py -- regression suite for checkout-guard (Claude Code build)."""
 import json
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -45,10 +46,10 @@ def main():
         now = time.time()
         for cid, holder, paths, expires in (
             ("c1", "relay:task-a", ["calc.py", "src/"], now + 600),
-            ("c2", "manual:commander", ["mine.py"], now + 600),
+            ("c2", f"manual:commander@{socket.gethostname().lower()}", ["mine.py"], now + 600),
             ("c3", "relay:old", ["stale.py"], now - 1),
         ):
-            (claims / f"{cid}.json").write_text(json.dumps({"id": cid, "holder": holder, "paths": paths,
+            (claims / f"{cid}.json").write_text(json.dumps({"schema": "agent-relay/claim@1", "id": cid, "holder": holder, "paths": paths,
                                                             "expires": expires, "expires_at": "later"}), encoding="utf-8")
 
         def edit(rel, tool="Edit"):
@@ -72,6 +73,27 @@ def main():
             ok = code == want and (want == 0 or "relay:task-a" in err)
             failures += not ok
             print(f"{'PASS' if ok else 'FAIL'}  {label}  (exit {code})")
+
+        # a broken claim (expires null) and one without schema are skipped; the good claim still blocks
+        (claims / "bad.json").write_text(json.dumps({"schema": "agent-relay/claim@1", "id": "bad", "holder": "x",
+                                                     "paths": ["calc.py"], "expires": None}), encoding="utf-8")
+        (claims / "noschema.json").write_text(json.dumps({"id": "noschema", "holder": "y", "paths": ["free.py"],
+                                                          "expires": now + 600}), encoding="utf-8")
+        for payload, want, label in ((edit("calc.py"), 2, "broken claim file does not switch the guard off"),
+                                     (edit("free.py"), 0, "claim without schema is ignored")):
+            code, _ = run(payload, home)
+            failures += code != want
+            print(f"{'PASS' if code == want else 'FAIL'}  {label}  (exit {code})")
+
+        # store given only through AGENT_RELAY_STORE (no config.json), like relay dispatch --store
+        env_home = tmp / "env-home"
+        env_home.mkdir()
+        env = {k: v for k, v in os.environ.items() if k != "AGENT_RELAY_HOLDER"}
+        env.update({"AGENT_RELAY_HOME": str(env_home), "AGENT_RELAY_STORE": str(store)})
+        proc = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(edit("calc.py")).encode("utf-8"),
+                              capture_output=True, env=env, timeout=60)
+        failures += proc.returncode != 2
+        print(f"{'PASS' if proc.returncode == 2 else 'FAIL'}  store from AGENT_RELAY_STORE  (exit {proc.returncode})")
 
         log = (home / "touch-log.jsonl").read_text(encoding="utf-8").splitlines()
         decisions = [json.loads(line)["decision"] for line in log]
