@@ -12,6 +12,15 @@ hooks/<tool-name>/
 The fourth and fifth hooks (`test-gate-guard/` and `danger-zone-guard/`) are added by this fork.
 They are pure Python on all platforms and require no external dependencies.
 
+`checkout-guard/` (also added by this fork, Claude Code build, pure Python) stops two
+agents from editing the same file at once. It is a PreToolUse hook on `Edit|Write|MultiEdit|NotebookEdit`
+that reads the check-out locks [agent-relay](https://github.com/SanHsien/agent-relay)
+keeps in its store (SPEC section 9). If the file is checked out by someone else it
+exits 2 and names the holder; every decision is appended to
+`~/.agent-relay/touch-log.jsonl`. Without agent-relay set up it allows everything.
+Register it like the others, with matcher `Edit|Write|MultiEdit|NotebookEdit`:
+`python "C:\Users\<you>\...\harness-guard\hooks\checkout-guard\claude-code\checkout_guard.py"`.
+
 `danger-zone-guard/` blocks catastrophic deletions, force pushes to a protected
 branch, and credential exfiltration. The force-push rule -- and only that rule --
 has an escape hatch: put `# force-push-ok: <reason>` in the command. Squashing a

@@ -188,6 +188,7 @@ python scripts/verify-install.py
 ```bash
 python hooks/danger-zone-guard/tests/run-tests.py
 python hooks/test-gate-guard/tests/run-tests.py
+python hooks/checkout-guard/tests/run-tests.py
 python hooks/tests/run-encoding-tests.py
 python hooks/tests/run-agent-protocol-tests.py
 python hooks/no-emoji-guard/tests/run-config-tests.py
