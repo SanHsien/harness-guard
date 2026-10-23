@@ -46,6 +46,9 @@ jobs:
       - name: Test checkout guard
         run: python hooks/checkout-guard/tests/run-tests.py
 
+      - name: Test anti-doom-loop guard
+        run: python hooks/anti-doom-loop-guard/tests/run-tests.py
+
       - name: Test UTF-8 and locale handling
         run: python hooks/tests/run-encoding-tests.py
 
