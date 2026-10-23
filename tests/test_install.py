@@ -513,11 +513,15 @@ class AntiDoomLoopGuardInstallTests(unittest.TestCase):
             home = Path(tmp)
             claude = home / ".claude"
             script = claude / "hooks" / HOOK_FILE
-            manual = 'python "%s"' % script
+            # The installer writes `python` on Windows and `python3` elsewhere, so a
+            # manual install it should recognise uses that interpreter. Quoting, slash
+            # direction and case are what may differ, not the interpreter.
+            interpreter = "python" if platform.system() == "Windows" else "python3"
+            manual = '%s "%s"' % (interpreter, script)
             variants = [
                 manual,
-                'python %s' % str(script).replace("\\", "/"),
-                'PYTHON "%s"' % str(script).upper().replace("HOOKS", "hooks"),
+                '%s %s' % (interpreter, str(script).replace("\\", "/")),
+                '%s "%s"' % (interpreter.upper(), str(script).upper().replace("HOOKS", "hooks")),
             ]
             for command in variants:
                 with self.subTest(command=command):
@@ -538,6 +542,28 @@ class AntiDoomLoopGuardInstallTests(unittest.TestCase):
                     self.assertEqual(settings_path.read_bytes(), before,
                                      "settings.json must be byte-identical when the hook is already there")
                     self.assertTrue(script.exists())
+
+    def test_claude_replaces_a_manual_install_that_uses_another_interpreter(self):
+        # The same script under a different interpreter is not "already registered",
+        # but it must be replaced rather than left beside the new entry (a double run).
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            claude = home / ".claude"
+            claude.mkdir()
+            script = claude / "hooks" / HOOK_FILE
+            settings_path = claude / "settings.json"
+            settings_path.write_text(json.dumps(
+                self._manual_settings('some-other-python "%s"' % script)), encoding="utf-8")
+
+            real = self._run(home, ["--agent", "claude", "--hooks", HOOK_NAME])
+
+            self.assertEqual(real.returncode, 0, real.stdout + real.stderr)
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+            commands = [h["command"] for entry in settings["hooks"]["PreToolUse"]
+                        for h in entry["hooks"]]
+            self.assertEqual(len(commands), 1, commands)
+            self.assertNotIn("some-other-python", commands[0])
+            self.assertTrue(commands[0].endswith('%s"' % HOOK_FILE), commands[0])
 
     def test_claude_installs_only_this_hook_with_the_documented_matcher(self):
         with tempfile.TemporaryDirectory() as tmp:
