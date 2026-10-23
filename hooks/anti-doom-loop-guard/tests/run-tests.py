@@ -103,6 +103,22 @@ def main():
         assert_eq(first_event["action"], "blocked", "Logged event marked as blocked")
         assert_eq(first_event["threshold"], 3, "Logged event recorded correct threshold")
 
+        print("==> Testing that another tool call between repeats resets the count")
+        reset_state = tmp / "reset-state.json"
+        test_cmd = {"tool_name": "Bash", "session_id": "edit-loop",
+                    "tool_input": {"command": "python -m unittest discover -s tests"}}
+        edit = {"tool_name": "Edit", "session_id": "edit-loop",
+                "tool_input": {"file_path": "src/app.py", "old_string": "a", "new_string": "b"}}
+        codes = []
+        for _ in range(4):  # test -> edit -> test -> edit ... the normal fix loop
+            codes.append(run_hook(test_cmd, reset_state, log_file, threshold=3)[0])
+            run_hook(edit, reset_state, log_file, threshold=3)
+        assert_eq(codes, [0, 0, 0, 0], "Test runs separated by edits are never blocked")
+        for _ in range(2):
+            run_hook(test_cmd, reset_state, log_file, threshold=3)
+        assert_eq(run_hook(test_cmd, reset_state, log_file, threshold=3)[0], 2,
+                  "Three identical runs with nothing in between are still blocked")
+
         print("==> Testing robustness & fail-open")
         # Malformed stdin
         proc = subprocess.run(

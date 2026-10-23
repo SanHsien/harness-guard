@@ -116,11 +116,16 @@ def log_block_event(entry: dict) -> None:
 
 def decide(payload: dict) -> tuple[bool, str | None]:
     sig, summary = extract_signature(payload)
-    if not sig:
-        return True, None
-
     session_id = payload.get("session_id")
     state_file = get_state_path(session_id)
+
+    if not sig:
+        # Any other tool call (an Edit between two test runs, for example) means the
+        # agent changed something, so the next identical command is not a blind retry.
+        if payload.get("tool_name") and state_file.is_file():
+            save_state(state_file, {"last_signature": None, "consecutive_count": 0, "summary": None})
+        return True, None
+
     state = load_state(state_file)
     threshold = get_threshold()
 
