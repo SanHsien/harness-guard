@@ -53,9 +53,9 @@ Tool names are the lowercased step types. Every hook is the **same script** as i
 |---|---|
 | Deny (`PreToolUse`) | stdout `{"decision":"deny","reason":"..."}`, exit 0 |
 | Refuse the stop (`Stop`) | stdout `{"decision":"continue","reason":"..."}`, exit 0 |
-| Allow (every event) | stdout `{}`. It does not answer `{"decision":"allow"}`: in Antigravity `allow` means "approve this call automatically", which would skip a permission prompt you still want |
+| Allow | `PreToolUse` answers `{"decision":"ask"}`, handing the call to Antigravity's normal permission flow (`decision` is required: an empty `{}` is read as a deny with an empty reason, which blocks every command); it never answers `allow`, which auto-approves and skips a prompt you still want |
 
-> Before this release `danger-zone-guard`, `test-gate-guard` and `no-emoji-guard` answered `{"decision":"allow"}` to Antigravity on an allow; they now answer `{}`.
+> Before this release `danger-zone-guard`, `test-gate-guard` and `no-emoji-guard` answered `{"decision":"allow"}` to Antigravity on an allow; they now answer `{"decision":"ask"}` (a short-lived `{}` blocked every `run_command`; fixed).
 
 ### Registration layout
 
@@ -164,8 +164,8 @@ python scripts/verify-install.py --agent antigravity
 
 For every hook from this repo that is registered in `hooks.json`, it checks the registration (no Claude-layout top-level `hooks` block, `Stop` as a flat list, no quotes, a matcher that covers the tools the hook looks at, the script exists) and then live-fires Antigravity-shaped payloads, one allow and one block:
 
-- `danger-zone-guard`: `rm -rf /` is denied, `rm -rf dist/` answers `{}`; `test-gate-guard`: `pytest ; git push` is denied, `&&` answers `{}`;
-- `no-emoji-guard`: a `write_to_file` with emoji is denied, clean content answers `{}`;
+- `danger-zone-guard`: `rm -rf /` is denied, `rm -rf dist/` answers ask; `test-gate-guard`: `pytest ; git push` is denied, `&&` answers ask;
+- `no-emoji-guard`: a `write_to_file` with emoji is denied, clean content answers ask;
 - `claim-guard`: with an empty ledger `Stop` answers continue, after one `pytest -q` was recorded the same claim passes (the transcript is synthetic, see limit 1 above);
 - `lint-gate`: a project with no `.lint-gate.json` answers `{}`, a failing check answers continue, the identical failure passes the second time;
 - `anti-doom-loop-guard`: an edit in between does not block, three identical commands in a row do.

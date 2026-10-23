@@ -10,6 +10,18 @@ Entries marked `fork` are this fork's changes relative to
 
 ## 2026-10-23
 
+### Fixed
+
+- **Antigravity: every `run_command` was blocked (`fork`).** Antigravity reported
+  `tool call denied by pre-tool hook: ` with nothing after the colon, even for
+  `python -c "print('hello')"`. Cause: the official `PreToolUse` output requires `decision`, and
+  `danger-zone-guard`, `test-gate-guard`, `no-emoji-guard` and `anti-doom-loop-guard` answered an allow
+  with an empty `{}`, which is read as a deny. Fix: an allow now answers `{"decision":"ask"}`, handing
+  the call to Antigravity's normal permission flow (it respects "Always Allow"); never `allow`, which
+  auto-approves and skips the permission prompt. `PostToolUse` and an allowing `Stop` still answer `{}`
+  (as documented). Existing installs: rerun `python scripts/install.py --agent antigravity --hooks <name>`;
+  `verify-install.py` now checks that an allow answers ask.
+
 ### Added
 
 - **`anti-doom-loop-guard` now covers Codex, Cursor and Antigravity and installs through the installer (`fork`).**

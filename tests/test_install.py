@@ -891,7 +891,8 @@ class AntigravityGuardInstallTests(unittest.TestCase):
             self.assertEqual(denied.returncode, 0)
             self.assertEqual(json.loads(denied.stdout)["decision"], "deny")
             allowed = self._fire(hooks / "danger_zone_guard.py", pre("rm -rf dist/"))
-            self.assertEqual(allowed.stdout.decode().strip(), "{}", "an allow must not auto-approve")
+            self.assertEqual(json.loads(allowed.stdout), {"decision": "ask"},
+                             "an allow defers to the permission flow: {} reads as a deny, allow auto-approves")
             gated = self._fire(hooks / "test_gate_guard.py", pre("pytest ; git push"))
             self.assertEqual(json.loads(gated.stdout)["decision"], "deny")
             emoji = self._fire(hooks / "no-emoji-guard.py", dict(common, toolCall={
@@ -1053,11 +1054,11 @@ class AntiDoomLoopGuardVerifierTests(unittest.TestCase):
             for line in (
                 'PASS Antigravity hooks.json has no Claude Code layout top-level "hooks" key',
                 "PASS Antigravity danger-zone-guard denies `rm -rf /`",
-                "PASS Antigravity danger-zone-guard allows `rm -rf dist/` with {}",
+                "PASS Antigravity danger-zone-guard allows `rm -rf dist/` (decision ask)",
                 "PASS Antigravity test-gate-guard denies `pytest ; git push`",
-                "PASS Antigravity test-gate-guard allows `pytest && git push` with {}",
+                "PASS Antigravity test-gate-guard allows `pytest && git push` (decision ask)",
                 "PASS Antigravity no-emoji-guard denies a write containing emoji",
-                "PASS Antigravity no-emoji-guard allows a clean write with {}",
+                "PASS Antigravity no-emoji-guard allows a clean write (decision ask)",
                 "PASS Antigravity claim-guard continues 'tests pass' with an empty ledger",
                 "PASS Antigravity claim-guard allows the same claim once the ledger has a test run",
                 "PASS Antigravity lint-gate continues when the project's check fails",

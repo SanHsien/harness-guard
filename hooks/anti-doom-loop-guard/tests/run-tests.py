@@ -412,8 +412,8 @@ def main():
                                     st, log_file))
             run_raw(agy_event("replace_file_content", {"TargetFile": "C:\\work\\proj\\src\\app.py"}), st, log_file)
         assert_eq([p.returncode for p in outcomes], [0, 0, 0, 0], "Antigravity: alternating run_command/replace_file_content never blocks")
-        assert_eq(all(p.stdout.decode().strip() == "{}" for p in outcomes), True,
-                  "Antigravity: allowing prints {} -- its \"allow\" would auto-approve and skip the user's prompt")
+        assert_eq(all(json.loads(p.stdout.decode()) == {"decision": "ask"} for p in outcomes), True,
+                  "Antigravity: allowing prints decision ask -- {} reads as a deny, \"allow\" would auto-approve")
         runs = [run_raw(agy_event("run_command", {"CommandLine": "go build ./..."}), st, log_file) for _ in range(3)]
         assert_eq([p.returncode for p in runs], [0, 0, 0], "Antigravity: a deny is exit 0 ...")
         assert_eq(denied_antigravity(runs[2]), True, "Antigravity: ... with {\"decision\":\"deny\",\"reason\":...} on stdout")

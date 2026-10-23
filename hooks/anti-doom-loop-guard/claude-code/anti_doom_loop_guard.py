@@ -386,12 +386,14 @@ def _emit(obj: dict) -> None:
 def emit_allow(agent: str, payload: dict) -> int:
     """Let the call through, in words the agent understands.
 
-    Antigravity gets `{}` and not {"decision": "allow"}: its "allow" means
-    "approve this call automatically", which would skip a permission prompt the
-    user still wants. Staying silent about the decision changes nothing.
+    Antigravity gets {"decision": "ask"}: `decision` is required there (an
+    empty `{}` is read as a deny with no reason), and "allow" would approve the
+    call automatically, skipping a permission prompt the user still wants.
     """
-    if agent in ("codex", "antigravity"):
+    if agent == "codex":
         _emit({})
+    elif agent == "antigravity":
+        _emit({"decision": "ask"})
     elif agent == "cursor":
         if payload.get("hook_event_name") in CURSOR_PERMISSION_EVENTS:
             _emit({"permission": "allow"})

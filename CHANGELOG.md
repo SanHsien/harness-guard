@@ -10,6 +10,17 @@
 
 ## 2026-10-23
 
+### 修正
+
+- **Antigravity：所有 `run_command` 都被擋下（`fork`）。** 症狀是 Antigravity 回報
+  `tool call denied by pre-tool hook: `，冒號後面沒有原因，連 `python -c "print('hello')"` 也被擋。
+  原因：官方規定 `PreToolUse` 的輸出 `decision` 為**必填**，而 `danger-zone-guard`、`test-gate-guard`、
+  `no-emoji-guard`、`anti-doom-loop-guard` 放行時回的是空的 `{}`，被當成否決。解法：放行改回
+  `{"decision":"ask"}`，交給 Antigravity 原本的權限流程（會尊重「一律允許」設定）；不回 `allow`，
+  那會自動核准並跳過授權彈窗。`PostToolUse` 與放行的 `Stop` 仍回 `{}`（官方規定）。已裝過的人重跑
+  `python scripts/install.py --agent antigravity --hooks <名稱>` 即可換成新版；`verify-install.py`
+  現在會檢查放行輸出是 ask。
+
 ### 新增
 
 - **`anti-doom-loop-guard` 擴及 Codex、Cursor、Antigravity，並可由安裝器安裝（`fork`）。**

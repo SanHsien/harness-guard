@@ -199,10 +199,10 @@ def extract_command(payload):
 
 def allow(payload):
     if is_antigravity(payload):
-        # `{}`, not {"decision": "allow"}: in Antigravity "allow" means "approve
-        # this call automatically", which would skip a permission prompt the
-        # user still wants. Saying nothing about the decision changes nothing.
-        sys.stdout.write("{}")
+        # "ask" hands the call to Antigravity's normal permission flow. `decision`
+        # is required: an empty `{}` is read as a deny with no reason, and
+        # "allow" would auto-approve and skip a prompt the user still wants.
+        sys.stdout.write('{"decision": "ask"}')
     elif is_cursor(payload):
         sys.stdout.write(json.dumps({"permission": "allow"}))
     return 0

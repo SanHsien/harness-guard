@@ -355,6 +355,16 @@ def agy_continues(proc):
     return bool(data) and data.get("decision") == "continue" and bool(data.get("reason"))
 
 
+def agy_defers(proc):
+    """A PreToolUse allow: {"decision": "ask"} (an empty `{}` reads as a deny)."""
+    if proc is None or proc.returncode != 0:
+        return False
+    try:
+        return json.loads((proc.stdout or "").strip()) == {"decision": "ask"}
+    except ValueError:
+        return False
+
+
 def agy_silent(proc):
     """`{}` exactly. {"decision": "allow"} would approve the call without asking."""
     return proc is not None and proc.returncode == 0 and (proc.stdout or "").strip() == "{}"
@@ -375,7 +385,7 @@ def live_fire_antigravity(name, scripts):
         blocked = run_hook(script, agy_pre("run_command", {"CommandLine": bad}), env=agy_env())
         allowed = run_hook(script, agy_pre("run_command", {"CommandLine": good}), env=agy_env())
         record(agy_denies(blocked), "Antigravity %s denies `%s`" % (name, bad), process_detail(blocked))
-        record(agy_silent(allowed), "Antigravity %s allows `%s` with {}" % (name, good), process_detail(allowed))
+        record(agy_defers(allowed), "Antigravity %s allows `%s` (decision ask)" % (name, good), process_detail(allowed))
     elif name == "no-emoji-guard":
         script = scripts["no-emoji-guard.py"]
         probe = str(SCRATCH / "a.md")
@@ -390,7 +400,7 @@ def live_fire_antigravity(name, scripts):
             "TargetFile": probe, "CodeContent": "ship it"}), env=agy_env())
         record(agy_denies(blocked), "Antigravity no-emoji-guard denies a write containing emoji",
                process_detail(blocked))
-        record(agy_silent(allowed), "Antigravity no-emoji-guard allows a clean write with {}",
+        record(agy_defers(allowed), "Antigravity no-emoji-guard allows a clean write (decision ask)",
                process_detail(allowed))
     elif name == "claim-guard":
         live_fire_antigravity_claim(scripts["claim_ledger_tracker.py"], scripts["claim_evidence_guard.py"])

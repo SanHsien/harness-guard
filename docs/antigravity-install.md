@@ -53,9 +53,9 @@ python scripts/install.py --agent antigravity --hooks anti-doom-loop-guard
 |---|---|
 | 否決（`PreToolUse`） | stdout `{"decision":"deny","reason":"..."}`，exit 0 |
 | 擋下結束（`Stop`） | stdout `{"decision":"continue","reason":"..."}`，exit 0 |
-| 放行（所有事件） | stdout `{}`。不回 `{"decision":"allow"}`：Antigravity 的 `allow` 是「自動核准這次呼叫」，會跳過你仍想要的授權彈窗 |
+| 放行 | `PreToolUse` 回 `{"decision":"ask"}`，交給 Antigravity 原本的權限流程（官方規定 `decision` 必填，回空的 `{}` 會被當成否決、原因空白，所有指令都會被擋）；不回 `allow`，那會自動核准、跳過你仍想要的授權彈窗。`PostToolUse` 與放行的 `Stop` 回 `{}` |
 
-> 這一版之前，`danger-zone-guard`、`test-gate-guard`、`no-emoji-guard` 對 Antigravity 放行時回的是 `{"decision":"allow"}`，現在改回 `{}`。
+> 這一版之前，`danger-zone-guard`、`test-gate-guard`、`no-emoji-guard` 對 Antigravity 放行時回的是 `{"decision":"allow"}`，現在改為 `{"decision":"ask"}`（曾短暫改成 `{}`，會讓所有 `run_command` 被擋，已修正）。
 
 ### 登記格式
 
@@ -162,8 +162,8 @@ python scripts/verify-install.py --agent antigravity
 
 對 `hooks.json` 裡登記的每個本 repo hook，它會檢查登記格式（頂層沒有 Claude 版面的 `hooks` 區塊、`Stop` 是扁平清單、命令無引號、matcher 涵蓋該 hook 要看的工具、腳本存在），再用 Antigravity 形狀的 payload live-fire，一次放行、一次攔截：
 
-- `danger-zone-guard`：`rm -rf /` 否決、`rm -rf dist/` 回 `{}`；`test-gate-guard`：`pytest ; git push` 否決、`&&` 回 `{}`；
-- `no-emoji-guard`：含 emoji 的 `write_to_file` 否決、乾淨內容回 `{}`；
+- `danger-zone-guard`：`rm -rf /` 否決、`rm -rf dist/` 回 ask；`test-gate-guard`：`pytest ; git push` 否決、`&&` 回 ask；
+- `no-emoji-guard`：含 emoji 的 `write_to_file` 否決、乾淨內容回 ask；
 - `claim-guard`：空帳本時 `Stop` 回 continue，記一次 `pytest -q` 之後同樣的話放行（transcript 是合成的，見上方限制第 1 點）；
 - `lint-gate`：沒有 `.lint-gate.json` 的專案回 `{}`、檢查失敗回 continue、同一份失敗第二次放行；
 - `anti-doom-loop-guard`：改檔夾在中間不擋、連續 3 次相同指令擋。

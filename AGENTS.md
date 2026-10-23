@@ -134,8 +134,8 @@ python scripts/install.py --agent codex --hooks all --skills all
 - Codex hook 由 `install.py --agent codex` 合併進 `~/.codex/hooks.json`；Windows 必須用絕對路徑的 Python 版，不要註冊 `python3 ~/.codex/hooks/...`。Codex 使用者層 skills 寫入官方位置 `~/.agents/skills/`；不要再建立新的 `~/.codex/skills/`，也不要自動刪除使用者既有的 legacy 內容。
 - Codex hooks 預設啟用；若使用者曾關閉，設定 `[features].hooks = true`。註冊變更後要提醒使用者在 `/hooks` 檢視並信任目前定義；直接執行 hook 的 verifier 不能證明 TUI trust 狀態。
 - Cursor hook 由 `install.py --agent cursor` 寫入扁平的 `~/.cursor/hooks.json`。不要把 Claude Code 的 nested `hooks[].hooks[]` 結構寫進 Cursor。
-- `anti-doom-loop-guard` 是選裝（不在預設清單）。同一支 `anti_doom_loop_guard.py` 服務四個 agent，用各 agent 專有欄位／事件名分辨；Codex 要靠 `--agent codex`。Antigravity 的登記是 `~/.gemini/config/hooks.json` 頂層以 hook 名稱為 key，命令**不加引號**、路徑不可含空白；其放行輸出是 `{}`，不是 `{"decision":"allow"}`（那會自動核准）。
-- Antigravity 的其餘 5 個 hook 同樣是具名登記：`PreToolUse` / `PostToolUse` 是 `{matcher, hooks}` 分組，**`Stop` 是扁平 handler 清單**（沒有 matcher、不包 `hooks`）；否決 `{"decision":"deny"}`、擋下結束 `{"decision":"continue"}`、放行 `{}`。`hooks.json` 頂層若有 Claude 版面的 `hooks` 區塊或形狀不合的 entry，安裝器拒絕寫入（Antigravity 整份拒絕）。claim-guard 的查驗端要讀 `transcriptPath`，其行格式官方未文件化，只能說「照文件記載的 step 形狀、fail-open」，不要宣稱已對真實 transcript 驗證。herdr 的 `herdr-agent-state.ps1` 不在範圍。細節見 `docs/antigravity-install.md`。
+- `anti-doom-loop-guard` 是選裝（不在預設清單）。同一支 `anti_doom_loop_guard.py` 服務四個 agent，用各 agent 專有欄位／事件名分辨；Codex 要靠 `--agent codex`。Antigravity 的登記是 `~/.gemini/config/hooks.json` 頂層以 hook 名稱為 key，命令**不加引號**、路徑不可含空白；其 PreToolUse 放行輸出是 `{"decision":"ask"}`（`decision` 必填：空的 `{}` 會被當成否決；`allow` 會自動核准）。
+- Antigravity 的其餘 5 個 hook 同樣是具名登記：`PreToolUse` / `PostToolUse` 是 `{matcher, hooks}` 分組，**`Stop` 是扁平 handler 清單**（沒有 matcher、不包 `hooks`）；否決 `{"decision":"deny"}`、擋下結束 `{"decision":"continue"}`、PreToolUse 放行 `{"decision":"ask"}`、PostToolUse 與放行的 Stop 回 `{}`。`hooks.json` 頂層若有 Claude 版面的 `hooks` 區塊或形狀不合的 entry，安裝器拒絕寫入（Antigravity 整份拒絕）。claim-guard 的查驗端要讀 `transcriptPath`，其行格式官方未文件化，只能說「照文件記載的 step 形狀、fail-open」，不要宣稱已對真實 transcript 驗證。herdr 的 `herdr-agent-state.ps1` 不在範圍。細節見 `docs/antigravity-install.md`。
 
 ## 規則檔範本：merge，不是覆蓋
 

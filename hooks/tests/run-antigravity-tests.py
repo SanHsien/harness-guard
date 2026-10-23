@@ -124,8 +124,18 @@ def denies(result):
     return code == 0 and data.get("decision") == "deny" and bool(data.get("reason"))
 
 
+def defers(result):
+    """A PreToolUse allow: {"decision": "ask"}. `decision` is required -- an empty
+    `{}` is read as a deny with no reason -- and "allow" would auto-approve."""
+    code, out, _err = result
+    try:
+        return code == 0 and json.loads(out) == {"decision": "ask"}
+    except ValueError:
+        return False
+
+
 def stays_silent(result):
-    """The exact allow answer: `{}`, never {"decision": "allow"}."""
+    """PostToolUse and a Stop that lets the agent finish: `{}` exactly."""
     code, out, _err = result
     return code == 0 and out == "{}"
 
@@ -158,9 +168,9 @@ def main():
         result = box.run(DANGER, box.pre("run_command", {"CommandLine": command, "Cwd": str(box.workspace)}))
         check("danger-zone-guard denies %s" % label, denies(result), detail(result))
     result = box.run(DANGER, box.pre("run_command", {"CommandLine": "rm -rf dist/"}))
-    check("danger-zone-guard allows rm -rf dist/ with {}", stays_silent(result), detail(result))
+    check("danger-zone-guard allows rm -rf dist/ (decision ask)", defers(result), detail(result))
     result = box.run(DANGER, box.pre("view_file", {"AbsolutePath": "C:\\work\\rm -rf /"}))
-    check("danger-zone-guard ignores a tool that is not a shell", stays_silent(result), detail(result))
+    check("danger-zone-guard ignores a tool that is not a shell", defers(result), detail(result))
     result = box.run(DANGER, b"not json at all")
     check("danger-zone-guard fails open on malformed input", result[0] == 0 and "deny" not in result[1], detail(result))
 
@@ -168,9 +178,9 @@ def main():
     result = box.run(TEST_GATE, box.pre("run_command", {"CommandLine": "pytest -q ; git push origin main"}))
     check("test-gate-guard denies `pytest ; git push`", denies(result), detail(result))
     result = box.run(TEST_GATE, box.pre("run_command", {"CommandLine": "pytest -q && git push origin main"}))
-    check("test-gate-guard allows `pytest && git push` with {}", stays_silent(result), detail(result))
+    check("test-gate-guard allows `pytest && git push` (decision ask)", defers(result), detail(result))
     result = box.run(TEST_GATE, box.pre("run_command", {"CommandLine": "git commit -m \"pytest ; git push\""}))
-    check("test-gate-guard allows a message that only mentions it", stays_silent(result), detail(result))
+    check("test-gate-guard allows a message that only mentions it", defers(result), detail(result))
 
     # -- no-emoji-guard: PreToolUse, write_to_file / replace_file_content / multi_ ---
     target = str(box.workspace / "README.md")
@@ -189,15 +199,15 @@ def main():
           denies(result), detail(result))
     result = box.run(NO_EMOJI, box.pre("write_to_file", {
         "TargetFile": target, "CodeContent": "ship it", "Overwrite": True, "EmptyFile": False}))
-    check("no-emoji-guard allows a clean write with {}", stays_silent(result), detail(result))
+    check("no-emoji-guard allows a clean write (decision ask)", defers(result), detail(result))
     result = box.run(NO_EMOJI, box.pre("write_to_file", {
         "TargetFile": str(box.workspace / "talk.transcript.srt"), "CodeContent": "raw %s" % ROCKET}))
-    check("no-emoji-guard allows an exempt transcript path", stays_silent(result), detail(result))
+    check("no-emoji-guard allows an exempt transcript path", defers(result), detail(result))
     config = box.root / "no-emoji.json"
     config.write_text(json.dumps({"enabled": False}), encoding="utf-8")
     result = box.run(NO_EMOJI, box.pre("write_to_file", {"TargetFile": target, "CodeContent": ROCKET}),
                      env=box.env(NO_EMOJI_GUARD_CONFIG=str(config)))
-    check("no-emoji-guard honours enabled:false with {}", stays_silent(result), detail(result))
+    check("no-emoji-guard honours enabled:false (decision ask)", defers(result), detail(result))
 
     # -- claim-guard tracker: PostToolUse ------------------------------------------
     box = Sandbox()

@@ -42,7 +42,7 @@ unknown events fail open, and `ANTI_DOOM_LOOP_THRESHOLD` changes the threshold. 
 **Antigravity adapters for the other guards.** `danger-zone-guard`, `test-gate-guard`, `no-emoji-guard`,
 `claim-guard` and `lint-gate` recognise Antigravity by `toolCall` / `conversationId` (never by a field other agents
 also send) and answer in its contract: `PreToolUse` deny `{"decision":"deny","reason":...}`, `Stop` refuse
-`{"decision":"continue","reason":...}`, allow `{}` (never `{"decision":"allow"}`, which auto-approves). Registered
+`{"decision":"continue","reason":...}`, PreToolUse allow `{"decision":"ask"}` (`{}` reads as a deny; `allow` auto-approves), PostToolUse `{}`. Registered
 with `install.py --agent antigravity --hooks <name>`; matchers and limits (notably: the `Stop` payload has no
 assistant message, so `claim-guard` reads `transcriptPath`, whose format is not in the official docs) are in
 [`../docs/antigravity-install.en.md`](../docs/antigravity-install.en.md). Tests:
