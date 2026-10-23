@@ -38,9 +38,12 @@ On Windows the `command` is `python "C:\Users\<you>\.cursor\hooks\....py"`. No s
 | test-gate-guard | `beforeShellExecution` | yes; top-level `command` |
 | danger-zone-guard | `beforeShellExecution` | yes |
 | no-emoji-guard | `preToolUse` (matcher `Write`) | yes, via `permission: deny` |
+| anti-doom-loop-guard | `preToolUse` (matcher `Shell\|Read\|Write\|Delete`) | yes, `permission: deny` as JSON with exit 0. Three identical Shell or Read calls in a row; Write / Delete reset the count |
 | claim-ledger-tracker | `postToolUse` | record only |
 | claim-evidence-guard | `stop` | **no veto**. Sends `followup_message` when a completion claim has no evidence |
 | lint-gate | `stop` | same; project directory comes from payload `cwd` / `workspace_roots`, not `~/.cursor` |
+
+`anti-doom-loop-guard` uses `preToolUse` rather than `beforeShellExecution` + `beforeReadFile`: `beforeReadFile` carries a path but no offset or limit, so paging through one big file would look like a retry; `preToolUse` carries the whole tool input and the whole argument object is the signature. The script also understands `beforeShellExecution` (counted) and `afterFileEdit` (reset); do not register both sets, or one shell command is counted twice. `beforeReadFile` is never counted.
 
 If there is no `last_assistant_message`, claim-evidence-guard still fails open. That is the existing contract, not a Cursor-only relaxation: unreadable input is never a reason to get in the way.
 

@@ -8,6 +8,34 @@
 
 ---
 
+## 2026-10-23
+
+### 新增
+
+- **`anti-doom-loop-guard` 擴及 Codex、Cursor、Antigravity，並可由安裝器安裝（`fork`）。**
+  同一個 Bash／Read 呼叫連續 3 次且中間沒有其他工具呼叫就擋下（舊行為不變）。一支檔案內含共用核心
+  （簽章、狀態、門檻、稽核紀錄）與四個薄 adapter，因為 hook 平放安裝、不能互相 import：
+  Codex 回 `{"decision":"block"}`（需 `--agent codex`，payload 與 Claude 相似）、Cursor 走
+  `preToolUse`（`Shell|Read|Write|Delete`）回 `{"permission":"deny"}`、Antigravity 走 `PreToolUse`
+  （`toolCall`）回 `{"decision":"deny"}`。Cursor 不用 `beforeReadFile`：它沒有 offset／limit，分頁讀大檔會被誤判。
+  Cursor／Antigravity 的 Read 以整組工具參數當簽章，不依賴猜測的欄位名。
+- **`install.py --agent <claude|codex|cursor|antigravity> --hooks anti-doom-loop-guard` 只安裝這個 hook。**
+  Claude 端把既有手動安裝（同檔名、同 matcher 的 `PreToolUse` 登記，引號／斜線／大小寫不同也算）
+  視為已存在，不重複加入。Antigravity 首度支援 hook：合併進 `~/.gemini/config/hooks.json`
+  （頂層以 hook 名稱為 key），命令不加引號、路徑含空白時拒絕安裝；沒有 `--hooks` 時 Antigravity
+  仍只裝 skills。`--dry-run` 現在會列出會複製與合併的檔案。
+- **`verify-install.py` 對四個 agent 都 live-fire `anti-doom-loop-guard`**：改檔夾在中間不擋、連續
+  3 次相同指令依該 agent 的格式擋；並檢查 Antigravity 命令無引號與 Codex 的 `--agent codex`。
+
+### 變更
+
+- `--hooks all` 現在也會安裝 `anti-doom-loop-guard`（預設清單不變）。
+- 安裝器寫入 JSON 設定後會真的讀回比對，再印出「re-read and valid」（先前只印不讀）。
+
+### 修正
+
+- 狀態檔名含 session id，現在會過濾路徑字元；先前含 `/` 的 id 會讓狀態寫入無聲失敗而失去防護。
+
 ## 2026-09-20
 
 ### 修正

@@ -22,6 +22,37 @@ This copies the complete skill packages into the Antigravity global skills direc
 
 ---
 
+## Hooks (optional)
+
+Antigravity's `PreToolUse` hook fires before a tool runs and can answer `{"decision": "deny"}` to block it, so guard hooks have a real interception point here (official reference: `agy-customizations/docs/hooks.md`, bundled with `agy`). This repo ships one Antigravity registration so far:
+
+```bash
+python scripts/install.py --dry-run --agent antigravity --hooks anti-doom-loop-guard
+python scripts/install.py --agent antigravity --hooks anti-doom-loop-guard
+```
+
+| Item | Detail |
+|---|---|
+| Script | `~/.gemini/config/hooks/anti_doom_loop_guard.py` |
+| Registration | `~/.gemini/config/hooks.json`; the **top-level key is the hook's name** (`anti-doom-loop-guard`) with its events underneath, unlike Claude Code's nested `hooks` block |
+| Event / matcher | `PreToolUse`, `run_command\|view_file\|write_to_file\|replace_file_content\|multi_replace_file_content` (tool names are the lowercased step types) |
+| Behaviour | denies the same `run_command` or `view_file` three times in a row with no other tool call in between; edit tools reset the count |
+| Deny format | stdout `{"decision":"deny","reason":"..."}`, exit 0 |
+| Allow format | stdout `{}`. It does not answer `{"decision":"allow"}`: in Antigravity `allow` means "approve this call automatically", which would skip a permission prompt you still want |
+| Backup | backed up to `~/.gemini/backups/hooks.json.bak-<time>` first; read back after writing; re-running does not duplicate |
+
+The installer adds only its own entry and keeps every other hook name and your own content as it was. Without `--hooks`, Antigravity gets skills only; `--hooks all` installs only hooks that have an Antigravity registration, and any other name prints a note and is skipped.
+
+**No quotes in the command, and no whitespace in the path.** Antigravity's bundled reference says the command runs through `cmd /c` (Windows) or `sh -c`, but at least one build splits argv itself and handles no quotes; no quotes and no whitespace work under both readings. So the installer writes `python C:\Users\<you>\.gemini\config\hooks\anti_doom_loop_guard.py`. If the path has whitespace or a quote the installer refuses and says why; pass `--gemini-dir` with a path that has none.
+
+Known limits:
+
+- The official reference does not list `view_file`'s argument names; the script uses the whole argument object as the signature, so it never depends on a particular name and does not mistake paging for a retry.
+- The other five hooks (claim-guard, test-gate-guard, danger-zone-guard, lint-gate, no-emoji-guard) have no Antigravity registration yet, and the installer writes nothing to `hooks.json` for them.
+- If your `hooks.json` already has a top-level `hooks` block in Claude Code's layout, the installer warns and leaves it alone; one Antigravity build reported `invalid hook "hooks"` for such a file, so trust what `agy` actually loads.
+
+---
+
 ## Rules Integration (GEMINI.md)
 
 Antigravity supports hierarchical rule resolution (Global: `~/.gemini/GEMINI.md`, Project: `GEMINI.md` or `.agents/rules/*.md` in repo root).
@@ -82,3 +113,5 @@ Run self-verification:
 ```bash
 python scripts/verify-install.py --agent antigravity
 ```
+
+When `anti-doom-loop-guard` is registered, it checks the registration (no quotes, matcher) and live-fires an Antigravity-shaped payload: an edit in between does not block, three identical commands in a row do.

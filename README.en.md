@@ -37,6 +37,17 @@ These guardrails are defense-in-depth, not a sandbox or formal policy engine. Th
 
 See [`hooks/`](hooks) for platform-specific implementations and interface details.
 
+### Optional: `anti-doom-loop-guard`
+
+Blocks the same Bash or Read call issued three times in a row with no other tool call in between. One edit (or any other registered tool) between two identical commands resets the count, so the normal "run tests, edit, run tests" loop is never touched. It pushes the agent to change approach instead of retrying verbatim. One file serves Claude Code, Codex, Cursor and Antigravity, each answered in that agent's own deny format; set the threshold with `ANTI_DOOM_LOOP_THRESHOLD`; any error fails open.
+
+It is not in the default set and not one of the five above; `--hooks anti-doom-loop-guard` (or `--hooks all`) installs it. To install only this hook:
+
+```bash
+python scripts/install.py --dry-run --agent codex --hooks anti-doom-loop-guard
+python scripts/install.py --agent codex --hooks anti-doom-loop-guard
+```
+
 ## Twelve workflow skills
 
 `explain`, `polite`, `first-principles`, `checkpoint`, `neat-freak`, `review-loop`, `info-diet`, `asd-ste100`, `iso-24495`, `phantom-pushback`, `verification-protocol`, and `task-orchestrator`.
@@ -47,10 +58,10 @@ They are optional workflows, not required dependencies of the five guardrail hoo
 
 | Agent / environment | Hooks | Skills / rules | Installation status |
 |---|---|---|---|
-| **Claude Code** | all five hooks; Windows selects Python builds where needed | `~/.claude/skills/` + CLAUDE rule templates | automated by `install.py` |
-| **OpenAI Codex** | all five hooks; Windows uses Python builds and absolute interpreter paths | `~/.agents/skills/` | `install.py --agent codex` |
-| **Google Antigravity / Gemini** | no equivalent hook registration in this repo today | skills + `GEMINI.md` templates | `install.py --agent antigravity` installs skills |
-| **Cursor** | all five hooks, written to `~/.cursor/hooks.json` in Cursor's flat format | `~/.cursor/skills/`; also merged into `~/.agents/skills/` when that directory already exists | `install.py --agent cursor` |
+| **Claude Code** | all five hooks; Windows selects Python builds where needed; optional `anti-doom-loop-guard` | `~/.claude/skills/` + CLAUDE rule templates | automated by `install.py` |
+| **OpenAI Codex** | all five hooks; Windows uses Python builds and absolute interpreter paths; optional `anti-doom-loop-guard` (`PreToolUse`, shell commands only) | `~/.agents/skills/` | `install.py --agent codex` |
+| **Google Antigravity / Gemini** | only the optional `anti-doom-loop-guard` (`PreToolUse` can deny); the other five hooks have no Antigravity registration yet | skills + `GEMINI.md` templates | `install.py --agent antigravity` installs skills |
+| **Cursor** | all five hooks, written to `~/.cursor/hooks.json` in Cursor's flat format; optional `anti-doom-loop-guard` (`preToolUse`) | `~/.cursor/skills/`; also merged into `~/.agents/skills/` when that directory already exists | `install.py --agent cursor` |
 
 Accordingly, `--agent all` currently means **Claude Code + Antigravity + Cursor + Codex**. Cursor's `stop` event cannot veto a finished turn, so claim-guard and lint-gate follow up there instead of blocking.
 
@@ -70,12 +81,21 @@ Then install:
 python scripts/install.py --hooks all --skills all
 ```
 
-### Google Antigravity / Gemini skills
+### Google Antigravity / Gemini
 
 ```bash
 python scripts/install.py --dry-run --agent antigravity --skills all
 python scripts/install.py --agent antigravity --skills all
 ```
+
+Without `--hooks`, Antigravity gets skills only. To install a hook, name it (there is one so far):
+
+```bash
+python scripts/install.py --dry-run --agent antigravity --hooks anti-doom-loop-guard
+python scripts/install.py --agent antigravity --hooks anti-doom-loop-guard
+```
+
+The script goes into `~/.gemini/config/hooks/` and one entry keyed by the hook's name is **merged** into `~/.gemini/config/hooks.json` (backed up to `~/.gemini/backups/` first, read back after writing). Antigravity may split the hook command itself (its bundled reference says `cmd /c` / `sh -c`, but promises nothing about quote handling), so the command has **no quotes** and the path must contain no whitespace, which works under either reading; the installer refuses a path with a space, so pass `--gemini-dir` with one that has none. Details in [`docs/antigravity-install.en.md`](docs/antigravity-install.en.md).
 
 ### Cursor
 
@@ -84,7 +104,7 @@ python scripts/install.py --dry-run --agent cursor --hooks all --skills all
 python scripts/install.py --agent cursor --hooks all --skills all
 ```
 
-User-level Cursor hooks go in `~/.cursor/hooks.json`. Shell guards use `beforeShellExecution`; the emoji guard uses `preToolUse` (`Write`). See [`docs/cursor-install.en.md`](docs/cursor-install.en.md).
+User-level Cursor hooks go in `~/.cursor/hooks.json`. Shell guards use `beforeShellExecution`; the emoji guard uses `preToolUse` (`Write`); `anti-doom-loop-guard` uses `preToolUse` (`Shell|Read|Write|Delete`). See [`docs/cursor-install.en.md`](docs/cursor-install.en.md).
 
 ### OpenAI Codex
 
@@ -126,7 +146,7 @@ python scripts/verify-install.py
 
 The verifier does more than inspect configuration: it feeds synthetic payloads into installed hooks and checks their actual allow / block behavior. Exit code `0` means the items it checked passed.
 
-It primarily verifies Claude Code hooks and the Antigravity skills directory, and live-fires Cursor / Codex hooks when those installs are present.
+It primarily verifies Claude Code hooks and the Antigravity skills directory, and live-fires Cursor / Codex hooks when those installs are present. `anti-doom-loop-guard` is live-fired on all four agents with each agent's own payload and deny format.
 
 ## Windows
 

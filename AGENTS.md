@@ -27,7 +27,7 @@ Harness Guard 是 cross-agent AI coding guardrails kit。核心產品是：
 | Agent | 目前自動化範圍 |
 |---|---|
 | Claude Code | `install.py` 可安裝 hooks + skills；`verify-install.py` 可 live-fire 已安裝 hooks |
-| Google Antigravity / Gemini | `install.py --agent antigravity` 可安裝 skills；另有 `GEMINI.md` 範本 |
+| Google Antigravity / Gemini | `install.py --agent antigravity` 可安裝 skills；`--hooks anti-doom-loop-guard` 合併進 `~/.gemini/config/hooks.json`（目前只有這一個 hook 有 Antigravity 登記）；另有 `GEMINI.md` 範本 |
 | OpenAI Codex | `install.py --agent codex` 合併進 `~/.codex/hooks.json`，skills 寫入 `~/.agents/skills/`（Windows 用 Python 版與絕對路徑） |
 | Cursor | `install.py --agent cursor` 寫入 `~/.cursor/hooks.json`（扁平格式）與 `~/.cursor/hooks/` |
 
@@ -131,6 +131,7 @@ python scripts/install.py --agent codex --hooks all --skills all
 - Codex hook 由 `install.py --agent codex` 合併進 `~/.codex/hooks.json`；Windows 必須用絕對路徑的 Python 版，不要註冊 `python3 ~/.codex/hooks/...`。Codex 使用者層 skills 寫入官方位置 `~/.agents/skills/`；不要再建立新的 `~/.codex/skills/`，也不要自動刪除使用者既有的 legacy 內容。
 - Codex hooks 預設啟用；若使用者曾關閉，設定 `[features].hooks = true`。註冊變更後要提醒使用者在 `/hooks` 檢視並信任目前定義；直接執行 hook 的 verifier 不能證明 TUI trust 狀態。
 - Cursor hook 由 `install.py --agent cursor` 寫入扁平的 `~/.cursor/hooks.json`。不要把 Claude Code 的 nested `hooks[].hooks[]` 結構寫進 Cursor。
+- `anti-doom-loop-guard` 是選裝（不在預設清單）。同一支 `anti_doom_loop_guard.py` 服務四個 agent，用各 agent 專有欄位／事件名分辨；Codex 要靠 `--agent codex`。Antigravity 的登記是 `~/.gemini/config/hooks.json` 頂層以 hook 名稱為 key，命令**不加引號**、路徑不可含空白；其放行輸出是 `{}`，不是 `{"decision":"allow"}`（那會自動核准）。
 
 ## 規則檔範本：merge，不是覆蓋
 
@@ -189,6 +190,7 @@ python scripts/verify-install.py
 python hooks/danger-zone-guard/tests/run-tests.py
 python hooks/test-gate-guard/tests/run-tests.py
 python hooks/checkout-guard/tests/run-tests.py
+python hooks/anti-doom-loop-guard/tests/run-tests.py
 python hooks/tests/run-encoding-tests.py
 python hooks/tests/run-agent-protocol-tests.py
 python hooks/no-emoji-guard/tests/run-config-tests.py

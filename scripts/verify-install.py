@@ -201,6 +201,42 @@ def check_antigravity():
     else:
         note("Antigravity skills", "not yet populated under %s" % skills_dir)
 
+    path = GEMINI_DIR / "config" / "hooks.json"
+    if not path.exists():
+        note("Antigravity hooks.json", "does not exist yet at %s (skipped)" % path)
+        return
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
+        record(False, "Antigravity hooks.json is valid JSON", str(exc))
+        return
+    record(True, "Antigravity hooks.json is valid JSON", str(path))
+    entry = data.get("anti-doom-loop-guard") if isinstance(data, dict) else None
+    if entry is None:
+        note("Antigravity anti-doom-loop-guard", "not registered, skipped")
+        return
+
+    groups = (entry or {}).get("PreToolUse") if isinstance(entry, dict) else None
+    commands = [h.get("command", "") for g in groups or [] if isinstance(g, dict)
+                for h in g.get("hooks") or [] if isinstance(h, dict)]
+    record(bool(commands), "Antigravity anti-doom-loop-guard is registered on PreToolUse",
+           "%d handler(s)" % len(commands))
+    quoted = [c for c in commands if '"' in c or "'" in c]
+    record(not quoted, "Antigravity hook command has no quotes (Antigravity may split it without a shell)",
+           quoted[0][:80] if quoted else "")
+    if isinstance(entry, dict) and entry.get("enabled") is False:
+        note("Antigravity anti-doom-loop-guard", 'switched off ("enabled": false), so it protects nothing')
+    matchers = {m for g in groups or [] if isinstance(g, dict)
+                for m in (g.get("matcher") or "").split("|")}
+    record({"run_command", "replace_file_content"} <= matchers,
+           "Antigravity matcher covers run_command and the edit tools",
+           "" if {"run_command", "replace_file_content"} <= matchers else "matchers: %s" % sorted(matchers))
+    script = find_hook_in(GEMINI_DIR / "config" / "hooks", DOOM_HOOK)
+    record(bool(script), "Antigravity anti-doom-loop-guard script exists")
+    if script:
+        live_fire_doom_loop("antigravity", "Antigravity", script)
+
 
 def check_cursor_config():
     section("Cursor hooks.json")
@@ -217,10 +253,12 @@ def check_cursor_config():
     record(True, "Cursor hooks.json is valid JSON", str(path))
     record(data.get("version") == 1, "Cursor hooks.json has version 1")
     hooks = data.get("hooks") or {}
+    shell_guards = hooks.get("beforeShellExecution") or []
+    tool_guards = hooks.get("preToolUse") or []
     record(
-        bool(hooks.get("beforeShellExecution")),
-        "Cursor has beforeShellExecution guards",
-        "%d entries" % len(hooks.get("beforeShellExecution") or []),
+        bool(shell_guards or tool_guards),
+        "Cursor has beforeShellExecution or preToolUse guards",
+        "%d beforeShellExecution, %d preToolUse entries" % (len(shell_guards), len(tool_guards)),
     )
     for event, entries in hooks.items():
         for entry in entries or []:
@@ -303,6 +341,99 @@ def process_detail(*processes):
     return " | ".join(parts)
 
 
+# -- anti-doom-loop-guard, one live fire for every agent ------------------------
+
+DOOM_HOOK = "anti_doom_loop_guard.py"
+
+
+def _doom_payloads(agent):
+    """(command payload for a given command, an edit payload) in the agent's own shape."""
+    if agent == "codex":
+        return (
+            lambda cmd: {"session_id": "verify-doom", "turn_id": "t1", "hook_event_name": "PreToolUse",
+                         "tool_name": "Bash", "tool_input": {"command": cmd}},
+            {"session_id": "verify-doom", "turn_id": "t1", "hook_event_name": "PreToolUse",
+             "tool_name": "apply_patch",
+             "tool_input": {"command": "*** Begin Patch\n*** End Patch"}},
+        )
+    if agent == "cursor":
+        return (
+            lambda cmd: {"hook_event_name": "preToolUse", "cursor_version": "1.0",
+                         "conversation_id": "verify-doom", "tool_name": "Shell",
+                         "tool_input": {"command": cmd}},
+            {"hook_event_name": "preToolUse", "cursor_version": "1.0",
+             "conversation_id": "verify-doom", "tool_name": "Write",
+             "tool_input": {"path": "probe.txt", "contents": "x"}},
+        )
+    if agent == "antigravity":
+        return (
+            lambda cmd: {"toolCall": {"name": "run_command", "args": {"CommandLine": cmd}},
+                         "stepIdx": 1, "conversationId": "verify-doom"},
+            {"toolCall": {"name": "replace_file_content", "args": {"TargetFile": "probe.txt"}},
+             "stepIdx": 2, "conversationId": "verify-doom"},
+        )
+    return (
+        lambda cmd: {"session_id": "verify-doom", "hook_event_name": "PreToolUse",
+                     "tool_name": "Bash", "tool_input": {"command": cmd}},
+        {"session_id": "verify-doom", "hook_event_name": "PreToolUse", "tool_name": "Edit",
+         "tool_input": {"file_path": "probe.txt", "old_string": "a", "new_string": "b"}},
+    )
+
+
+def doom_denies(agent, proc):
+    """Did the guard say no in this agent's own deny format?"""
+    if proc is None:
+        return False
+    if agent == "claude":
+        return proc.returncode == 2 and bool((proc.stderr or "").strip())
+    try:
+        data = json.loads(proc.stdout or "{}")
+    except (TypeError, ValueError):
+        return False
+    if proc.returncode != 0 or not isinstance(data, dict):
+        return False
+    if agent == "codex":
+        return data.get("decision") == "block"
+    if agent == "cursor":
+        return data.get("permission") == "deny"
+    return data.get("decision") == "deny"
+
+
+def live_fire_doom_loop(agent, label, script, args=()):
+    """Alternating command/edit must pass; three identical commands in a row must be denied."""
+    command_payload, edit_payload = _doom_payloads(agent)
+    state = SCRATCH / ("doom-%s.json" % agent)
+    env = {
+        "ANTI_DOOM_LOOP_STATE_FILE": str(state),
+        "ANTI_DOOM_LOOP_LOG_FILE": str(SCRATCH / ("doom-%s.jsonl" % agent)),
+        "ANTI_DOOM_LOOP_THRESHOLD": "3",
+    }
+    if state.exists():
+        state.unlink()
+
+    alternating = []
+    for _ in range(3):
+        alternating.append(run_hook(script, command_payload("pytest -q"), env=env, args=args))
+        run_hook(script, edit_payload, env=env, args=args)
+    repeated = [run_hook(script, command_payload("npm run build"), env=env, args=args) for _ in range(3)]
+    if any(proc is None for proc in alternating + repeated):
+        record(False, "%s anti-doom-loop-guard runs" % label)
+        return
+    allowed_ok = all(proc.returncode == 0 and not doom_denies(agent, proc) for proc in alternating)
+    record(
+        allowed_ok,
+        "%s anti-doom-loop-guard allows a command repeated with edits in between" % label,
+        "" if allowed_ok else process_detail(*alternating[-1:]),
+    )
+    blocked_ok = (not doom_denies(agent, repeated[0]) and not doom_denies(agent, repeated[1])
+                  and doom_denies(agent, repeated[2]))
+    record(
+        blocked_ok,
+        "%s anti-doom-loop-guard blocks the third identical command in a row" % label,
+        "" if blocked_ok else process_detail(*repeated),
+    )
+
+
 def check_codex_live_fire():
     hooks_dir = CODEX_DIR / "hooks"
     settings_path = CODEX_DIR / "hooks.json"
@@ -341,6 +472,21 @@ def check_codex_live_fire():
                     if any(name in command for name in names):
                         matchers.append(matcher)
         return matchers
+
+    if registered(DOOM_HOOK):
+        doom = find_hook_in(hooks_dir, DOOM_HOOK)
+        if not doom:
+            record(False, "Codex anti-doom-loop-guard script exists")
+        else:
+            doom_command = registered_command(DOOM_HOOK)
+            record("--agent codex" in doom_command,
+                   "Codex anti-doom-loop-guard is registered with --agent codex",
+                   "" if "--agent codex" in doom_command else doom_command[:80])
+            doom_matchers = registered_matchers(DOOM_HOOK)
+            doom_ok = any({"Bash", "apply_patch"} <= set(m.split("|")) for m in doom_matchers)
+            record(doom_ok, "Codex anti-doom-loop-guard matcher covers Bash and apply_patch",
+                   "" if doom_ok else "matchers: %s" % (doom_matchers or ["<missing>"]))
+            live_fire_doom_loop("codex", "Codex", doom, args=("--agent", "codex"))
 
     tracker_names = ("claim_ledger_tracker.py", "claim-ledger-tracker.sh")
     guard_names = ("claim_evidence_guard.py", "claim-evidence-guard.sh")
@@ -641,6 +787,19 @@ def check_cursor_live_fire():
         note("Cursor hooks", "not installed, skipped")
         return
     section("Live fire (Cursor payload shape)")
+    doom = find_hook_in(hooks_dir, DOOM_HOOK)
+    if doom:
+        registered = False
+        try:
+            with open(CURSOR_DIR / "hooks.json", encoding="utf-8") as fh:
+                pre = (json.load(fh).get("hooks") or {}).get("preToolUse") or []
+            registered = any(isinstance(e, dict) and DOOM_HOOK in (e.get("command") or "")
+                             and {"Shell", "Write"} <= set((e.get("matcher") or "").split("|"))
+                             for e in pre)
+        except (OSError, ValueError, UnicodeDecodeError):
+            pass
+        record(registered, "Cursor anti-doom-loop-guard is registered on preToolUse for Shell, Read and Write")
+        live_fire_doom_loop("cursor", "Cursor", doom)
     test_gate = find_hook_in(hooks_dir, "test_gate_guard.py")
     danger = find_hook_in(hooks_dir, "danger_zone_guard.py")
     if test_gate:
@@ -907,6 +1066,14 @@ def check_danger_zone_guard():
     record(safe.returncode == 0, "danger-zone-guard allows safe `rm -rf dist/`")
 
 
+def check_anti_doom_loop_guard():
+    hook = find_hook(DOOM_HOOK)
+    if not hook:
+        note("anti-doom-loop-guard", "not installed, skipped")
+        return
+    live_fire_doom_loop("claude", "Claude Code", hook)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -939,6 +1106,7 @@ def main():
         check_lint_gate()
         check_test_gate()
         check_danger_zone_guard()
+        check_anti_doom_loop_guard()
     if _args.agent in ("cursor", "all"):
         check_cursor_live_fire()
     if _args.agent in ("codex", "all"):

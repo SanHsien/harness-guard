@@ -8,6 +8,7 @@
     python scripts/install.py --agent cursor --hooks all --skills all
     python scripts/install.py --agent codex --hooks all --skills all
     python scripts/install.py --agent all --hooks all --skills all
+    python scripts/install.py --agent antigravity --hooks anti-doom-loop-guard
 
 What it does:
 
@@ -25,12 +26,16 @@ What it does:
      copies Python hooks to ~/.cursor/hooks/. `--agent codex` merges into
      ~/.codex/hooks.json with absolute interpreter paths and installs user
      skills into the shared ~/.agents/skills location Codex documents.
-  7. `--agent all` is Claude Code + Antigravity + Cursor + Codex.
+  7. `--agent antigravity --hooks <name>` merges a named hook into
+     ~/.gemini/config/hooks.json. Only anti-doom-loop-guard has an Antigravity
+     registration; without an explicit --hooks, Antigravity gets skills only.
+  8. `--agent all` is Claude Code + Antigravity + Cursor + Codex.
 """
 import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import stat
 import sys
@@ -85,6 +90,19 @@ HOOKS = {
             },
             "event": "PreToolUse",
             "matcher": "Bash",
+            "timeout": 10,
+        },
+    ],
+    "anti-doom-loop-guard": [
+        {
+            # One self-contained file for every agent: it tells the callers
+            # apart by their own payload fields (see the module docstring).
+            "source": {
+                "windows": "hooks/anti-doom-loop-guard/claude-code/anti_doom_loop_guard.py",
+                "posix": "hooks/anti-doom-loop-guard/claude-code/anti_doom_loop_guard.py",
+            },
+            "event": "PreToolUse",
+            "matcher": "Bash|PowerShell|Read|Edit|Write|MultiEdit|NotebookEdit",
             "timeout": 10,
         },
     ],
@@ -143,6 +161,19 @@ CURSOR_HOOKS = {
         {
             "source": "hooks/danger-zone-guard/claude-code/danger_zone_guard.py",
             "event": "beforeShellExecution",
+            "timeout": 10,
+        },
+    ],
+    "anti-doom-loop-guard": [
+        {
+            # preToolUse fires for every tool and carries the whole tool input,
+            # so Shell and Read are counted with their real arguments and a
+            # Write or Delete in between resets the count. beforeReadFile is
+            # not used: it has no offset or limit, so paging through a file
+            # would look like a loop.
+            "source": "hooks/anti-doom-loop-guard/claude-code/anti_doom_loop_guard.py",
+            "event": "preToolUse",
+            "matcher": "Shell|Read|Write|Delete",
             "timeout": 10,
         },
     ],
@@ -210,6 +241,20 @@ CODEX_HOOKS = {
             "timeout": 10,
         },
     ],
+    "anti-doom-loop-guard": [
+        {
+            # Codex's payload looks like Claude's, so the caller is named
+            # explicitly. Codex has no read tool; apply_patch resets the count.
+            "source": {
+                "windows": "hooks/anti-doom-loop-guard/claude-code/anti_doom_loop_guard.py",
+                "posix": "hooks/anti-doom-loop-guard/claude-code/anti_doom_loop_guard.py",
+            },
+            "args": ("--agent", "codex"),
+            "event": "PreToolUse",
+            "matcher": "exec|shell|exec_command|shell_command|Bash|apply_patch|Write|Edit|MultiEdit",
+            "timeout": 10,
+        },
+    ],
     "lint-gate": [
         {
             "source": {
@@ -236,6 +281,23 @@ CODEX_HOOKS = {
 }
 
 
+# Antigravity reads ~/.gemini/config/hooks.json, where each top-level key is a
+# hook NAME holding its events (not Claude Code's nested `hooks` block). Tool
+# names are the lowercased step types. Only this hook has an Antigravity
+# registration: the other builds were written for Claude Code's protocol, and
+# nothing here registers a hook that has not been checked against Antigravity's.
+ANTIGRAVITY_HOOKS = {
+    "anti-doom-loop-guard": [
+        {
+            "source": "hooks/anti-doom-loop-guard/claude-code/anti_doom_loop_guard.py",
+            "event": "PreToolUse",
+            "matcher": "run_command|view_file|write_to_file|replace_file_content|multi_replace_file_content",
+            "timeout": 10,
+        },
+    ],
+}
+
+
 def build_command(installed_path, extra_args=()):
     """The command line for an installed hook script."""
     quoted = '"%s"' % installed_path
@@ -248,6 +310,34 @@ def build_command(installed_path, extra_args=()):
         if git_bash.exists():
             return '"%s" %s' % (git_bash, quoted)
     return quoted
+
+
+def build_command_unquoted(installed_path, extra_args=()):
+    """A command line with no quoting, for Antigravity.
+
+    Antigravity's reference says commands run through `cmd /c` or `sh -c`, but a
+    build that splits argv itself and handles no quotes is known, so the path
+    has to survive being cut at whitespace and carry no quote. The caller must
+    have checked that it contains neither.
+    """
+    interpreter = "python" if IS_WINDOWS else "python3"
+    return " ".join([interpreter, str(installed_path), *extra_args])
+
+
+def normalize_command(command):
+    """A command reduced to what decides whether two registrations are the same.
+
+    Quoting, slash direction and case do not change which script runs with
+    which arguments, so a hook added by hand without quotes or with forward
+    slashes is recognised as the one the installer would write itself, instead
+    of being treated as another hook (a duplicate) or as a stale one (replaced).
+    """
+    text = command.replace('"', "").replace("'", "").replace("\\", "/")
+    return " ".join(text.lower().split())
+
+
+def same_command(left, right):
+    return normalize_command(left or "") == normalize_command(right or "")
 
 
 def load_settings(path):
@@ -269,7 +359,7 @@ def hook_script_path(command):
     import re as _re
     match = _re.search(r'"([^"]+\.(?:py|sh))"', command) or _re.search(
         r"(\S+\.(?:py|sh))", command)
-    return match.group(1).lower() if match else command.lower()
+    return match.group(1).lower().replace("\\", "/") if match else command.lower()
 
 
 def drop_stale_registrations(settings, event, command, flat=False):
@@ -278,12 +368,13 @@ def drop_stale_registrations(settings, event, command, flat=False):
     removed = 0
     for entry in list(settings.get("hooks", {}).get(event) or []):
         if flat:
-            if isinstance(entry, dict) and entry.get("command") != command                     and hook_script_path(entry.get("command", "")) == script:
+            if (isinstance(entry, dict) and not same_command(entry.get("command"), command)
+                    and hook_script_path(entry.get("command", "")) == script):
                 settings["hooks"][event].remove(entry)
                 removed += 1
             continue
         kept = [h for h in entry.get("hooks", []) or []
-                if h.get("command") == command
+                if same_command(h.get("command"), command)
                 or hook_script_path(h.get("command", "")) != script]
         removed += len(entry.get("hooks", []) or []) - len(kept)
         entry["hooks"] = kept
@@ -297,14 +388,14 @@ def drop_stale_registrations(settings, event, command, flat=False):
 def already_registered(settings, event, command):
     for entry in (settings.get("hooks", {}).get(event) or []):
         for hook in entry.get("hooks", []) or []:
-            if hook.get("command") == command:
+            if same_command(hook.get("command"), command):
                 return True
     return False
 
 
 def already_registered_cursor(settings, event, command):
     for entry in settings.get("hooks", {}).get(event) or []:
-        if isinstance(entry, dict) and entry.get("command") == command:
+        if isinstance(entry, dict) and same_command(entry.get("command"), command):
             return True
     return False
 
@@ -488,6 +579,7 @@ def install_for_claude(args):
             planned.append((spec, source, target, command, state))
 
     if args.dry_run:
+        report_dry_run(planned, hooks_dir, settings_path)
         return install_skills(args, claude_dir / "skills")
 
     hooks_dir.mkdir(parents=True, exist_ok=True)
@@ -562,12 +654,36 @@ def backup_json(path, backup_root):
 
 
 def write_json_atomic(path, data):
+    """Write JSON next to its final name, swap it in, then read it back.
+
+    The read-back is what "re-read and valid" in the installer output stands
+    for: the file on disk is parsed as UTF-8 JSON and has to equal what was
+    meant to be written. If it does not, the error says so instead of the run
+    claiming success.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
     os.replace(tmp, path)
+    with open(path, encoding="utf-8") as fh:
+        if json.load(fh) != data:
+            raise ValueError("%s does not read back as written" % path)
+
+
+def report_dry_run(planned, hooks_dir, settings_path):
+    """Say what a real run would write. Nothing is written here."""
+    if not planned:
+        return
+    print("\nwould write (dry run, nothing was written):")
+    for _spec, source, target, _command, _state in planned:
+        print("  copy     %s%s" % (target, "  (replaces the file there)" if target.exists() else ""))
+    pending = [item for item in planned if item[4] != "already registered"]
+    if pending:
+        print("  merge    %d registration(s) into %s (backed up first)" % (len(pending), settings_path))
+    else:
+        print("  keep     %s unchanged, every registration is already there" % settings_path)
 
 
 def install_for_cursor(args):
@@ -616,6 +732,7 @@ def install_for_cursor(args):
     if args.agent != "all" and agents_skills.exists():
         skill_targets.append(agents_skills)
     if args.dry_run:
+        report_dry_run(planned, hooks_dir, settings_path)
         rc = 0
         for target_skills_dir in skill_targets:
             result = install_skills(args, target_skills_dir)
@@ -694,7 +811,10 @@ def install_for_codex(args):
                 print("SKIP %s -- missing %s" % (name, source))
                 continue
             target = hooks_dir / source.name
-            command = build_command(target, spec.get("args_windows", ()) if IS_WINDOWS else ())
+            command = build_command(
+                target,
+                tuple(spec.get("args", ())) + (tuple(spec.get("args_windows", ())) if IS_WINDOWS else ()),
+            )
             state = "already registered" if already_registered(
                 settings, spec["event"], command
             ) else "will register"
@@ -704,6 +824,7 @@ def install_for_codex(args):
 
     skills_dir = Path.home() / ".agents" / "skills"
     if args.dry_run:
+        report_dry_run(planned, hooks_dir, settings_path)
         return install_skills(args, skills_dir)
 
     hooks_dir.mkdir(parents=True, exist_ok=True)
@@ -745,13 +866,171 @@ def install_for_codex(args):
     return install_skills(args, skills_dir)
 
 
+def antigravity_selection(args):
+    """Which hooks to register for Antigravity, or None on a bad name.
+
+    The default --hooks list is the Claude Code set, so Antigravity installs no
+    hooks unless --hooks was passed. Names that exist but have no Antigravity
+    registration are skipped with a note, so `--agent all --hooks claim-guard`
+    does not fail halfway through.
+    """
+    if not args.hooks_explicit:
+        return []
+    requested = list(ANTIGRAVITY_HOOKS) if args.hooks == "all" else [
+        name.strip() for name in args.hooks.split(",") if name.strip()
+    ]
+    unknown = [name for name in requested if name not in HOOKS]
+    if unknown:
+        print("Unknown hook(s): %s" % ", ".join(unknown))
+        print("Available: %s" % ", ".join(HOOKS))
+        return None
+    unsupported = [name for name in requested if name not in ANTIGRAVITY_HOOKS]
+    if unsupported:
+        print("note     : no Antigravity registration for %s (only %s); skipped"
+              % (", ".join(unsupported), ", ".join(ANTIGRAVITY_HOOKS)))
+    return [name for name in requested if name in ANTIGRAVITY_HOOKS]
+
+
+def antigravity_registered(config, name, spec, command):
+    for group in (config.get(name) or {}).get(spec["event"]) or []:
+        for hook in (group.get("hooks") or []) if isinstance(group, dict) else []:
+            if isinstance(hook, dict) and same_command(hook.get("command"), command):
+                return True
+    return False
+
+
+def drop_stale_antigravity(config, name, spec, command):
+    """Remove handlers that run the same script under a different command."""
+    script = hook_script_path(command)
+    removed = 0
+    groups = (config.get(name) or {}).get(spec["event"]) or []
+    for group in list(groups):
+        if not isinstance(group, dict):
+            continue
+        hooks = group.get("hooks") or []
+        kept = [h for h in hooks
+                if not isinstance(h, dict) or same_command(h.get("command"), command)
+                or hook_script_path(h.get("command", "")) != script]
+        removed += len(hooks) - len(kept)
+        group["hooks"] = kept
+        if not kept:
+            groups.remove(group)
+    return removed
+
+
+def register_antigravity(config, name, spec, command):
+    """Add one handler under the hook's own name, reusing a matching matcher group."""
+    groups = config.setdefault(name, {}).setdefault(spec["event"], [])
+    definition = {"type": "command", "command": command}
+    if spec.get("timeout"):
+        definition["timeout"] = spec["timeout"]
+    for group in groups:
+        if isinstance(group, dict) and group.get("matcher") == spec["matcher"]:
+            group.setdefault("hooks", []).append(definition)
+            return
+    groups.append({"matcher": spec["matcher"], "hooks": [definition]})
+
+
 def install_for_antigravity(args):
     print("\n=== Google Antigravity (AGY) Installation ===")
-    gemini_dir = Path.home() / ".gemini"
-    skills_target = gemini_dir / "config" / "skills"
-    print("target   : %s" % skills_target)
-    if not args.dry_run:
-        skills_target.mkdir(parents=True, exist_ok=True)
+    gemini_dir = Path(args.gemini_dir)
+    config_dir = gemini_dir / "config"
+    hooks_dir = config_dir / "hooks"
+    settings_path = config_dir / "hooks.json"
+    skills_target = config_dir / "skills"
+
+    selected = antigravity_selection(args)
+    if selected is None:
+        return 2
+
+    print("target   : %s" % config_dir)
+    print("hooks    : %s" % (", ".join(selected) if selected else "(none)"))
+    if selected:
+        print("note     : Antigravity PreToolUse can deny a call; hooks.json holds one named "
+              "entry per hook, other entries are left as they are")
+
+    planned = []
+    config = {}
+    if selected:
+        try:
+            config = load_settings(settings_path)
+        except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
+            print("hooks.json could not be read: %s" % exc)
+            return 1
+        if not isinstance(config, dict):
+            print("hooks.json is not a JSON object; refusing to touch it")
+            return 1
+        for name in selected:
+            if name in config and not isinstance(config[name], dict):
+                print("hooks.json entry %r is not an object; refusing to touch it" % name)
+                return 1
+            if config.get(name, {}).get("enabled") is False:
+                print("note     : %s is switched off in hooks.json (\"enabled\": false); "
+                      "it is registered but stays off until you remove that" % name)
+        if isinstance(config.get("hooks"), dict) and any(
+                key in config["hooks"] for key in ("PreToolUse", "PostToolUse", "Stop")):
+            print("note     : hooks.json has a top-level \"hooks\" block in Claude Code's "
+                  "layout. Antigravity reads top-level keys as hook names, and one of its "
+                  "builds rejected that file once; this installer leaves that block alone")
+
+        for name in selected:
+            for spec in ANTIGRAVITY_HOOKS[name]:
+                source = REPO / spec["source"]
+                if not source.exists():
+                    print("SKIP %s -- missing %s" % (name, source))
+                    continue
+                target = hooks_dir / source.name
+                # A build of Antigravity that cuts the command at whitespace and
+                # never unquotes it is known, so a path with a space or a quote
+                # cannot be written down safely: refuse instead of registering a
+                # command that breaks silently.
+                if re.search(r"[\s\"']", str(target)):
+                    print("FAIL %s -- %s contains a space or quote and Antigravity cannot "
+                          "quote a hook command; pass --gemini-dir with a path that has none"
+                          % (name, target))
+                    return 1
+                command = build_command_unquoted(target)
+                state = "already registered" if antigravity_registered(
+                    config, name, spec, command
+                ) else "will register"
+                print("%-20s %-12s %s" % (name, spec["event"], command))
+                print("%-20s %-12s %s" % ("", "", state))
+                planned.append((spec, source, target, command, state, name))
+
+    if args.dry_run:
+        report_dry_run([item[:5] for item in planned], hooks_dir, settings_path)
+        return install_skills(args, skills_target)
+
+    if planned:
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        for _spec, source, target, _command, _state, _name in planned:
+            copy_hook_file(source, target)
+            if not IS_WINDOWS:
+                os.chmod(target, stat.S_IRWXU)
+        print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
+
+        backup_json(settings_path, gemini_dir / "backups")
+
+        added = 0
+        stale = 0
+        for spec, _source, _target, command, _state, name in planned:
+            stale += drop_stale_antigravity(config, name, spec, command)
+        if stale:
+            print("removed %d outdated registration(s) of the same script" % stale)
+        for spec, _source, _target, command, _state, name in planned:
+            if antigravity_registered(config, name, spec, command):
+                continue
+            register_antigravity(config, name, spec, command)
+            added += 1
+
+        if added or stale:
+            write_json_atomic(settings_path, config)
+            print("registered %d hook(s), removed %d stale; hooks.json re-read and valid"
+                  % (added, stale))
+        else:
+            print("nothing new to register in hooks.json")
+
+    skills_target.mkdir(parents=True, exist_ok=True)
     return install_skills(args, skills_target)
 
 
@@ -765,9 +1044,9 @@ def main():
     )
     parser.add_argument(
         "--hooks",
-        default=DEFAULT_HOOKS,
-        help="comma-separated: %s, or `all` (default: %s)"
-        % (", ".join(HOOKS), DEFAULT_HOOKS),
+        default=None,
+        help="comma-separated: %s, or `all` (default: %s; Antigravity installs hooks "
+        "only when this is given)" % (", ".join(HOOKS), DEFAULT_HOOKS),
     )
     parser.add_argument(
         "--skills",
@@ -788,11 +1067,19 @@ def main():
         default=str(Path.home() / ".cursor"),
     )
     parser.add_argument(
+        "--gemini-dir",
+        default=str(Path.home() / ".gemini"),
+        help="Antigravity root; hooks and skills go under <dir>/config",
+    )
+    parser.add_argument(
         "--codex-dir",
         default=os.environ.get("CODEX_HOME") or str(Path.home() / ".codex"),
     )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
+    args.hooks_explicit = args.hooks is not None
+    if args.hooks is None:
+        args.hooks = DEFAULT_HOOKS
 
     try:
         sys.stdout.reconfigure(encoding="utf-8")

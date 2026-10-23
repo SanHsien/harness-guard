@@ -8,6 +8,41 @@ Entries marked `fork` are this fork's changes relative to
 
 ---
 
+## 2026-10-23
+
+### Added
+
+- **`anti-doom-loop-guard` now covers Codex, Cursor and Antigravity and installs through the installer (`fork`).**
+  It still blocks the same Bash or Read call issued three times in a row with no other tool call in
+  between. One file holds the shared core (signature, state, threshold, audit log) and four thin
+  per-agent adapters, because hooks are installed flat and may not import each other: Codex answers
+  `{"decision":"block"}` (needs `--agent codex`; its payload resembles Claude's), Cursor runs on
+  `preToolUse` (`Shell|Read|Write|Delete`) and answers `{"permission":"deny"}`, Antigravity runs on
+  `PreToolUse` (`toolCall`) and answers `{"decision":"deny"}`. Cursor does not use `beforeReadFile`: it
+  has no offset or limit, so paging through a big file would be misread as a retry. For Cursor and
+  Antigravity reads, the whole tool-argument object is the signature rather than guessed field names.
+- **`install.py --agent <claude|codex|cursor|antigravity> --hooks anti-doom-loop-guard` installs only this hook.**
+  On Claude Code an existing manual install (same file name, a `PreToolUse` registration with that
+  matcher; quoting, slash direction and case may differ) counts as already present and is not
+  duplicated. Antigravity gets its first hook support: a named entry merged into
+  `~/.gemini/config/hooks.json`, a command with no quotes, and a refusal when the path has whitespace;
+  without `--hooks`, Antigravity still installs skills only. `--dry-run` now lists the files it would
+  copy and merge.
+- **`verify-install.py` live-fires `anti-doom-loop-guard` on all four agents**: an edit in between does
+  not block, three identical commands in a row block in that agent's format; it also checks that the
+  Antigravity command has no quotes and the Codex registration carries `--agent codex`.
+
+### Changed
+
+- `--hooks all` now also installs `anti-doom-loop-guard` (the default list is unchanged).
+- After writing JSON configuration the installer now really reads it back and compares before
+  printing "re-read and valid" (it printed that without reading before).
+
+### Fixed
+
+- The state file name contains the session id, which is now filtered to safe characters; an id with a
+  `/` used to make the state write fail silently and leave the guard doing nothing.
+
 ## 2026-09-20
 
 ### Fixed

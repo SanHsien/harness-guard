@@ -22,6 +22,37 @@ python scripts/install.py --agent antigravity --skills all
 
 ---
 
+## Hooks（選裝）
+
+Antigravity 的 `PreToolUse` hook 在工具執行前觸發，可以回 `{"decision": "deny"}` 否決，所以防呆類 hook 在這裡有真正的攔截點（官方文件：`agy` 內建的 `agy-customizations/docs/hooks.md`）。本 repo 目前只提供一個 Antigravity 登記：
+
+```bash
+python scripts/install.py --dry-run --agent antigravity --hooks anti-doom-loop-guard
+python scripts/install.py --agent antigravity --hooks anti-doom-loop-guard
+```
+
+| 項目 | 內容 |
+|---|---|
+| 腳本 | `~/.gemini/config/hooks/anti_doom_loop_guard.py` |
+| 登記 | `~/.gemini/config/hooks.json`，**頂層 key 是 hook 名稱**（`anti-doom-loop-guard`），底下才是事件；與 Claude Code 的巢狀 `hooks` 區塊不同 |
+| 事件 / matcher | `PreToolUse`，`run_command\|view_file\|write_to_file\|replace_file_content\|multi_replace_file_content`（工具名是 step type 的小寫） |
+| 行為 | 同一個 `run_command` 或 `view_file` 連續 3 次、中間沒有別的工具呼叫才否決；改檔工具讓計數歸零 |
+| 否決格式 | stdout `{"decision":"deny","reason":"..."}`，exit 0 |
+| 放行格式 | stdout `{}`。不回 `{"decision":"allow"}`：Antigravity 的 `allow` 是「自動核准這次呼叫」，會跳過你仍想要的授權彈窗 |
+| 備份 | 先備份到 `~/.gemini/backups/hooks.json.bak-<時間>`；寫完讀回驗證；重跑不重複 |
+
+安裝器只加自己那一筆，其他 hook 名稱與你自己的內容原樣保留。不帶 `--hooks` 時 Antigravity 只裝 skills；`--hooks all` 只會裝有 Antigravity 登記的 hook，其餘名稱會印一行說明並略過。
+
+**命令不加引號、路徑不能有空白。** Antigravity 內建文件寫命令經 `cmd /c`（Windows）或 `sh -c` 執行，但已知有版本自己切 argv、不處理引號；不加引號、路徑沒有空白，兩種情況都能跑。所以安裝器寫的是 `python C:\Users\<你>\.gemini\config\hooks\anti_doom_loop_guard.py`。路徑含空白或引號時安裝器直接拒絕並說明，請用 `--gemini-dir` 指到沒有空白的位置。
+
+已知限制：
+
+- `view_file` 的參數名稱官方文件沒列；腳本把整組參數當簽章，不依賴特定名稱，所以不會把分頁讀取誤判成重試。
+- 其餘 5 個 hook（claim-guard、test-gate-guard、danger-zone-guard、lint-gate、no-emoji-guard）目前沒有 Antigravity 登記，安裝器不會替它們寫 `hooks.json`。
+- 若你的 `hooks.json` 頂層已有 Claude Code 版面的 `hooks` 區塊，安裝器會提醒並原樣保留；Antigravity 曾有一個版本因為這種檔案報 `invalid hook "hooks"`，請以 `agy` 實際載入結果為準。
+
+---
+
 ## Antigravity 規則檔整合 (GEMINI.md)
 
 Antigravity 支援階層式規則載入（Global: `~/.gemini/GEMINI.md`，專案層級: 專案根目錄的 `GEMINI.md` 或 `.agents/rules/*.md`）。
@@ -80,3 +111,5 @@ Antigravity 支援階層式規則載入（Global: `~/.gemini/GEMINI.md`，專案
 ```bash
 python scripts/verify-install.py --agent antigravity
 ```
+
+已登記 `anti-doom-loop-guard` 時，它會檢查登記格式（無引號、matcher）並用 Antigravity 形狀的 payload live-fire：改檔夾在中間不擋、連續 3 次相同指令擋。

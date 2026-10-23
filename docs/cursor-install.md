@@ -38,9 +38,12 @@ Windows 上的 `command` 是 `python "C:\Users\<你>\.cursor\hooks\....py"`，�
 | test-gate-guard | `beforeShellExecution` | 可以。頂層 `command` |
 | danger-zone-guard | `beforeShellExecution` | 可以 |
 | no-emoji-guard | `preToolUse`（matcher `Write`） | 可以，回 `permission: deny` |
+| anti-doom-loop-guard | `preToolUse`（matcher `Shell\|Read\|Write\|Delete`） | 可以，回 `permission: deny`（JSON，exit 0）。Shell 與 Read 連續 3 次相同才擋，Write／Delete 讓計數歸零 |
 | claim-ledger-tracker | `postToolUse` | 只記帳，不擋 |
 | claim-evidence-guard | `stop` | **不能 veto**。有完成宣稱但沒證據時送 `followup_message` |
 | lint-gate | `stop` | 同上；專案目錄來自 payload `cwd` / `workspace_roots`，不是 `~/.cursor` |
+
+`anti-doom-loop-guard` 用 `preToolUse` 而不是 `beforeShellExecution` + `beforeReadFile`：`beforeReadFile` 只有路徑、沒有 offset／limit，分頁讀同一個大檔會被誤當成重試；`preToolUse` 帶完整 tool input，整組參數當簽章。腳本也看得懂 `beforeShellExecution`（計數）與 `afterFileEdit`（歸零）；兩套別同時註冊，否則同一個 shell 指令會被數兩次。`beforeReadFile` 不計數。
 
 沒有 `last_assistant_message` 時，claim-evidence-guard 維持 fail-open。這不是 Cursor 特有的寬鬆，是這支 hook 一直以來的契約：解析不出訊息就不要攔。
 

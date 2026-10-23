@@ -404,6 +404,10 @@ class CodexVerifierTests(unittest.TestCase):
             self.assertIn("Codex test-gate-guard blocks", proc.stdout)
             self.assertIn("Codex danger-zone-guard blocks", proc.stdout)
             self.assertIn("Codex no-emoji-guard blocks", proc.stdout)
+            self.assertIn(
+                "PASS Codex anti-doom-loop-guard blocks the third identical command in a row",
+                proc.stdout,
+            )
 
     def test_codex_claim_tracker_alias_matcher_is_verified(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -439,6 +443,405 @@ class CodexVerifierTests(unittest.TestCase):
 
             self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
             self.assertIn("FAIL Codex test-gate-guard script exists", proc.stdout)
+
+
+HOOK_NAME = "anti-doom-loop-guard"
+HOOK_FILE = "anti_doom_loop_guard.py"
+
+
+def _snapshot(*roots):
+    """Every file under the roots with its bytes and mtime, to prove a dry run wrote nothing."""
+    found = {}
+    for root in roots:
+        root = Path(root)
+        if root.is_file():
+            found[str(root)] = (root.read_bytes(), root.stat().st_mtime_ns)
+            continue
+        for path in sorted(root.rglob("*")) if root.exists() else []:
+            if path.is_file():
+                found[str(path)] = (path.read_bytes(), path.stat().st_mtime_ns)
+    return found
+
+
+class AntiDoomLoopGuardInstallTests(unittest.TestCase):
+    """`--hooks anti-doom-loop-guard` installs this hook and nothing else, per agent."""
+
+    def _run(self, home, extra):
+        env = dict(os.environ)
+        env["HOME"] = str(home)
+        env["USERPROFILE"] = str(home)
+        env["CLAUDE_CONFIG_DIR"] = str(home / ".claude")
+        env.pop("CODEX_HOME", None)
+        return subprocess.run(
+            [sys.executable, str(INSTALLER)] + extra,
+            cwd=str(REPO),
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=60,
+        )
+
+    def _fire(self, command_script, payload, *args, env_extra=None):
+        env = dict(os.environ)
+        env["ANTI_DOOM_LOOP_STATE_FILE"] = str(Path(command_script).parent / "state.json")
+        env["ANTI_DOOM_LOOP_LOG_FILE"] = str(Path(command_script).parent / "audit.jsonl")
+        env.update(env_extra or {})
+        return subprocess.run(
+            [sys.executable, str(command_script), *args],
+            input=json.dumps(payload).encode("utf-8"),
+            capture_output=True,
+            env=env,
+            timeout=30,
+        )
+
+    # -- Claude Code ---------------------------------------------------------
+
+    def _manual_settings(self, command):
+        return {
+            "hooks": {
+                "PreToolUse": [{
+                    "matcher": "Bash|PowerShell|Read|Edit|Write|MultiEdit|NotebookEdit",
+                    "hooks": [{"type": "command", "command": command, "timeout": 10}],
+                }],
+            },
+        }
+
+    def test_claude_recognises_the_manual_install_and_adds_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            claude = home / ".claude"
+            script = claude / "hooks" / HOOK_FILE
+            manual = 'python "%s"' % script
+            variants = [
+                manual,
+                'python %s' % str(script).replace("\\", "/"),
+                'PYTHON "%s"' % str(script).upper().replace("HOOKS", "hooks"),
+            ]
+            for command in variants:
+                with self.subTest(command=command):
+                    claude.mkdir(parents=True, exist_ok=True)
+                    settings_path = claude / "settings.json"
+                    settings_path.write_text(
+                        json.dumps(self._manual_settings(command)), encoding="utf-8")
+                    before = settings_path.read_bytes()
+
+                    dry = self._run(home, ["--agent", "claude", "--hooks", HOOK_NAME, "--dry-run"])
+                    self.assertEqual(dry.returncode, 0, dry.stdout + dry.stderr)
+                    self.assertIn("already registered", dry.stdout)
+                    self.assertIn("keep", dry.stdout)
+
+                    real = self._run(home, ["--agent", "claude", "--hooks", HOOK_NAME])
+                    self.assertEqual(real.returncode, 0, real.stdout + real.stderr)
+                    self.assertIn("nothing new to register", real.stdout)
+                    self.assertEqual(settings_path.read_bytes(), before,
+                                     "settings.json must be byte-identical when the hook is already there")
+                    self.assertTrue(script.exists())
+
+    def test_claude_installs_only_this_hook_with_the_documented_matcher(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            claude = home / ".claude"
+            claude.mkdir()
+            (claude / "settings.json").write_text(json.dumps({
+                "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "keep-me"}]}]},
+            }), encoding="utf-8")
+
+            proc = self._run(home, ["--agent", "claude", "--hooks", HOOK_NAME])
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            settings = json.loads((claude / "settings.json").read_text(encoding="utf-8"))
+            self.assertEqual(settings["hooks"]["Stop"][0]["hooks"][0]["command"], "keep-me")
+            pre = settings["hooks"]["PreToolUse"]
+            self.assertEqual(len(pre), 1)
+            self.assertEqual(pre[0]["matcher"], "Bash|PowerShell|Read|Edit|Write|MultiEdit|NotebookEdit")
+            self.assertEqual(len(pre[0]["hooks"]), 1)
+            self.assertEqual(sorted(p.name for p in (claude / "hooks").iterdir()), [HOOK_FILE])
+            self.assertTrue(list((claude / "backups").glob("settings.json.bak-*")))
+
+    # -- Codex ---------------------------------------------------------------
+
+    def test_codex_installs_only_this_hook_and_names_the_caller(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            codex = home / ".codex"
+            codex.mkdir()
+            (codex / "hooks.json").write_text(json.dumps({
+                "hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "keep-me"}]}]},
+            }), encoding="utf-8")
+            args = ["--agent", "codex", "--codex-dir", str(codex), "--hooks", HOOK_NAME, "--skills", "none"]
+
+            first = self._run(home, args)
+            self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+            settings = json.loads((codex / "hooks.json").read_text(encoding="utf-8"))
+            self.assertEqual(settings["hooks"]["SessionStart"][0]["hooks"][0]["command"], "keep-me")
+            pre = settings["hooks"]["PreToolUse"]
+            self.assertEqual(len(pre), 1)
+            matchers = pre[0]["matcher"].split("|")
+            for tool in ("Bash", "exec_command", "shell_command", "apply_patch"):
+                self.assertIn(tool, matchers)
+            command = pre[0]["hooks"][0]["command"]
+            self.assertTrue(command.endswith("--agent codex"), command)
+            self.assertEqual(sorted(p.name for p in (codex / "hooks").iterdir()), [HOOK_FILE])
+
+            again = self._run(home, args)
+            self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+            settings2 = json.loads((codex / "hooks.json").read_text(encoding="utf-8"))
+            self.assertEqual(settings2, settings, "re-running must not duplicate the registration")
+
+            script = codex / "hooks" / HOOK_FILE
+            patch = {"command": "*** Begin Patch\n*** End Patch"}
+            shell = {"session_id": "s", "turn_id": "t", "hook_event_name": "PreToolUse",
+                     "tool_name": "Bash", "tool_input": {"command": "pytest"}}
+            outcomes = [self._fire(script, shell, "--agent", "codex") for _ in range(3)]
+            self.assertEqual([p.returncode for p in outcomes], [0, 0, 0])
+            self.assertEqual(json.loads(outcomes[2].stdout)["decision"], "block")
+            edit = dict(shell, tool_name="apply_patch", tool_input=patch)
+            self._fire(script, edit, "--agent", "codex")
+            self.assertNotIn("block", self._fire(script, shell, "--agent", "codex").stdout.decode())
+
+    # -- Cursor --------------------------------------------------------------
+
+    def test_cursor_installs_only_this_hook_on_pretooluse(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cursor = home / ".cursor"
+            cursor.mkdir()
+            (cursor / "hooks.json").write_text(json.dumps({
+                "version": 1, "hooks": {"sessionStart": [{"command": "keep-me.py"}]},
+            }), encoding="utf-8")
+            args = ["--agent", "cursor", "--cursor-dir", str(cursor), "--hooks", HOOK_NAME, "--skills", "none"]
+
+            first = self._run(home, args)
+            self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+            settings = json.loads((cursor / "hooks.json").read_text(encoding="utf-8"))
+            self.assertEqual(settings["version"], 1)
+            self.assertEqual(settings["hooks"]["sessionStart"], [{"command": "keep-me.py"}])
+            self.assertEqual(set(settings["hooks"]), {"sessionStart", "preToolUse"})
+            entry = settings["hooks"]["preToolUse"]
+            self.assertEqual(len(entry), 1)
+            self.assertEqual(entry[0]["matcher"], "Shell|Read|Write|Delete")
+            self.assertIn(HOOK_FILE, entry[0]["command"])
+            self.assertEqual(sorted(p.name for p in (cursor / "hooks").iterdir()), [HOOK_FILE])
+
+            again = self._run(home, args)
+            self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+            self.assertEqual(json.loads((cursor / "hooks.json").read_text(encoding="utf-8")), settings)
+
+            script = cursor / "hooks" / HOOK_FILE
+            shell = {"hook_event_name": "preToolUse", "cursor_version": "1.7.2", "conversation_id": "c",
+                     "tool_name": "Shell", "tool_input": {"command": "pytest"}}
+            outcomes = [self._fire(script, shell) for _ in range(3)]
+            self.assertEqual([p.returncode for p in outcomes], [0, 0, 0])
+            self.assertEqual(json.loads(outcomes[2].stdout)["permission"], "deny")
+
+    # -- Antigravity ---------------------------------------------------------
+
+    def _agy_args(self, gemini, *extra):
+        return ["--agent", "antigravity", "--gemini-dir", str(gemini), *extra]
+
+    def _skip_if_space(self, path):
+        if any(ch.isspace() for ch in str(path)):
+            self.skipTest("Antigravity cannot quote a hook command; the temp path has a space")
+
+    def test_antigravity_merges_a_named_hook_and_leaves_the_rest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._skip_if_space(home)
+            gemini = home / ".gemini"
+            config = gemini / "config"
+            config.mkdir(parents=True)
+            existing = {
+                "danger-zone-guard": {"PreToolUse": [{"matcher": "run_command", "hooks": [
+                    {"type": "command", "command": "python keep-me.py", "timeout": 10}]}]},
+                "hooks": {"PreToolUse": [{"hooks": [{"command": "claude-shaped"}], "matcher": "run_command"}]},
+            }
+            (config / "hooks.json").write_text(json.dumps(existing), encoding="utf-8")
+            args = self._agy_args(gemini, "--hooks", HOOK_NAME)
+
+            first = self._run(home, args)
+            self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+            merged = json.loads((config / "hooks.json").read_text(encoding="utf-8"))
+            self.assertEqual(merged["danger-zone-guard"], existing["danger-zone-guard"])
+            self.assertEqual(merged["hooks"], existing["hooks"])
+            mine = merged[HOOK_NAME]["PreToolUse"]
+            self.assertEqual(len(mine), 1)
+            matchers = mine[0]["matcher"].split("|")
+            for tool in ("run_command", "view_file", "write_to_file", "replace_file_content",
+                         "multi_replace_file_content"):
+                self.assertIn(tool, matchers)
+            handler = mine[0]["hooks"][0]
+            self.assertEqual(handler["type"], "command")
+            self.assertEqual(handler["timeout"], 10)
+            self.assertNotIn('"', handler["command"], "Antigravity cannot unquote a command")
+            self.assertNotIn("'", handler["command"])
+            self.assertEqual(handler["command"].split(" ")[0], "python" if platform.system() == "Windows" else "python3")
+            self.assertTrue(handler["command"].endswith(HOOK_FILE))
+            self.assertEqual(sorted(p.name for p in (config / "hooks").iterdir()), [HOOK_FILE])
+            self.assertTrue(list((gemini / "backups").glob("hooks.json.bak-*")))
+
+            again = self._run(home, args)
+            self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+            self.assertIn("nothing new to register", again.stdout)
+            self.assertEqual(json.loads((config / "hooks.json").read_text(encoding="utf-8")), merged)
+
+            script = config / "hooks" / HOOK_FILE
+            call = {"toolCall": {"name": "run_command", "args": {"CommandLine": "pytest"}},
+                    "stepIdx": 1, "conversationId": "agy-1"}
+            outcomes = [self._fire(script, call) for _ in range(3)]
+            self.assertEqual([p.returncode for p in outcomes], [0, 0, 0])
+            self.assertEqual(json.loads(outcomes[2].stdout)["decision"], "deny")
+
+    def test_antigravity_without_hooks_flag_installs_no_hooks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._skip_if_space(home)
+            gemini = home / ".gemini"
+
+            proc = self._run(home, self._agy_args(gemini, "--skills", "explain"))
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("(none)", proc.stdout)
+            self.assertFalse((gemini / "config" / "hooks.json").exists())
+            self.assertFalse((gemini / "config" / "hooks").exists())
+            self.assertTrue((gemini / "config" / "skills" / "explain" / "SKILL.md").exists())
+
+    def test_antigravity_skips_hooks_it_has_no_registration_for(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._skip_if_space(home)
+            gemini = home / ".gemini"
+
+            proc = self._run(home, self._agy_args(gemini, "--hooks", "claim-guard,%s" % HOOK_NAME))
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("no Antigravity registration for claim-guard", proc.stdout)
+            merged = json.loads((gemini / "config" / "hooks.json").read_text(encoding="utf-8"))
+            self.assertEqual(list(merged), [HOOK_NAME])
+
+    def test_antigravity_refuses_a_path_it_cannot_quote(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            gemini = home / "has space" / ".gemini"
+
+            proc = self._run(home, self._agy_args(gemini, "--hooks", HOOK_NAME))
+
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("cannot quote", proc.stdout)
+            self.assertFalse((home / "has space").exists())
+
+    # -- every agent: dry run writes nothing -------------------------------------
+
+    def test_dry_run_per_agent_writes_nothing_and_says_what_it_would_do(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._skip_if_space(home)
+            # Real-looking configs that must come out byte-for-byte and mtime-for-mtime unchanged.
+            (home / ".claude").mkdir()
+            (home / ".claude" / "settings.json").write_text('{"hooks": {}}', encoding="utf-8")
+            (home / ".codex").mkdir()
+            (home / ".codex" / "hooks.json").write_text('{"hooks": {}}', encoding="utf-8")
+            (home / ".gemini" / "config").mkdir(parents=True)
+            (home / ".gemini" / "config" / "hooks.json").write_text('{}', encoding="utf-8")
+            before = _snapshot(home)
+
+            for agent in ("claude", "codex", "cursor", "antigravity"):
+                with self.subTest(agent=agent):
+                    proc = self._run(home, [
+                        "--dry-run", "--agent", agent, "--hooks", HOOK_NAME,
+                        "--claude-dir", str(home / ".claude"),
+                        "--codex-dir", str(home / ".codex"),
+                        "--cursor-dir", str(home / ".cursor"),
+                        "--gemini-dir", str(home / ".gemini"),
+                    ])
+                    self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                    self.assertIn(HOOK_FILE, proc.stdout)
+                    self.assertIn("will register", proc.stdout)
+                    self.assertIn("would write (dry run, nothing was written)", proc.stdout)
+                    self.assertEqual(_snapshot(home), before, "a dry run must not touch anything")
+            self.assertFalse((home / ".cursor").exists())
+
+
+class AntiDoomLoopGuardVerifierTests(unittest.TestCase):
+    """verify-install.py must live-fire this hook for every agent that has it installed."""
+
+    def _env(self, home):
+        env = dict(os.environ)
+        env["HOME"] = str(home)
+        env["USERPROFILE"] = str(home)
+        env["CLAUDE_CONFIG_DIR"] = str(home / ".claude")
+        env.pop("CODEX_HOME", None)
+        return env
+
+    def _install(self, home, env):
+        proc = subprocess.run(
+            [sys.executable, str(INSTALLER), "--agent", "all", "--hooks", HOOK_NAME, "--skills", "none"],
+            cwd=str(REPO), env=env, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=60,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+    def _verify(self, env, agent):
+        return subprocess.run(
+            [sys.executable, str(VERIFIER), "--agent", agent],
+            cwd=str(REPO), env=env, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=120,
+        )
+
+    def test_every_agent_is_live_fired(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            if any(ch.isspace() for ch in str(home)):
+                self.skipTest("Antigravity cannot quote a hook command; the temp path has a space")
+            env = self._env(home)
+            self._install(home, env)
+
+            for agent, label in (("claude", "Claude Code"), ("codex", "Codex"),
+                                 ("cursor", "Cursor"), ("antigravity", "Antigravity")):
+                with self.subTest(agent=agent):
+                    proc = self._verify(env, agent)
+                    self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                    self.assertIn(
+                        "PASS %s anti-doom-loop-guard allows a command repeated with edits in between" % label,
+                        proc.stdout)
+                    self.assertIn(
+                        "PASS %s anti-doom-loop-guard blocks the third identical command in a row" % label,
+                        proc.stdout)
+
+    def test_antigravity_command_with_quotes_fails_verification(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            if any(ch.isspace() for ch in str(home)):
+                self.skipTest("Antigravity cannot quote a hook command; the temp path has a space")
+            env = self._env(home)
+            self._install(home, env)
+            path = home / ".gemini" / "config" / "hooks.json"
+            config = json.loads(path.read_text(encoding="utf-8"))
+            handler = config[HOOK_NAME]["PreToolUse"][0]["hooks"][0]
+            handler["command"] = handler["command"].replace("python ", 'python "') + '"'
+            path.write_text(json.dumps(config), encoding="utf-8")
+
+            proc = self._verify(env, "antigravity")
+
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("FAIL Antigravity hook command has no quotes", proc.stdout)
+
+    def test_codex_registration_without_the_agent_flag_fails_verification(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            env = self._env(home)
+            self._install(home, env)
+            path = home / ".codex" / "hooks.json"
+            config = json.loads(path.read_text(encoding="utf-8"))
+            handler = config["hooks"]["PreToolUse"][0]["hooks"][0]
+            handler["command"] = handler["command"].replace(" --agent codex", "")
+            path.write_text(json.dumps(config), encoding="utf-8")
+
+            proc = self._verify(env, "codex")
+
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("FAIL Codex anti-doom-loop-guard is registered with --agent codex", proc.stdout)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,24 @@ exits 2 and names the holder; every decision is appended to
 Register it like the others, with matcher `Edit|Write|MultiEdit|NotebookEdit`:
 `python "C:\Users\<you>\...\harness-guard\hooks\checkout-guard\claude-code\checkout_guard.py"`.
 
+`anti-doom-loop-guard/` (also added by this fork, optional, not one of the five) blocks the same
+Bash or Read call issued three times in a row with no other tool call in between. It is **one self-contained
+file for all four agents**, `claude-code/anti_doom_loop_guard.py`: hooks are installed flat and may not import
+each other, so the shared core (signature, state, threshold, audit log) and the thin per-agent adapters live
+together. Only the two ends differ:
+
+| Agent | Event | Identified by | Deny |
+|---|---|---|---|
+| Claude Code | `PreToolUse`, matcher `Bash\|PowerShell\|Read\|Edit\|Write\|MultiEdit\|NotebookEdit` | `tool_name` | exit 2, reason on stderr |
+| Codex | `PreToolUse`, matcher `exec\|shell\|exec_command\|shell_command\|Bash\|apply_patch\|Write\|Edit\|MultiEdit` | `--agent codex` (its payload looks like Claude's) | `{"decision":"block","reason":...}`, exit 0 |
+| Cursor | `preToolUse`, matcher `Shell\|Read\|Write\|Delete` (`beforeShellExecution` / `afterFileEdit` also understood) | camelCase `hook_event_name` or `cursor_version` | `{"permission":"deny",...}`, exit 0 |
+| Antigravity | `PreToolUse`, matcher `run_command\|view_file\|write_to_file\|replace_file_content\|multi_replace_file_content` | `toolCall` object | `{"decision":"deny","reason":...}`, exit 0 |
+
+`--agent <claude|codex|cursor|antigravity>` overrides detection. Any other tool call resets the count, errors and
+unknown events fail open, and `ANTI_DOOM_LOOP_THRESHOLD` changes the threshold. Tests:
+`python hooks/anti-doom-loop-guard/tests/run-tests.py`. Install only this hook with
+`python scripts/install.py --agent <claude|codex|cursor|antigravity> --hooks anti-doom-loop-guard`.
+
 `danger-zone-guard/` blocks catastrophic deletions, force pushes to a protected
 branch, and credential exfiltration. The force-push rule -- and only that rule --
 has an escape hatch: put `# force-push-ok: <reason>` in the command. Squashing a

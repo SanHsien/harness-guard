@@ -37,6 +37,17 @@ Harness Guard 專注在幾個容易造成實際損失的情境：
 
 完整 hook 介面與平台版本見 [`hooks/`](hooks)。
 
+### 選裝：`anti-doom-loop-guard`
+
+同一個 Bash／Read 呼叫連續重複 3 次、中間沒有任何其他工具呼叫時擋下；中間夾一次改檔（或其他被登記的工具）就歸零，所以正常的「跑測試、改檔、再跑測試」不受影響。它逼 agent 換做法，而不是原樣重試。一支檔案同時服務 Claude Code、Codex、Cursor 與 Antigravity，各自用該 agent 的 deny 格式回應；門檻用環境變數 `ANTI_DOOM_LOOP_THRESHOLD` 調整，任何錯誤一律放行。
+
+它不在預設清單、也不計入上面的 5 個；用 `--hooks anti-doom-loop-guard`（或 `--hooks all`）才會安裝。例如只裝它：
+
+```bash
+python scripts/install.py --dry-run --agent codex --hooks anti-doom-loop-guard
+python scripts/install.py --agent codex --hooks anti-doom-loop-guard
+```
+
 ## 12 套 workflow skills
 
 `explain`、`polite`、`first-principles`、`checkpoint`、`neat-freak`、`review-loop`、`info-diet`、`asd-ste100`、`iso-24495`、`phantom-pushback`、`verification-protocol`、`task-orchestrator`。
@@ -47,10 +58,10 @@ Harness Guard 專注在幾個容易造成實際損失的情境：
 
 | Agent / 環境 | Hooks | Skills / Rules | 安裝方式 |
 |---|---|---|---|
-| **Claude Code** | 5 個 hook；Windows 會選 Python 版本 | `~/.claude/skills/` + CLAUDE 規則範本 | `install.py` 自動安裝 |
-| **OpenAI Codex** | 5 個 hook；Windows 用 Python 版並寫入絕對路徑 | `~/.agents/skills/` | `install.py --agent codex` |
-| **Google Antigravity / Gemini** | 本 repo 目前不提供等價 hook 註冊 | skills + `GEMINI.md` 範本 | `install.py --agent antigravity` 可安裝 skills |
-| **Cursor** | 5 個 hook，寫入 `~/.cursor/hooks.json`（Cursor 扁平格式） | `~/.cursor/skills/`；若本機已有 `~/.agents/skills/` 也會一併合併 | `install.py --agent cursor` |
+| **Claude Code** | 5 個 hook；Windows 會選 Python 版本；另可選裝 `anti-doom-loop-guard` | `~/.claude/skills/` + CLAUDE 規則範本 | `install.py` 自動安裝 |
+| **OpenAI Codex** | 5 個 hook；Windows 用 Python 版並寫入絕對路徑；另可選裝 `anti-doom-loop-guard`（`PreToolUse`，只計 shell 指令） | `~/.agents/skills/` | `install.py --agent codex` |
+| **Google Antigravity / Gemini** | 只有選裝的 `anti-doom-loop-guard`（`PreToolUse` 可否決）；其餘 5 個 hook 目前沒有 Antigravity 註冊 | skills + `GEMINI.md` 範本 | `install.py --agent antigravity` 可安裝 skills |
+| **Cursor** | 5 個 hook，寫入 `~/.cursor/hooks.json`（Cursor 扁平格式）；另可選裝 `anti-doom-loop-guard`（`preToolUse`） | `~/.cursor/skills/`；若本機已有 `~/.agents/skills/` 也會一併合併 | `install.py --agent cursor` |
 
 因此 `--agent all` 目前代表 **Claude Code + Antigravity + Cursor + Codex**。Cursor 的 `stop` 不能否決已結束的回合，所以 claim-guard / lint-gate 在 Cursor 上改為 follow-up，不是 veto。
 
@@ -70,12 +81,21 @@ python scripts/install.py --dry-run --hooks all --skills all
 python scripts/install.py --hooks all --skills all
 ```
 
-### Google Antigravity / Gemini skills
+### Google Antigravity / Gemini
 
 ```bash
 python scripts/install.py --dry-run --agent antigravity --skills all
 python scripts/install.py --agent antigravity --skills all
 ```
+
+不帶 `--hooks` 時 Antigravity 只裝 skills。要裝 hook，明確指定（目前只有一個）：
+
+```bash
+python scripts/install.py --dry-run --agent antigravity --hooks anti-doom-loop-guard
+python scripts/install.py --agent antigravity --hooks anti-doom-loop-guard
+```
+
+會把腳本放進 `~/.gemini/config/hooks/`，並在 `~/.gemini/config/hooks.json` **合併**一筆以 hook 名稱為 key 的登記（先備份到 `~/.gemini/backups/`、寫完讀回驗證）。Antigravity 的 hook 命令可能被它自己直接切字串（內建文件寫的是 `cmd /c`／`sh -c`，但沒有保證能去引號），所以命令**不加引號**，路徑也不能含空白，兩種解讀下都能執行；含空白時安裝器會拒絕，請用 `--gemini-dir` 指到沒有空白的位置。細節見 [`docs/antigravity-install.md`](docs/antigravity-install.md)。
 
 ### Cursor
 
@@ -84,7 +104,7 @@ python scripts/install.py --dry-run --agent cursor --hooks all --skills all
 python scripts/install.py --agent cursor --hooks all --skills all
 ```
 
-Cursor 使用者層 hook 寫在 `~/.cursor/hooks.json`。shell 攔截走 `beforeShellExecution`；emoji 攔截走 `preToolUse`（`Write`）。細節見 [`docs/cursor-install.md`](docs/cursor-install.md)。
+Cursor 使用者層 hook 寫在 `~/.cursor/hooks.json`。shell 攔截走 `beforeShellExecution`；emoji 攔截走 `preToolUse`（`Write`）；`anti-doom-loop-guard` 走 `preToolUse`（`Shell|Read|Write|Delete`）。細節見 [`docs/cursor-install.md`](docs/cursor-install.md)。
 
 ### OpenAI Codex
 
@@ -126,7 +146,7 @@ python scripts/verify-install.py
 
 這支工具不只讀設定檔，而會對已安裝 hook 餵合成 payload，確認它真的執行並產生預期的 allow / block 行為。exit code `0` 才代表它檢查到的項目通過。
 
-它主要驗證 Claude Code hook 與 Antigravity skills 目錄，並在本機已安裝時檢查 Cursor / Codex 的設定檔與 live-fire 行為。
+它主要驗證 Claude Code hook 與 Antigravity skills 目錄，並在本機已安裝時檢查 Cursor / Codex 的設定檔與 live-fire 行為；`anti-doom-loop-guard` 在四個 agent 上都會用各自的 payload 與 deny 格式 live-fire。
 
 ## Windows
 
