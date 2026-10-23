@@ -60,7 +60,7 @@ python scripts/install.py --agent codex --hooks anti-doom-loop-guard
 |---|---|---|---|
 | **Claude Code** | 5 個 hook；Windows 會選 Python 版本；另可選裝 `anti-doom-loop-guard` | `~/.claude/skills/` + CLAUDE 規則範本 | `install.py` 自動安裝 |
 | **OpenAI Codex** | 5 個 hook；Windows 用 Python 版並寫入絕對路徑；另可選裝 `anti-doom-loop-guard`（`PreToolUse`，只計 shell 指令） | `~/.agents/skills/` | `install.py --agent codex` |
-| **Google Antigravity / Gemini** | 只有選裝的 `anti-doom-loop-guard`（`PreToolUse` 可否決）；其餘 5 個 hook 目前沒有 Antigravity 註冊 | skills + `GEMINI.md` 範本 | `install.py --agent antigravity` 可安裝 skills |
+| **Google Antigravity / Gemini** | 5 個 hook 加選裝的 `anti-doom-loop-guard`，各自登記為 `hooks.json` 裡的具名 hook：`PreToolUse` 可否決、`Stop` 可用 `continue` 擋下結束；`claim-guard` 查驗端靠讀 transcript，格式官方未文件化（見 [`docs/antigravity-install.md`](docs/antigravity-install.md)） | skills + `GEMINI.md` 範本 | `install.py --agent antigravity` 安裝 skills；`--hooks <名稱>` 安裝 hook |
 | **Cursor** | 5 個 hook，寫入 `~/.cursor/hooks.json`（Cursor 扁平格式）；另可選裝 `anti-doom-loop-guard`（`preToolUse`） | `~/.cursor/skills/`；若本機已有 `~/.agents/skills/` 也會一併合併 | `install.py --agent cursor` |
 
 因此 `--agent all` 目前代表 **Claude Code + Antigravity + Cursor + Codex**。Cursor 的 `stop` 不能否決已結束的回合，所以 claim-guard / lint-gate 在 Cursor 上改為 follow-up，不是 veto。
@@ -88,14 +88,14 @@ python scripts/install.py --dry-run --agent antigravity --skills all
 python scripts/install.py --agent antigravity --skills all
 ```
 
-不帶 `--hooks` 時 Antigravity 只裝 skills。要裝 hook，明確指定（目前只有一個）：
+不帶 `--hooks` 時 Antigravity 只裝 skills。要裝 hook，明確指定名稱（`danger-zone-guard`、`test-gate-guard`、`no-emoji-guard`、`claim-guard`、`lint-gate`、`anti-doom-loop-guard`，或 `all`）：
 
 ```bash
-python scripts/install.py --dry-run --agent antigravity --hooks anti-doom-loop-guard
-python scripts/install.py --agent antigravity --hooks anti-doom-loop-guard
+python scripts/install.py --dry-run --agent antigravity --hooks danger-zone-guard,test-gate-guard,no-emoji-guard,claim-guard,lint-gate
+python scripts/install.py --agent antigravity --hooks danger-zone-guard,test-gate-guard,no-emoji-guard,claim-guard,lint-gate
 ```
 
-會把腳本放進 `~/.gemini/config/hooks/`，並在 `~/.gemini/config/hooks.json` **合併**一筆以 hook 名稱為 key 的登記（先備份到 `~/.gemini/backups/`、寫完讀回驗證）。Antigravity 的 hook 命令可能被它自己直接切字串（內建文件寫的是 `cmd /c`／`sh -c`，但沒有保證能去引號），所以命令**不加引號**，路徑也不能含空白，兩種解讀下都能執行；含空白時安裝器會拒絕，請用 `--gemini-dir` 指到沒有空白的位置。細節見 [`docs/antigravity-install.md`](docs/antigravity-install.md)。
+會把腳本放進 `~/.gemini/config/hooks/`，並在 `~/.gemini/config/hooks.json` **合併**一筆以 hook 名稱為 key 的登記（先備份到 `~/.gemini/backups/`、寫完讀回驗證）。Antigravity 的 hook 命令可能被它自己直接切字串（內建文件寫的是 `cmd /c`／`sh -c`，但沒有保證能去引號），所以命令**不加引號**，路徑也不能含空白，兩種解讀下都能執行；含空白時安裝器會拒絕，請用 `--gemini-dir` 指到沒有空白的位置。`hooks.json` 若還留著 Claude Code 版面的頂層 `hooks` 區塊（Antigravity 會整份拒絕），安裝器直接拒絕寫入並說明，不會假裝裝好。herdr 自己的 `herdr-agent-state.ps1` 不在安裝範圍內。細節與每個 hook 的限制見 [`docs/antigravity-install.md`](docs/antigravity-install.md)。
 
 ### Cursor
 
@@ -146,7 +146,7 @@ python scripts/verify-install.py
 
 這支工具不只讀設定檔，而會對已安裝 hook 餵合成 payload，確認它真的執行並產生預期的 allow / block 行為。exit code `0` 才代表它檢查到的項目通過。
 
-它主要驗證 Claude Code hook 與 Antigravity skills 目錄，並在本機已安裝時檢查 Cursor / Codex 的設定檔與 live-fire 行為；`anti-doom-loop-guard` 在四個 agent 上都會用各自的 payload 與 deny 格式 live-fire。
+它主要驗證 Claude Code hook 與 Antigravity skills 目錄，並在本機已安裝時檢查 Cursor / Codex 的設定檔與 live-fire 行為；`anti-doom-loop-guard` 在四個 agent 上都會用各自的 payload 與 deny 格式 live-fire。Antigravity 已登記的每個 hook 都會檢查登記版面並用 Antigravity 形狀的 payload live-fire 一次放行、一次攔截。
 
 ## Windows
 

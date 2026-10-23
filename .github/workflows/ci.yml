@@ -55,6 +55,9 @@ jobs:
       - name: Test cross-agent hook protocols
         run: python hooks/tests/run-agent-protocol-tests.py
 
+      - name: Test Antigravity hook contracts
+        run: python hooks/tests/run-antigravity-tests.py
+
       - name: Test no-emoji-guard settings persistence
         run: python hooks/no-emoji-guard/tests/run-config-tests.py
 

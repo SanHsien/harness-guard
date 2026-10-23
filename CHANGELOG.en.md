@@ -31,17 +31,42 @@ Entries marked `fork` are this fork's changes relative to
 - **`verify-install.py` live-fires `anti-doom-loop-guard` on all four agents**: an edit in between does
   not block, three identical commands in a row block in that agent's format; it also checks that the
   Antigravity command has no quotes and the Codex registration carries `--agent codex`.
+- **Five guard hooks for Antigravity (`fork`): `danger-zone-guard`, `test-gate-guard`, `no-emoji-guard`,
+  `claim-guard` and `lint-gate`.** Antigravity's `hooks.json` used to hold these in Claude Code's layout,
+  was rejected as a whole, and none of them ever ran. Each is now a named hook in `hooks.json`:
+  `PreToolUse` (`run_command`; `write_to_file|replace_file_content|multi_replace_file_content` for
+  `no-emoji-guard`) denies with `{"decision":"deny"}`, `claim-guard`'s ledger runs on `PostToolUse`
+  (`run_command|grep_search|find_by_name|list_dir`; a failed tool call is not recorded), its check and
+  `lint-gate` run on `Stop` (a **flat** handler list, no matcher) and refuse the stop with
+  `{"decision":"continue"}`, and every allow is `{}`. Same scripts, told apart by `toolCall` /
+  `conversationId`; Claude, Codex and Cursor behave as before. `Stop` has no `stop_hook_active`, so the
+  same message / the same failure is blocked only once. **Limit:** the `Stop` payload has no assistant
+  message, so `claim-guard`'s check reads `transcriptPath`, whose line format the official docs do not
+  give; it follows the step shape in the `run-workflow` docs and lets the turn end when it finds nothing.
+  herdr's hook is out of scope. Details in `docs/antigravity-install.en.md`.
+- **`install.py --agent antigravity --hooks <name>[,<name>...]` installs any combination of the six
+  hooks** (`--hooks all` is all of them): named entries, backup first, read back after writing, no
+  duplicates on re-run, an existing registration of the same script counts as installed.
+  `verify-install.py --agent antigravity` checks the layout of every registered hook and live-fires one
+  allow and one block. New `hooks/tests/run-antigravity-tests.py` (in CI).
 
 ### Changed
 
 - `--hooks all` now also installs `anti-doom-loop-guard` (the default list is unchanged).
 - After writing JSON configuration the installer now really reads it back and compares before
   printing "re-read and valid" (it printed that without reading before).
+- **Antigravity: when `hooks.json` has a Claude Code layout top-level `hooks` block, or an entry in a shape
+  Antigravity rejects (for example `Stop` wrapped in a matcher group), the installer now refuses to
+  write** (prints `REFUSED` and the reason, copies and backs up nothing). It used to warn and write
+  anyway, leaving a file Antigravity still rejected as a whole: hooks that never ran, reported as installed.
 
 ### Fixed
 
 - The state file name contains the session id, which is now filtered to safe characters; an id with a
   `/` used to make the state write fail silently and leave the guard doing nothing.
+- **`danger-zone-guard`, `test-gate-guard` and `no-emoji-guard` now answer `{}` to Antigravity on an allow**
+  instead of `{"decision":"allow"}`: in Antigravity the latter means "approve this call automatically" and
+  skips a permission prompt the user still wants.
 
 ## 2026-09-20
 

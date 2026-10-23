@@ -190,15 +190,31 @@ def is_cursor(payload):
     return payload.get("hook_event_name") in CURSOR_EVENTS
 
 
+def is_antigravity(payload):
+    """Antigravity names its tool call `toolCall` and its session `conversationId`.
+
+    Neither is a field Claude Code, Codex or Cursor send, so either one is a
+    reliable sign of the caller -- unlike a field several of them share.
+    """
+    return isinstance(payload.get("toolCall"), dict) or "conversationId" in payload
+
+
 def allow_payload(payload):
-    if "toolCall" in payload:
-        sys.stdout.write(json.dumps({"decision": "allow"}))
+    if is_antigravity(payload):
+        # `{}`, not {"decision": "allow"}: in Antigravity "allow" means "approve
+        # this call automatically", which would skip a permission prompt the
+        # user still wants. Saying nothing about the decision changes nothing.
+        sys.stdout.write("{}")
     elif is_cursor(payload):
         sys.stdout.write(json.dumps({"permission": "allow"}))
     sys.exit(0)
 
 
 def deny_payload(payload, msg):
+    if is_antigravity(payload):
+        # Antigravity reads the verdict from stdout JSON and expects exit 0.
+        sys.stdout.write(json.dumps({"decision": "deny", "reason": msg}, ensure_ascii=False))
+        sys.exit(0)
     if is_cursor(payload):
         sys.stdout.write(json.dumps({
             "permission": "deny",
@@ -206,9 +222,6 @@ def deny_payload(payload, msg):
             "user_message": msg,
         }, ensure_ascii=False))
         sys.exit(2)
-    if "toolCall" in payload:
-        sys.stdout.write(json.dumps({"decision": "deny", "reason": msg}, ensure_ascii=False))
-        sys.exit(0)
     sys.stderr.write(msg)
     sys.exit(2)
 

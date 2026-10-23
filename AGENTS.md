@@ -27,7 +27,7 @@ Harness Guard 是 cross-agent AI coding guardrails kit。核心產品是：
 | Agent | 目前自動化範圍 |
 |---|---|
 | Claude Code | `install.py` 可安裝 hooks + skills；`verify-install.py` 可 live-fire 已安裝 hooks |
-| Google Antigravity / Gemini | `install.py --agent antigravity` 可安裝 skills；`--hooks anti-doom-loop-guard` 合併進 `~/.gemini/config/hooks.json`（目前只有這一個 hook 有 Antigravity 登記）；另有 `GEMINI.md` 範本 |
+| Google Antigravity / Gemini | `install.py --agent antigravity` 可安裝 skills；`--hooks <名稱>[,<名稱>...]`（6 個 hook 都有登記）各自以具名 hook 合併進 `~/.gemini/config/hooks.json`；另有 `GEMINI.md` 範本 |
 | OpenAI Codex | `install.py --agent codex` 合併進 `~/.codex/hooks.json`，skills 寫入 `~/.agents/skills/`（Windows 用 Python 版與絕對路徑） |
 | Cursor | `install.py --agent cursor` 寫入 `~/.cursor/hooks.json`（扁平格式）與 `~/.cursor/hooks/` |
 
@@ -99,6 +99,9 @@ python scripts/install.py --hooks all --skills all
 ```bash
 python scripts/install.py --dry-run --agent antigravity --skills all
 python scripts/install.py --agent antigravity --skills all
+
+# hooks（具名登記，合併進 ~/.gemini/config/hooks.json）
+python scripts/install.py --dry-run --agent antigravity --hooks danger-zone-guard,test-gate-guard,no-emoji-guard,claim-guard,lint-gate
 ```
 
 ### 目前所有自動化 target
@@ -132,6 +135,7 @@ python scripts/install.py --agent codex --hooks all --skills all
 - Codex hooks 預設啟用；若使用者曾關閉，設定 `[features].hooks = true`。註冊變更後要提醒使用者在 `/hooks` 檢視並信任目前定義；直接執行 hook 的 verifier 不能證明 TUI trust 狀態。
 - Cursor hook 由 `install.py --agent cursor` 寫入扁平的 `~/.cursor/hooks.json`。不要把 Claude Code 的 nested `hooks[].hooks[]` 結構寫進 Cursor。
 - `anti-doom-loop-guard` 是選裝（不在預設清單）。同一支 `anti_doom_loop_guard.py` 服務四個 agent，用各 agent 專有欄位／事件名分辨；Codex 要靠 `--agent codex`。Antigravity 的登記是 `~/.gemini/config/hooks.json` 頂層以 hook 名稱為 key，命令**不加引號**、路徑不可含空白；其放行輸出是 `{}`，不是 `{"decision":"allow"}`（那會自動核准）。
+- Antigravity 的其餘 5 個 hook 同樣是具名登記：`PreToolUse` / `PostToolUse` 是 `{matcher, hooks}` 分組，**`Stop` 是扁平 handler 清單**（沒有 matcher、不包 `hooks`）；否決 `{"decision":"deny"}`、擋下結束 `{"decision":"continue"}`、放行 `{}`。`hooks.json` 頂層若有 Claude 版面的 `hooks` 區塊或形狀不合的 entry，安裝器拒絕寫入（Antigravity 整份拒絕）。claim-guard 的查驗端要讀 `transcriptPath`，其行格式官方未文件化，只能說「照文件記載的 step 形狀、fail-open」，不要宣稱已對真實 transcript 驗證。herdr 的 `herdr-agent-state.ps1` 不在範圍。細節見 `docs/antigravity-install.md`。
 
 ## 規則檔範本：merge，不是覆蓋
 
@@ -193,6 +197,7 @@ python hooks/checkout-guard/tests/run-tests.py
 python hooks/anti-doom-loop-guard/tests/run-tests.py
 python hooks/tests/run-encoding-tests.py
 python hooks/tests/run-agent-protocol-tests.py
+python hooks/tests/run-antigravity-tests.py
 python hooks/no-emoji-guard/tests/run-config-tests.py
 python -m unittest discover -s tests -p "test_*.py"
 ```

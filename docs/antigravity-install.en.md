@@ -24,32 +24,80 @@ This copies the complete skill packages into the Antigravity global skills direc
 
 ## Hooks (optional)
 
-Antigravity's `PreToolUse` hook fires before a tool runs and can answer `{"decision": "deny"}` to block it, so guard hooks have a real interception point here (official reference: `agy-customizations/docs/hooks.md`, bundled with `agy`). This repo ships one Antigravity registration so far:
+Antigravity's `PreToolUse` hook fires before a tool runs and can answer `{"decision": "deny"}` to block it; its `Stop` hook fires when the execution loop ends and can answer `{"decision": "continue"}` to refuse the stop and send the agent back (official reference: `agy-customizations/docs/hooks.md`, bundled with `agy`). So guard hooks have a real interception point here. This repo ships Antigravity registrations for six optional hooks:
 
 ```bash
-python scripts/install.py --dry-run --agent antigravity --hooks anti-doom-loop-guard
+# preview (writes nothing)
+python scripts/install.py --dry-run --agent antigravity --hooks danger-zone-guard,test-gate-guard,no-emoji-guard,claim-guard,lint-gate
+# install
+python scripts/install.py --agent antigravity --hooks danger-zone-guard,test-gate-guard,no-emoji-guard,claim-guard,lint-gate
+# anti-doom-loop-guard is separate; --hooks all means all six
 python scripts/install.py --agent antigravity --hooks anti-doom-loop-guard
 ```
 
+### What each hook does in Antigravity
+
+Tool names are the lowercased step types. Every hook is the **same script** as its Claude Code build and recognises Antigravity by Antigravity's own fields (`toolCall`, `conversationId`); Claude, Codex and Cursor behave exactly as before.
+
+| Hook | Event | Matcher | Mechanism | Notes |
+|---|---|---|---|---|
+| `danger-zone-guard` | `PreToolUse` | `run_command` | deny | reads `toolCall.args.CommandLine`; same rules as the Claude build |
+| `test-gate-guard` | `PreToolUse` | `run_command` | deny | same: `pytest ; git push` is blocked, `&&` passes |
+| `no-emoji-guard` | `PreToolUse` | `write_to_file\|replace_file_content\|multi_replace_file_content` | deny | scans `CodeContent`, `ReplacementContent` and `ReplacementChunks[].ReplacementContent`; the path is `TargetFile`; `no-emoji-guard.json` sits beside the script |
+| `claim-guard` (ledger) | `PostToolUse` | `run_command\|grep_search\|find_by_name\|list_dir` | records only, answers `{}` | notes which verification commands ran and which searches happened; a call with a non-empty `error` (the tool failed) is not recorded, so a failed test run is not evidence |
+| `claim-guard` (check) | `Stop` | none (Stop takes no matcher) | continue | see limit 1 below: **it can block, but how it gets the message is not guaranteed by the official docs** |
+| `lint-gate` | `Stop` | none | continue | runs only when the project root (`workspacePaths[0]`) has a `.lint-gate.json`; on failure the output goes back to the agent |
+| `anti-doom-loop-guard` | `PreToolUse` | `run_command\|view_file\|write_to_file\|replace_file_content\|multi_replace_file_content` | deny | denies the same `run_command` or `view_file` three times in a row with no other tool call in between; edit tools reset the count |
+
+| Output | Format |
+|---|---|
+| Deny (`PreToolUse`) | stdout `{"decision":"deny","reason":"..."}`, exit 0 |
+| Refuse the stop (`Stop`) | stdout `{"decision":"continue","reason":"..."}`, exit 0 |
+| Allow (every event) | stdout `{}`. It does not answer `{"decision":"allow"}`: in Antigravity `allow` means "approve this call automatically", which would skip a permission prompt you still want |
+
+> Before this release `danger-zone-guard`, `test-gate-guard` and `no-emoji-guard` answered `{"decision":"allow"}` to Antigravity on an allow; they now answer `{}`.
+
+### Registration layout
+
+In `~/.gemini/config/hooks.json` the **top-level key is the hook's name** with its events underneath, unlike Claude Code's nested `hooks` block. The two kinds of event have different shapes:
+
+```json
+{
+  "danger-zone-guard": {
+    "PreToolUse": [
+      { "matcher": "run_command",
+        "hooks": [ { "type": "command", "command": "python C:\\Users\\<you>\\.gemini\\config\\hooks\\danger_zone_guard.py", "timeout": 10 } ] }
+    ]
+  },
+  "lint-gate": {
+    "Stop": [
+      { "type": "command", "command": "python C:\\Users\\<you>\\.gemini\\config\\hooks\\lint_gate.py", "timeout": 60 }
+    ]
+  }
+}
+```
+
+`PreToolUse` / `PostToolUse` use `{matcher, hooks:[...]}` groups; `Stop` is a **flat** list of handlers, with no matcher and no `hooks` wrapper. Writing `Stop` as a group (Claude Code's shape) is a likely reason the old Claude-layout file was rejected as a whole (`invalid hook "hooks": command hook must specify 'command'`).
+
 | Item | Detail |
 |---|---|
-| Script | `~/.gemini/config/hooks/anti_doom_loop_guard.py` |
-| Registration | `~/.gemini/config/hooks.json`; the **top-level key is the hook's name** (`anti-doom-loop-guard`) with its events underneath, unlike Claude Code's nested `hooks` block |
-| Event / matcher | `PreToolUse`, `run_command\|view_file\|write_to_file\|replace_file_content\|multi_replace_file_content` (tool names are the lowercased step types) |
-| Behaviour | denies the same `run_command` or `view_file` three times in a row with no other tool call in between; edit tools reset the count |
-| Deny format | stdout `{"decision":"deny","reason":"..."}`, exit 0 |
-| Allow format | stdout `{}`. It does not answer `{"decision":"allow"}`: in Antigravity `allow` means "approve this call automatically", which would skip a permission prompt you still want |
+| Scripts | `~/.gemini/config/hooks/` (flat; hooks never import each other) |
 | Backup | backed up to `~/.gemini/backups/hooks.json.bak-<time>` first; read back after writing; re-running does not duplicate |
+| Merge | adds only its own entries; every other hook name and your own content stays as it was; an existing registration of the same script (for example a hand-added `anti-doom-loop-guard`) counts as installed and is not duplicated |
+| Refuses to write | when the file has a Claude Code layout top-level `hooks` block, or any entry in a shape Antigravity would reject (for example `Stop` wrapped in a matcher group), the installer prints `REFUSED` and the reason and **copies nothing, backs nothing up, writes nothing**: Antigravity rejects the file as a whole, so writing into it would report an install whose hooks never run. Move that block out of the file (keep a backup) and run it again |
+| Without `--hooks` | Antigravity gets skills only |
 
-The installer adds only its own entry and keeps every other hook name and your own content as it was. Without `--hooks`, Antigravity gets skills only; `--hooks all` installs only hooks that have an Antigravity registration, and any other name prints a note and is skipped.
+**No quotes in the command, and no whitespace in the path.** Antigravity's bundled reference says the command runs through `cmd /c` (Windows) or `sh -c`, but at least one build splits argv itself and handles no quotes; no quotes and no whitespace work under both readings. So the installer writes commands like `python C:\Users\<you>\.gemini\config\hooks\anti_doom_loop_guard.py`. If the path has whitespace or a quote the installer refuses and says why; pass `--gemini-dir` with a path that has none.
 
-**No quotes in the command, and no whitespace in the path.** Antigravity's bundled reference says the command runs through `cmd /c` (Windows) or `sh -c`, but at least one build splits argv itself and handles no quotes; no quotes and no whitespace work under both readings. So the installer writes `python C:\Users\<you>\.gemini\config\hooks\anti_doom_loop_guard.py`. If the path has whitespace or a quote the installer refuses and says why; pass `--gemini-dir` with a path that has none.
+### Limits and what is not done
 
-Known limits:
-
-- The official reference does not list `view_file`'s argument names; the script uses the whole argument object as the signature, so it never depends on a particular name and does not mistake paging for a retry.
-- The other five hooks (claim-guard, test-gate-guard, danger-zone-guard, lint-gate, no-emoji-guard) have no Antigravity registration yet, and the installer writes nothing to `hooks.json` for them.
-- If your `hooks.json` already has a top-level `hooks` block in Claude Code's layout, the installer warns and leaves it alone; one Antigravity build reported `invalid hook "hooks"` for such a file, so trust what `agy` actually loads.
+1. **`claim-guard`'s check cannot see the assistant message.** The `Stop` payload carries `conversationId`, `transcriptPath`, `terminationReason` and so on, but not the last message, so the script reads the file `transcriptPath` points to. The official hooks reference does not describe that file's line format; the script follows the step shape the `run-workflow` reference documents (`type: PLANNER_RESPONSE`, `text`) and lets the turn end when it finds no model message (fail-open), so a different format makes it do nothing rather than block wrongly. `verify-install.py` checks it against a synthetic transcript of that shape: that proves the adapter logic, **not that a real transcript is readable**. See it block once in a real session before you rely on it.
+2. **`Stop` has no `stop_hook_active`.** Claude Code uses it to avoid blocking forever; Antigravity has no such flag, so `claim-guard` and `lint-gate` keep a fingerprint of "this message / this failure output was already blocked once" (in the temp directory; `HARNESS_GUARD_STATE_DIR` moves it): the agent trying again unchanged is let through, a changed message or failure blocks again, and a clean pass forgets it.
+3. They check only when `terminationReason` is `NO_TOOL_CALL` or `TERMINAL_STEP_TYPE` (a normal finish); a user cancel, an error or a limit is let through.
+4. Apart from `run_command.CommandLine`, the tool argument names (`TargetFile`, `CodeContent`, `ReplacementContent`, `ReplacementChunks`) are not listed in the official hooks reference; they follow what this repo's `no-emoji-guard` already did for Antigravity, so trust a real run.
+5. The official reference does not list `view_file`'s argument names; `anti-doom-loop-guard` uses the whole argument object as its signature and depends on no particular name.
+6. **herdr's `herdr-agent-state.ps1` is not covered**: it is herdr's own integration and uses events Antigravity does not have (`UserPromptSubmit`, `Notification`, `SessionEnd`, ...). This installer neither handles nor touches it.
+7. `fork_pr_guard` is not in this repo (it is the maintainer's own hook), so nothing registers it here.
 
 ---
 
@@ -114,4 +162,10 @@ Run self-verification:
 python scripts/verify-install.py --agent antigravity
 ```
 
-When `anti-doom-loop-guard` is registered, it checks the registration (no quotes, matcher) and live-fires an Antigravity-shaped payload: an edit in between does not block, three identical commands in a row do.
+For every hook from this repo that is registered in `hooks.json`, it checks the registration (no Claude-layout top-level `hooks` block, `Stop` as a flat list, no quotes, a matcher that covers the tools the hook looks at, the script exists) and then live-fires Antigravity-shaped payloads, one allow and one block:
+
+- `danger-zone-guard`: `rm -rf /` is denied, `rm -rf dist/` answers `{}`; `test-gate-guard`: `pytest ; git push` is denied, `&&` answers `{}`;
+- `no-emoji-guard`: a `write_to_file` with emoji is denied, clean content answers `{}`;
+- `claim-guard`: with an empty ledger `Stop` answers continue, after one `pytest -q` was recorded the same claim passes (the transcript is synthetic, see limit 1 above);
+- `lint-gate`: a project with no `.lint-gate.json` answers `{}`, a failing check answers continue, the identical failure passes the second time;
+- `anti-doom-loop-guard`: an edit in between does not block, three identical commands in a row do.

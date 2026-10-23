@@ -9,6 +9,7 @@
     python scripts/install.py --agent codex --hooks all --skills all
     python scripts/install.py --agent all --hooks all --skills all
     python scripts/install.py --agent antigravity --hooks anti-doom-loop-guard
+    python scripts/install.py --agent antigravity --hooks danger-zone-guard,test-gate-guard,no-emoji-guard
 
 What it does:
 
@@ -26,9 +27,11 @@ What it does:
      copies Python hooks to ~/.cursor/hooks/. `--agent codex` merges into
      ~/.codex/hooks.json with absolute interpreter paths and installs user
      skills into the shared ~/.agents/skills location Codex documents.
-  7. `--agent antigravity --hooks <name>` merges a named hook into
-     ~/.gemini/config/hooks.json. Only anti-doom-loop-guard has an Antigravity
-     registration; without an explicit --hooks, Antigravity gets skills only.
+  7. `--agent antigravity --hooks <name>[,<name>...]` merges each hook as a named
+     entry into ~/.gemini/config/hooks.json (backup first, read back after).
+     Without an explicit --hooks, Antigravity gets skills only. The installer
+     refuses to write while the file still holds a Claude Code layout top-level
+     "hooks" block: Antigravity rejects such a file as a whole.
   8. `--agent all` is Claude Code + Antigravity + Cursor + Codex.
 """
 import argparse
@@ -283,9 +286,16 @@ CODEX_HOOKS = {
 
 # Antigravity reads ~/.gemini/config/hooks.json, where each top-level key is a
 # hook NAME holding its events (not Claude Code's nested `hooks` block). Tool
-# names are the lowercased step types. Only this hook has an Antigravity
-# registration: the other builds were written for Claude Code's protocol, and
-# nothing here registers a hook that has not been checked against Antigravity's.
+# names are the lowercased step types. Per the official reference
+# (agy-customizations/docs/hooks.md) the events come in two shapes:
+#
+#   PreToolUse / PostToolUse  grouped: [{"matcher": ..., "hooks": [handler]}]
+#   Stop (and the other lifecycle events)  flat: [handler], matcher ignored
+#
+# Registering Stop in the grouped shape is the likely reason Antigravity rejected the old
+# Claude-layout file ("command hook must specify 'command'"), so a spec with
+# `matcher: None` is written flat. Every source below is a pure-Python build:
+# Antigravity runs the command through `cmd /c` or `sh -c` with no `jq` to rely on.
 ANTIGRAVITY_HOOKS = {
     "anti-doom-loop-guard": [
         {
@@ -295,7 +305,80 @@ ANTIGRAVITY_HOOKS = {
             "timeout": 10,
         },
     ],
+    "danger-zone-guard": [
+        {
+            "source": "hooks/danger-zone-guard/claude-code/danger_zone_guard.py",
+            "event": "PreToolUse",
+            "matcher": "run_command",
+            "timeout": 10,
+        },
+    ],
+    "test-gate-guard": [
+        {
+            "source": "hooks/test-gate-guard/claude-code/test_gate_guard.py",
+            "event": "PreToolUse",
+            "matcher": "run_command",
+            "timeout": 10,
+        },
+    ],
+    "no-emoji-guard": [
+        {
+            "source": "hooks/no-emoji-guard/claude-code/no-emoji-guard.py",
+            "event": "PreToolUse",
+            "matcher": "write_to_file|replace_file_content|multi_replace_file_content",
+            "timeout": 10,
+        },
+    ],
+    "claim-guard": [
+        {
+            # The tracker only needs the command text and `error`, both in the
+            # PostToolUse payload. The matcher lists the shell and the search tools.
+            "source": "hooks/claim-guard/windows/claim_ledger_tracker.py",
+            "event": "PostToolUse",
+            "matcher": "run_command|grep_search|find_by_name|list_dir",
+            "timeout": 10,
+        },
+        {
+            "source": "hooks/claim-guard/windows/claim_evidence_guard.py",
+            "event": "Stop",
+            "matcher": None,
+            "timeout": 15,
+        },
+    ],
+    "lint-gate": [
+        {
+            "source": "hooks/lint-gate/windows/lint_gate.py",
+            "event": "Stop",
+            "matcher": None,
+            "timeout": 60,
+        },
+    ],
 }
+
+# Events whose handlers sit directly in the list (no matcher group).
+ANTIGRAVITY_FLAT_EVENTS = ("SessionStart", "PreInvocation", "PostInvocation", "Stop")
+ANTIGRAVITY_GROUPED_EVENTS = ("PreToolUse", "PostToolUse")
+
+# What the user should know about a hook before relying on it in Antigravity.
+ANTIGRAVITY_NOTES = {
+    "claim-guard": (
+        "Stop cannot see the assistant message: claim-evidence-guard reads it from "
+        "transcriptPath, a file format the official docs do not describe. It follows "
+        "the documented step shape and does nothing (fails open) when it cannot read "
+        "a model message -- confirm with `verify-install.py --agent antigravity` and a "
+        "real turn. The tracker and the guard must be installed together"
+    ),
+    "lint-gate": (
+        "lint-gate runs only in a project with a .lint-gate.json; Stop blocks with "
+        "decision \"continue\", once per identical failure"
+    ),
+}
+
+HERDR_NOTE = (
+    "note     : herdr's own agent-state hook is not part of this installer and is never "
+    "touched; it needs events (UserPromptSubmit, Notification, SessionEnd) that "
+    "Antigravity does not have"
+)
 
 
 def build_command(installed_path, extra_args=()):
@@ -888,47 +971,113 @@ def antigravity_selection(args):
     if unsupported:
         print("note     : no Antigravity registration for %s (only %s); skipped"
               % (", ".join(unsupported), ", ".join(ANTIGRAVITY_HOOKS)))
-    return [name for name in requested if name in ANTIGRAVITY_HOOKS]
+    return [name for name in dict.fromkeys(requested) if name in ANTIGRAVITY_HOOKS]
+
+
+def antigravity_handlers(entries):
+    """Every handler dict under one event, whether the list is flat or grouped."""
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        if isinstance(entry.get("hooks"), list):
+            for hook in entry["hooks"]:
+                if isinstance(hook, dict):
+                    yield hook
+        elif "command" in entry:
+            yield entry
 
 
 def antigravity_registered(config, name, spec, command):
-    for group in (config.get(name) or {}).get(spec["event"]) or []:
-        for hook in (group.get("hooks") or []) if isinstance(group, dict) else []:
-            if isinstance(hook, dict) and same_command(hook.get("command"), command):
-                return True
-    return False
+    entries = (config.get(name) or {}).get(spec["event"]) or []
+    return any(same_command(hook.get("command"), command)
+               for hook in antigravity_handlers(entries))
 
 
 def drop_stale_antigravity(config, name, spec, command):
     """Remove handlers that run the same script under a different command."""
     script = hook_script_path(command)
     removed = 0
-    groups = (config.get(name) or {}).get(spec["event"]) or []
-    for group in list(groups):
-        if not isinstance(group, dict):
+    entries = (config.get(name) or {}).get(spec["event"]) or []
+    for entry in list(entries):
+        if not isinstance(entry, dict):
             continue
-        hooks = group.get("hooks") or []
-        kept = [h for h in hooks
-                if not isinstance(h, dict) or same_command(h.get("command"), command)
-                or hook_script_path(h.get("command", "")) != script]
-        removed += len(hooks) - len(kept)
-        group["hooks"] = kept
-        if not kept:
-            groups.remove(group)
+        if isinstance(entry.get("hooks"), list):
+            hooks = entry["hooks"]
+            kept = [h for h in hooks
+                    if not isinstance(h, dict) or same_command(h.get("command"), command)
+                    or hook_script_path(h.get("command", "")) != script]
+            removed += len(hooks) - len(kept)
+            entry["hooks"] = kept
+            if not kept:
+                entries.remove(entry)
+        elif "command" in entry and not same_command(entry["command"], command) \
+                and hook_script_path(entry["command"]) == script:
+            entries.remove(entry)
+            removed += 1
     return removed
 
 
 def register_antigravity(config, name, spec, command):
-    """Add one handler under the hook's own name, reusing a matching matcher group."""
-    groups = config.setdefault(name, {}).setdefault(spec["event"], [])
+    """Add one handler under the hook's own name.
+
+    A Stop (or other lifecycle) event takes the handler directly in its list;
+    PreToolUse and PostToolUse reuse a matching matcher group.
+    """
+    entries = config.setdefault(name, {}).setdefault(spec["event"], [])
     definition = {"type": "command", "command": command}
     if spec.get("timeout"):
         definition["timeout"] = spec["timeout"]
-    for group in groups:
+    if spec["event"] in ANTIGRAVITY_FLAT_EVENTS:
+        entries.append(definition)
+        return
+    for group in entries:
         if isinstance(group, dict) and group.get("matcher") == spec["matcher"]:
             group.setdefault("hooks", []).append(definition)
             return
-    groups.append({"matcher": spec["matcher"], "hooks": [definition]})
+    entries.append({"matcher": spec["matcher"], "hooks": [definition]})
+
+
+def antigravity_config_problems(config):
+    """Reasons Antigravity would reject this hooks.json, from its documented layout.
+
+    Antigravity loads the file as a whole: one bad entry and none of the hooks
+    run, which is how a Claude Code layout file silently disabled every guard.
+    """
+    if not isinstance(config, dict):
+        return ["the file is not a JSON object"]
+    problems = []
+    if "hooks" in config:
+        problems.append(
+            'top-level "hooks" key: that is Claude Code\'s layout. Antigravity reads every '
+            "top-level key as a hook NAME and rejects the whole file (invalid hook \"hooks\": "
+            "command hook must specify 'command')")
+    for name, entry in config.items():
+        if name == "hooks":
+            continue
+        if not isinstance(entry, dict):
+            problems.append("entry %r is not an object" % name)
+            continue
+        for event, value in entry.items():
+            if event == "enabled":
+                continue
+            if event in ANTIGRAVITY_GROUPED_EVENTS:
+                for group in value if isinstance(value, list) else [None]:
+                    handlers = group.get("hooks") if isinstance(group, dict) else None
+                    if not isinstance(handlers, list) or not handlers:
+                        problems.append("%s.%s needs groups of {matcher, hooks: [handler]}" % (name, event))
+                        break
+                    if any(not isinstance(h, dict) or not isinstance(h.get("command"), str)
+                           for h in handlers):
+                        problems.append("%s.%s has a handler without a 'command'" % (name, event))
+                        break
+            elif event in ANTIGRAVITY_FLAT_EVENTS:
+                if not isinstance(value, list) or any(
+                        not isinstance(h, dict) or not isinstance(h.get("command"), str)
+                        for h in value):
+                    problems.append(
+                        "%s.%s must be a flat list of handlers, each with a 'command' (no "
+                        "matcher group around them)" % (name, event))
+    return problems
 
 
 def install_for_antigravity(args):
@@ -946,8 +1095,13 @@ def install_for_antigravity(args):
     print("target   : %s" % config_dir)
     print("hooks    : %s" % (", ".join(selected) if selected else "(none)"))
     if selected:
-        print("note     : Antigravity PreToolUse can deny a call; hooks.json holds one named "
-              "entry per hook, other entries are left as they are")
+        print("note     : hooks.json holds one named entry per hook; other entries are left as "
+              "they are. PreToolUse denies with {\"decision\":\"deny\"}, Stop blocks with "
+              "{\"decision\":\"continue\"}, and an allow is `{}`")
+        for name in selected:
+            if name in ANTIGRAVITY_NOTES:
+                print("note     : %s" % ANTIGRAVITY_NOTES[name])
+        print(HERDR_NOTE)
 
     planned = []
     config = {}
@@ -967,11 +1121,17 @@ def install_for_antigravity(args):
             if config.get(name, {}).get("enabled") is False:
                 print("note     : %s is switched off in hooks.json (\"enabled\": false); "
                       "it is registered but stays off until you remove that" % name)
-        if isinstance(config.get("hooks"), dict) and any(
-                key in config["hooks"] for key in ("PreToolUse", "PostToolUse", "Stop")):
-            print("note     : hooks.json has a top-level \"hooks\" block in Claude Code's "
-                  "layout. Antigravity reads top-level keys as hook names, and one of its "
-                  "builds rejected that file once; this installer leaves that block alone")
+        problems = antigravity_config_problems(config)
+        if problems:
+            # Writing our entry into a file Antigravity rejects would report
+            # success for hooks that never run, so nothing is written at all.
+            print("REFUSED  %s would still be rejected by Antigravity, so no hook was "
+                  "installed and nothing was written:" % settings_path)
+            for problem in problems:
+                print("           - %s" % problem)
+            print("         Move the offending entry out of the file (keep a backup), then run "
+                  "this again.")
+            return 1
 
         for name in selected:
             for spec in ANTIGRAVITY_HOOKS[name]:

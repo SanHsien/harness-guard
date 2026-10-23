@@ -51,6 +51,8 @@ def default_ledger_dir():
         return Path.home() / ".cache" / "codex-guard-hooks"
     if "/.cursor/" in here:
         return Path.home() / ".cache" / "cursor-guard-hooks"
+    if "/.gemini/" in here:
+        return Path.home() / ".cache" / "antigravity-guard-hooks"
     return Path.home() / ".cache" / "claude-guard-hooks"
 
 
@@ -65,7 +67,8 @@ SHELL_TOOLS = (
     "run_command",
     "Shell",
 )
-SEARCH_TOOLS = ("Grep", "Glob", "grep_search", "GlobTool")
+# Antigravity's search tools are grep_search, find_by_name and list_dir.
+SEARCH_TOOLS = ("Grep", "Glob", "grep_search", "GlobTool", "find_by_name", "list_dir")
 
 # Verification-type commands: tests, builds, status and health checks, diffs,
 # live runs. The first group is carried over from the shell version unchanged;
@@ -138,10 +141,20 @@ def session_id(payload):
     sid = (
         payload.get("session_id")
         or payload.get("conversation_id")
+        or payload.get("conversationId")  # Antigravity
         or payload.get("turn_id")
         or "default"
     )
     return re.sub(r"[^A-Za-z0-9._-]", "_", str(sid))[:80] or "default"
+
+
+def is_antigravity(payload):
+    """Antigravity names its tool call `toolCall` and its session `conversationId`.
+
+    Neither is a field Claude Code, Codex or Cursor send, so either one is a
+    reliable sign of the caller -- unlike a field several of them share.
+    """
+    return isinstance(payload.get("toolCall"), dict) or "conversationId" in payload
 
 
 def extract_tool_name(payload):
@@ -170,7 +183,8 @@ def extract_command(payload):
 
 
 def main():
-    # Codex treats an empty response as an anomaly. This hook only ever
+    # Codex treats an empty response as an anomaly, and Antigravity's
+    # PostToolUse contract is "an empty JSON object". This hook only ever
     # records, so its answer is always "allow" -- it just has to say so.
     codex = "--codex" in sys.argv
     try:
@@ -179,12 +193,23 @@ def main():
         if codex:
             sys.stdout.write("{}\n")
         return 0  # unreadable input is never a reason to get in the way
+    if not isinstance(payload, dict):
+        payload = {}
+    antigravity = is_antigravity(payload)
+    codex = codex or antigravity
 
     tool = extract_tool_name(payload)
     command = extract_command(payload)
     if not tool and command:
         tool = "Shell"
     sid = session_id(payload)
+
+    # Claude Code only runs PostToolUse for a call that succeeded; Antigravity
+    # runs it for a failed one too and flags it with `error`. A test run that
+    # failed is not evidence that the tests pass, so it is not recorded.
+    if antigravity and payload.get("error"):
+        sys.stdout.write("{}\n")
+        return 0
 
     verify_ledger = LEDGER_DIR / (sid + ".verify")
     search_ledger = LEDGER_DIR / (sid + ".search")

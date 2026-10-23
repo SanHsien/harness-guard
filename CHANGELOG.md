@@ -26,15 +26,35 @@
   仍只裝 skills。`--dry-run` 現在會列出會複製與合併的檔案。
 - **`verify-install.py` 對四個 agent 都 live-fire `anti-doom-loop-guard`**：改檔夾在中間不擋、連續
   3 次相同指令依該 agent 的格式擋；並檢查 Antigravity 命令無引號與 Codex 的 `--agent codex`。
+- **Antigravity 的 5 個守衛 hook（`fork`）：`danger-zone-guard`、`test-gate-guard`、`no-emoji-guard`、
+  `claim-guard`、`lint-gate`。** 之前 Antigravity 的 `hooks.json` 用 Claude Code 版面放這些 hook，
+  被整份拒絕、一個都沒跑過。現在各自是 `hooks.json` 裡的具名 hook：`PreToolUse`（`run_command`；
+  `no-emoji-guard` 是 `write_to_file|replace_file_content|multi_replace_file_content`）否決回
+  `{"decision":"deny"}`，`claim-guard` 的記帳端走 `PostToolUse`（`run_command|grep_search|find_by_name|list_dir`，
+  失敗的工具呼叫不記），查驗端與 `lint-gate` 走 `Stop`（**扁平** handler 清單，沒有 matcher）擋下結束回
+  `{"decision":"continue"}`，放行一律 `{}`。同一支腳本，用 `toolCall` / `conversationId` 辨認 Antigravity，
+  Claude／Codex／Cursor 行為不變。`Stop` 沒有 `stop_hook_active`，所以同一則訊息／同一份失敗只擋一次。
+  **限制：** `Stop` payload 沒有助理訊息，`claim-guard` 查驗端改讀 `transcriptPath`，檔案行格式官方文件沒寫，
+  照 `run-workflow` 文件的 step 形狀讀、讀不到就放行；herdr 的 hook 不在範圍。細節見
+  `docs/antigravity-install.md`。
+- **`install.py --agent antigravity --hooks <名稱>[,<名稱>...]` 可安裝這 6 個 hook 的任意組合**
+  （`--hooks all` 即全部）：具名登記、先備份、寫完讀回、重跑不重複、已存在的同名登記視為已安裝。
+  `verify-install.py --agent antigravity` 對每個已登記的 hook 檢查版面並 live-fire 一次放行、一次攔截。
+  新增 `hooks/tests/run-antigravity-tests.py`（納入 CI）。
 
 ### 變更
 
 - `--hooks all` 現在也會安裝 `anti-doom-loop-guard`（預設清單不變）。
 - 安裝器寫入 JSON 設定後會真的讀回比對，再印出「re-read and valid」（先前只印不讀）。
+- **Antigravity：`hooks.json` 頂層有 Claude Code 版面的 `hooks` 區塊、或有 entry 的形狀 Antigravity 會拒絕（例如 `Stop`
+  包成 matcher 分組）時，安裝器改為拒絕寫入**（印 `REFUSED` 與原因，不複製、不備份）。先前是提醒後照寫，
+  結果是整份檔案仍被 Antigravity 拒絕、hook 從不執行卻顯示安裝成功。
 
 ### 修正
 
 - 狀態檔名含 session id，現在會過濾路徑字元；先前含 `/` 的 id 會讓狀態寫入無聲失敗而失去防護。
+- **`danger-zone-guard`、`test-gate-guard`、`no-emoji-guard` 對 Antigravity 放行時改回 `{}`**，不再回
+  `{"decision":"allow"}`：後者在 Antigravity 是「自動核准這次呼叫」，會跳過使用者仍想要的授權彈窗。
 
 ## 2026-09-20
 

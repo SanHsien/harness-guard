@@ -653,9 +653,8 @@ class AntiDoomLoopGuardInstallTests(unittest.TestCase):
             config = gemini / "config"
             config.mkdir(parents=True)
             existing = {
-                "danger-zone-guard": {"PreToolUse": [{"matcher": "run_command", "hooks": [
+                "my-own-hook": {"PreToolUse": [{"matcher": "run_command", "hooks": [
                     {"type": "command", "command": "python keep-me.py", "timeout": 10}]}]},
-                "hooks": {"PreToolUse": [{"hooks": [{"command": "claude-shaped"}], "matcher": "run_command"}]},
             }
             (config / "hooks.json").write_text(json.dumps(existing), encoding="utf-8")
             args = self._agy_args(gemini, "--hooks", HOOK_NAME)
@@ -663,8 +662,7 @@ class AntiDoomLoopGuardInstallTests(unittest.TestCase):
             first = self._run(home, args)
             self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
             merged = json.loads((config / "hooks.json").read_text(encoding="utf-8"))
-            self.assertEqual(merged["danger-zone-guard"], existing["danger-zone-guard"])
-            self.assertEqual(merged["hooks"], existing["hooks"])
+            self.assertEqual(merged["my-own-hook"], existing["my-own-hook"])
             mine = merged[HOOK_NAME]["PreToolUse"]
             self.assertEqual(len(mine), 1)
             matchers = mine[0]["matcher"].split("|")
@@ -707,18 +705,26 @@ class AntiDoomLoopGuardInstallTests(unittest.TestCase):
             self.assertFalse((gemini / "config" / "hooks").exists())
             self.assertTrue((gemini / "config" / "skills" / "explain" / "SKILL.md").exists())
 
-    def test_antigravity_skips_hooks_it_has_no_registration_for(self):
+    def test_antigravity_unknown_hook_name_is_refused_before_anything_is_written(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
             self._skip_if_space(home)
             gemini = home / ".gemini"
 
-            proc = self._run(home, self._agy_args(gemini, "--hooks", "claim-guard,%s" % HOOK_NAME))
+            proc = self._run(home, self._agy_args(gemini, "--hooks", "no-such-hook,%s" % HOOK_NAME))
 
-            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-            self.assertIn("no Antigravity registration for claim-guard", proc.stdout)
-            merged = json.loads((gemini / "config" / "hooks.json").read_text(encoding="utf-8"))
-            self.assertEqual(list(merged), [HOOK_NAME])
+            self.assertEqual(proc.returncode, 2, proc.stdout + proc.stderr)
+            self.assertIn("Unknown hook(s): no-such-hook", proc.stdout)
+            self.assertFalse(gemini.exists())
+
+    def test_antigravity_selection_skips_a_name_without_a_registration(self):
+        import argparse
+        from unittest import mock
+
+        args = argparse.Namespace(hooks="claim-guard,%s" % HOOK_NAME, hooks_explicit=True)
+        only_doom = {HOOK_NAME: installer_module.ANTIGRAVITY_HOOKS[HOOK_NAME]}
+        with mock.patch.dict(installer_module.ANTIGRAVITY_HOOKS, only_doom, clear=True):
+            self.assertEqual(installer_module.antigravity_selection(args), [HOOK_NAME])
 
     def test_antigravity_refuses_a_path_it_cannot_quote(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -761,6 +767,208 @@ class AntiDoomLoopGuardInstallTests(unittest.TestCase):
                     self.assertIn("would write (dry run, nothing was written)", proc.stdout)
                     self.assertEqual(_snapshot(home), before, "a dry run must not touch anything")
             self.assertFalse((home / ".cursor").exists())
+
+
+AGY_GUARDS = ("danger-zone-guard", "test-gate-guard", "no-emoji-guard", "claim-guard", "lint-gate")
+AGY_GUARD_FILES = {
+    "danger-zone-guard": ["danger_zone_guard.py"],
+    "test-gate-guard": ["test_gate_guard.py"],
+    "no-emoji-guard": ["no-emoji-guard.py"],
+    "claim-guard": ["claim_ledger_tracker.py", "claim_evidence_guard.py"],
+    "lint-gate": ["lint_gate.py"],
+}
+
+
+class AntigravityGuardInstallTests(unittest.TestCase):
+    """`--agent antigravity --hooks <guards>`: named entries in Antigravity's own layout."""
+
+    def _run(self, home, extra):
+        env = dict(os.environ)
+        env["HOME"] = str(home)
+        env["USERPROFILE"] = str(home)
+        return subprocess.run(
+            [sys.executable, str(INSTALLER), "--agent", "antigravity",
+             "--gemini-dir", str(home / ".gemini"), *extra],
+            cwd=str(REPO), env=env, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=60,
+        )
+
+    def _skip_if_space(self, path):
+        if any(ch.isspace() for ch in str(path)):
+            self.skipTest("Antigravity cannot quote a hook command; the temp path has a space")
+
+    def _doom_entry(self, config_dir):
+        script = config_dir / "hooks" / HOOK_FILE
+        command = "%s %s" % ("python" if platform.system() == "Windows" else "python3", script)
+        return {"PreToolUse": [{"matcher": "run_command|view_file", "hooks": [
+            {"type": "command", "command": command, "timeout": 10}]}]}
+
+    def _fire(self, script, payload, **env_extra):
+        env = dict(os.environ)
+        env["HARNESS_GUARD_STATE_DIR"] = str(Path(script).parent / "state")
+        env["CLAIM_GUARD_LEDGER_DIR"] = str(Path(script).parent / "ledger")
+        env.update(env_extra)
+        return subprocess.run([sys.executable, str(script)], input=json.dumps(payload).encode("utf-8"),
+                              capture_output=True, env=env, timeout=30)
+
+    def test_registers_every_guard_in_antigravitys_layout_and_keeps_the_rest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._skip_if_space(home)
+            config = home / ".gemini" / "config"
+            config.mkdir(parents=True)
+            keep = {"my-own-hook": {"PostToolUse": [{"matcher": "*", "hooks": [
+                {"type": "command", "command": "python keep-me.py"}]}]},
+                    "anti-doom-loop-guard": self._doom_entry(config)}
+            (config / "hooks.json").write_text(json.dumps(keep), encoding="utf-8")
+            args = ["--hooks", ",".join(("anti-doom-loop-guard",) + AGY_GUARDS)]
+
+            first = self._run(home, args)
+            self.assertEqual(first.returncode, 0, first.stdout + first.stderr)
+            merged = json.loads((config / "hooks.json").read_text(encoding="utf-8"))
+            self.assertNotIn("hooks", merged)
+            self.assertEqual(merged["my-own-hook"], keep["my-own-hook"])
+            self.assertEqual(merged["anti-doom-loop-guard"], keep["anti-doom-loop-guard"],
+                             "the doom-loop entry that was already there is left exactly as it is")
+            self.assertEqual(installer_module.antigravity_config_problems(merged), [])
+
+            for name in ("danger-zone-guard", "test-gate-guard"):
+                group = merged[name]["PreToolUse"]
+                self.assertEqual([g["matcher"] for g in group], ["run_command"])
+            self.assertEqual(set(merged["no-emoji-guard"]["PreToolUse"][0]["matcher"].split("|")),
+                             {"write_to_file", "replace_file_content", "multi_replace_file_content"})
+            tracker = merged["claim-guard"]["PostToolUse"]
+            self.assertEqual(set(tracker[0]["matcher"].split("|")),
+                             {"run_command", "grep_search", "find_by_name", "list_dir"})
+            # Stop is a flat list of handlers: no matcher group around them.
+            for name in ("claim-guard", "lint-gate"):
+                stop = merged[name]["Stop"]
+                self.assertEqual(len(stop), 1)
+                self.assertNotIn("hooks", stop[0])
+                self.assertNotIn("matcher", stop[0])
+                self.assertEqual(stop[0]["type"], "command")
+            self.assertEqual(merged["lint-gate"]["Stop"][0]["timeout"], 60)
+            for name, entry in merged.items():
+                for event, value in entry.items():
+                    for handler in ([h for g in value for h in g["hooks"]]
+                                    if event in ("PreToolUse", "PostToolUse") else value):
+                        self.assertNotIn('"', handler["command"], name)
+                        self.assertNotIn("'", handler["command"], name)
+            installed = sorted(p.name for p in (config / "hooks").iterdir())
+            expected = sorted([HOOK_FILE] + [f for n in AGY_GUARDS for f in AGY_GUARD_FILES[n]])
+            self.assertEqual(installed, expected)
+            self.assertTrue(list((home / ".gemini" / "backups").glob("hooks.json.bak-*")))
+            self.assertIn("herdr", first.stdout)
+            self.assertIn("transcriptPath", first.stdout, "the claim-guard limit has to be said out loud")
+
+            again = self._run(home, args)
+            self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
+            self.assertIn("nothing new to register", again.stdout)
+            self.assertEqual(json.loads((config / "hooks.json").read_text(encoding="utf-8")), merged)
+
+    def test_all_resolves_to_every_registered_hook(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._skip_if_space(home)
+            proc = self._run(home, ["--hooks", "all"])
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            merged = json.loads((home / ".gemini" / "config" / "hooks.json").read_text(encoding="utf-8"))
+            self.assertEqual(set(merged), {HOOK_NAME, *AGY_GUARDS})
+
+    def test_installed_guards_answer_in_antigravitys_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._skip_if_space(home)
+            self.assertEqual(self._run(home, ["--hooks", ",".join(AGY_GUARDS)]).returncode, 0)
+            hooks = home / ".gemini" / "config" / "hooks"
+            common = {"conversationId": "agy-install-1", "workspacePaths": [str(home)],
+                      "transcriptPath": str(home / "transcript.jsonl"), "modelName": "auto"}
+
+            def pre(command):
+                return dict(common, toolCall={"name": "run_command", "args": {"CommandLine": command}}, stepIdx=3)
+
+            denied = self._fire(hooks / "danger_zone_guard.py", pre("rm -rf /"))
+            self.assertEqual(denied.returncode, 0)
+            self.assertEqual(json.loads(denied.stdout)["decision"], "deny")
+            allowed = self._fire(hooks / "danger_zone_guard.py", pre("rm -rf dist/"))
+            self.assertEqual(allowed.stdout.decode().strip(), "{}", "an allow must not auto-approve")
+            gated = self._fire(hooks / "test_gate_guard.py", pre("pytest ; git push"))
+            self.assertEqual(json.loads(gated.stdout)["decision"], "deny")
+            emoji = self._fire(hooks / "no-emoji-guard.py", dict(common, toolCall={
+                "name": "write_to_file", "args": {"TargetFile": str(home / "a.md"), "CodeContent": "hi \U0001F680"}}))
+            self.assertEqual(json.loads(emoji.stdout)["decision"], "deny")
+
+            (home / "transcript.jsonl").write_text(json.dumps(
+                {"type": "PLANNER_RESPONSE", "text": "All tests pass, verified."}) + "\n", encoding="utf-8")
+            stop = dict(common, executionNum=1, terminationReason="NO_TOOL_CALL", fullyIdle=True)
+            claim = self._fire(hooks / "claim_evidence_guard.py", stop)
+            self.assertEqual(json.loads(claim.stdout)["decision"], "continue")
+
+    def test_dry_run_with_every_guard_writes_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._skip_if_space(home)
+            config = home / ".gemini" / "config"
+            config.mkdir(parents=True)
+            (config / "hooks.json").write_text(json.dumps({"anti-doom-loop-guard": self._doom_entry(config)}),
+                                               encoding="utf-8")
+            before = _snapshot(home)
+
+            proc = self._run(home, ["--dry-run", "--hooks", ",".join(("anti-doom-loop-guard",) + AGY_GUARDS)])
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertEqual(_snapshot(home), before, "a dry run must not touch anything")
+            self.assertEqual(proc.stdout.count("will register"), 6)  # 5 guards, claim-guard has 2 handlers
+            self.assertEqual(proc.stdout.count("already registered"), 1)
+            self.assertIn("would write (dry run, nothing was written)", proc.stdout)
+
+    def test_refuses_to_write_next_to_a_claude_layout_hooks_block(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._skip_if_space(home)
+            config = home / ".gemini" / "config"
+            config.mkdir(parents=True)
+            legacy = {"hooks": {"Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "x.py"}]}]}}
+            (config / "hooks.json").write_text(json.dumps(legacy), encoding="utf-8")
+            before = _snapshot(home)
+
+            for extra in (["--dry-run"], []):
+                with self.subTest(extra=extra):
+                    proc = self._run(home, [*extra, "--hooks", "danger-zone-guard"])
+                    self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+                    self.assertIn("REFUSED", proc.stdout)
+                    self.assertIn('top-level "hooks" key', proc.stdout)
+                    self.assertEqual(_snapshot(home), before, "a refusal writes nothing, not even a backup")
+
+    def test_refuses_a_user_entry_that_antigravity_would_reject(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._skip_if_space(home)
+            config = home / ".gemini" / "config"
+            config.mkdir(parents=True)
+            # Stop wrapped in a matcher group: the shape the Claude-layout file used.
+            broken = {"mine": {"Stop": [{"matcher": "*", "hooks": [{"type": "command", "command": "x.py"}]}]}}
+            (config / "hooks.json").write_text(json.dumps(broken), encoding="utf-8")
+            before = _snapshot(home)
+
+            proc = self._run(home, ["--hooks", "lint-gate"])
+
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("mine.Stop must be a flat list of handlers", proc.stdout)
+            self.assertEqual(_snapshot(home), before)
+
+    def test_config_problems_accepts_what_the_installer_writes_and_the_docs_example(self):
+        docs_example = {
+            "lint-checker": {"PostToolUse": [{"matcher": "run_command", "hooks": [
+                {"type": "command", "command": "./scripts/lint.sh", "timeout": 10}]}]},
+            "safety-gate": {"enabled": False, "PreToolUse": [{"matcher": "run_command", "hooks": [
+                {"command": "./scripts/safety-check.sh"}]}]},
+            "reminder": {"PreInvocation": [{"type": "command", "command": "./scripts/reminder.sh"}]},
+        }
+        self.assertEqual(installer_module.antigravity_config_problems(docs_example), [])
+        self.assertTrue(installer_module.antigravity_config_problems({"hooks": {}}))
+        self.assertTrue(installer_module.antigravity_config_problems({"a": {"PreToolUse": [{"hooks": [{}]}]}}))
+        self.assertTrue(installer_module.antigravity_config_problems([]))
 
 
 class AntiDoomLoopGuardVerifierTests(unittest.TestCase):
@@ -826,6 +1034,61 @@ class AntiDoomLoopGuardVerifierTests(unittest.TestCase):
 
             self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
             self.assertIn("FAIL Antigravity hook command has no quotes", proc.stdout)
+
+    def test_every_antigravity_guard_is_live_fired(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            if any(ch.isspace() for ch in str(home)):
+                self.skipTest("Antigravity cannot quote a hook command; the temp path has a space")
+            env = self._env(home)
+            proc = subprocess.run(
+                [sys.executable, str(INSTALLER), "--agent", "antigravity", "--hooks", "all", "--skills", "none"],
+                cwd=str(REPO), env=env, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+
+            verified = self._verify(env, "antigravity")
+
+            self.assertEqual(verified.returncode, 0, verified.stdout + verified.stderr)
+            for line in (
+                'PASS Antigravity hooks.json has no Claude Code layout top-level "hooks" key',
+                "PASS Antigravity danger-zone-guard denies `rm -rf /`",
+                "PASS Antigravity danger-zone-guard allows `rm -rf dist/` with {}",
+                "PASS Antigravity test-gate-guard denies `pytest ; git push`",
+                "PASS Antigravity test-gate-guard allows `pytest && git push` with {}",
+                "PASS Antigravity no-emoji-guard denies a write containing emoji",
+                "PASS Antigravity no-emoji-guard allows a clean write with {}",
+                "PASS Antigravity claim-guard continues 'tests pass' with an empty ledger",
+                "PASS Antigravity claim-guard allows the same claim once the ledger has a test run",
+                "PASS Antigravity lint-gate continues when the project's check fails",
+                "PASS Antigravity lint-gate lets the identical failure through the second time",
+                "PASS Antigravity anti-doom-loop-guard blocks the third identical command in a row",
+            ):
+                self.assertIn(line, verified.stdout)
+
+    def test_antigravity_stop_in_a_matcher_group_or_a_hooks_key_fails_verification(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            if any(ch.isspace() for ch in str(home)):
+                self.skipTest("Antigravity cannot quote a hook command; the temp path has a space")
+            env = self._env(home)
+            subprocess.run(
+                [sys.executable, str(INSTALLER), "--agent", "antigravity", "--hooks", "lint-gate", "--skills", "none"],
+                cwd=str(REPO), env=env, capture_output=True, text=True, timeout=60, check=True)
+            path = home / ".gemini" / "config" / "hooks.json"
+            config = json.loads(path.read_text(encoding="utf-8"))
+            config["lint-gate"]["Stop"] = [{"matcher": "*", "hooks": config["lint-gate"]["Stop"]}]
+            path.write_text(json.dumps(config), encoding="utf-8")
+
+            proc = self._verify(env, "antigravity")
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("FAIL Antigravity lint-gate uses Antigravity's event layout", proc.stdout)
+
+            config["hooks"] = {"Stop": []}
+            path.write_text(json.dumps(config), encoding="utf-8")
+            proc = self._verify(env, "antigravity")
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn('FAIL Antigravity hooks.json has no Claude Code layout top-level "hooks" key', proc.stdout)
 
     def test_codex_registration_without_the_agent_flag_fails_verification(self):
         with tempfile.TemporaryDirectory() as tmp:

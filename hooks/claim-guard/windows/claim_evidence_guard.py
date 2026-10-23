@@ -22,14 +22,27 @@ version: no `jq` on Windows, and a bare `bash` resolves to WSL).
 
 Both hooks in this pair must be installed together.
 
+Antigravity (Stop event). Its Stop payload names the conversation and a
+`transcriptPath`, but carries no assistant message, so the last model message
+is read from the transcript file. The official hooks reference does not
+describe that file's line format; the reader here follows the step shape the
+`run-workflow` reference documents (`type` PLANNER_RESPONSE with `text`) and
+fails open -- no readable model message, no block -- so a different format
+makes the guard silent, never wrong. Antigravity's Stop has no
+`stop_hook_active`, so "blocked once already" is remembered per conversation by
+a fingerprint of the message: the same message a second time is let through.
+Block = stdout {"decision":"continue","reason":...}; allow = {}.
+
 Adapted from AlethiaQuizForge/no-hallucination (MIT), by way of this repo's
 shell version.
 """
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -52,6 +65,8 @@ def default_ledger_dir():
         return Path.home() / ".cache" / "codex-guard-hooks"
     if "/.cursor/" in here:
         return Path.home() / ".cache" / "cursor-guard-hooks"
+    if "/.gemini/" in here:
+        return Path.home() / ".cache" / "antigravity-guard-hooks"
     return Path.home() / ".cache" / "claude-guard-hooks"
 
 
@@ -125,7 +140,13 @@ def cleanup(*paths):
 
 
 def target_repo_root(payload):
-    cwd = payload.get("cwd") or payload.get("working_directory") or os.getcwd()
+    workspaces = payload.get("workspacePaths")  # Antigravity
+    cwd = (
+        payload.get("cwd")
+        or payload.get("working_directory")
+        or (workspaces[0] if isinstance(workspaces, list) and workspaces else None)
+        or os.getcwd()
+    )
     path = Path(cwd).resolve()
     for cur in [path, *path.parents]:
         if (cur / "loop-policy.toml").exists() or (cur / ".git").exists():
@@ -222,10 +243,20 @@ def is_cursor(payload):
     return payload.get("hook_event_name") in CURSOR_EVENTS
 
 
+def is_antigravity(payload):
+    """Antigravity names its tool call `toolCall` and its session `conversationId`.
+
+    Neither is a field Claude Code, Codex or Cursor send, so either one is a
+    reliable sign of the caller -- unlike a field several of them share.
+    """
+    return isinstance(payload.get("toolCall"), dict) or "conversationId" in payload
+
+
 def session_id(payload):
     sid = (
         payload.get("session_id")
         or payload.get("conversation_id")
+        or payload.get("conversationId")  # Antigravity
         or payload.get("turn_id")
         or "default"
     )
@@ -276,11 +307,173 @@ def block(payload, reason, *ledgers):
     return 0
 
 
+def evaluate(payload, last, second_pass, verify_ledger, search_ledger):
+    """Reconcile the last message with the ledger. Returns a block reason, or None.
+
+    Ledgers are cleaned up here, in both outcomes, exactly where the checks
+    decide. `second_pass` means "this message was already blocked once":
+    Claude Code says so with `stop_hook_active`, Antigravity has to be told by
+    the caller.
+    """
+    if VERIFY_TRIGGERS.search(last):
+        if not has_records(verify_ledger) and not second_pass:
+            cleanup(verify_ledger, search_ledger)
+            return VERIFY_BLOCK
+        repo_root = target_repo_root(payload)
+        quality_err = check_quality_summary_gate(repo_root)
+        if quality_err:
+            cleanup(verify_ledger, search_ledger)
+            return quality_err
+
+    # A second pass may relax only the session-ledger requirement. Machine
+    # evidence remains fail-closed until the claim is revised or Full is rerun.
+    if second_pass:
+        cleanup(verify_ledger, search_ledger)
+        return None
+
+    if NEG_TRIGGERS.search(last) and not has_records(search_ledger):
+        cleanup(verify_ledger, search_ledger)
+        return SEARCH_BLOCK
+
+    cleanup(verify_ledger, search_ledger)
+    return None
+
+
+# -- Antigravity ---------------------------------------------------------------
+
+# `terminationReason` values that mean "the model finished its turn". The others
+# (user cancel, error, invocation or token limits, a hook's own terminate) are
+# not a completion claim, so there is nothing to check.
+ANTIGRAVITY_NORMAL_STOPS = ("NO_TOOL_CALL", "TERMINAL_STEP_TYPE")
+TRANSCRIPT_TAIL_BYTES = 512000
+
+
+def antigravity_text(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "".join(
+            (part.get("text") or "") if isinstance(part, dict) else str(part)
+            for part in value
+        )
+    return ""
+
+
+def antigravity_last_message(payload):
+    """The last model message in the transcript Antigravity points at, or "".
+
+    One JSON object per line. A line counts as a model message when its step
+    type is PLANNER_RESPONSE (optionally with the CORTEX_STEP_TYPE_ prefix) or
+    its role is assistant / model / ai. Anything unreadable is skipped.
+    """
+    path = payload.get("transcriptPath")
+    if not isinstance(path, str) or not path:
+        return ""
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - TRANSCRIPT_TAIL_BYTES))
+            data = fh.read().decode("utf-8", errors="replace")
+        if size > TRANSCRIPT_TAIL_BYTES:
+            data = data.split("\n", 1)[-1]  # the first line is cut in the middle
+    except OSError:
+        return ""
+    found = ""
+    for line in data.splitlines():
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(obj, dict):
+            continue
+        kind = str(obj.get("type") or obj.get("stepType") or "").upper()
+        kind = kind.replace("CORTEX_STEP_TYPE_", "")
+        role = str(obj.get("role") or "").lower()
+        if kind != "PLANNER_RESPONSE" and role not in ("assistant", "model", "ai"):
+            continue
+        text = ""
+        for key in ("text", "content", "message", "response"):
+            text = antigravity_text(obj.get(key))
+            if text.strip():
+                break
+        if not text.strip():
+            for key in ("plannerResponse", "planner_response"):
+                inner = obj.get(key)
+                if isinstance(inner, dict):
+                    for sub in ("text", "response", "content", "message"):
+                        text = antigravity_text(inner.get(sub))
+                        if text.strip():
+                            break
+                if text.strip():
+                    break
+        if text.strip():
+            found = text
+    return found
+
+
+def state_path(sid):
+    base = os.environ.get("HARNESS_GUARD_STATE_DIR") or tempfile.gettempdir()
+    return Path(base) / ("harness-guard-agy-claim-stop-%s.json" % sid)
+
+
+def read_blocked_fingerprint(path):
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data.get("blocked") if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def antigravity_stop(payload):
+    """Antigravity's Stop: block with {"decision":"continue"}, allow with {}."""
+    def allow():
+        sys.stdout.write("{}\n")
+        return 0
+
+    reason_code = payload.get("terminationReason") or ""
+    if reason_code and reason_code not in ANTIGRAVITY_NORMAL_STOPS:
+        return allow()
+
+    sid = session_id(payload)
+    last = antigravity_last_message(payload)
+    if not last:
+        return allow()
+
+    fingerprint = hashlib.sha256(last.encode("utf-8", "replace")).hexdigest()[:16]
+    state = state_path(sid)
+    second_pass = read_blocked_fingerprint(state) == fingerprint
+    reason = evaluate(
+        payload, last, second_pass, LEDGER_DIR / (sid + ".verify"), LEDGER_DIR / (sid + ".search")
+    )
+    if not reason:
+        try:
+            state.unlink()
+        except OSError:
+            pass
+        return allow()
+    try:
+        state.parent.mkdir(parents=True, exist_ok=True)
+        state.write_text(json.dumps({"blocked": fingerprint}), encoding="utf-8")
+    except OSError:
+        pass  # without the note the same message may be blocked again; still bounded by Antigravity
+    sys.stdout.write(json.dumps({"decision": "continue", "reason": reason}, ensure_ascii=False) + "\n")
+    return 0
+
+
 def main():
     try:
         payload = read_payload()
     except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
         return 0
+    if not isinstance(payload, dict):
+        return 0
+
+    if is_antigravity(payload):
+        return antigravity_stop(payload)
 
     sid = session_id(payload)
     verify_ledger = LEDGER_DIR / (sid + ".verify")
@@ -290,25 +483,12 @@ def main():
     if not last:
         return 0
 
-    if VERIFY_TRIGGERS.search(last):
-        second_pass = payload.get("stop_hook_active") is True
-        if not has_records(verify_ledger) and not second_pass:
-            return block(payload, VERIFY_BLOCK, verify_ledger, search_ledger)
-        repo_root = target_repo_root(payload)
-        quality_err = check_quality_summary_gate(repo_root)
-        if quality_err:
-            return block(payload, quality_err, verify_ledger, search_ledger)
-
-    # A second pass may relax only the session-ledger requirement. Machine
-    # evidence remains fail-closed until the claim is revised or Full is rerun.
-    if payload.get("stop_hook_active") is True:
-        cleanup(verify_ledger, search_ledger)
-        return 0
-
-    if NEG_TRIGGERS.search(last) and not has_records(search_ledger):
-        return block(payload, SEARCH_BLOCK, verify_ledger, search_ledger)
-
-    cleanup(verify_ledger, search_ledger)
+    reason = evaluate(
+        payload, last, payload.get("stop_hook_active") is True, verify_ledger, search_ledger
+    )
+    if reason:
+        # evaluate() already cleaned the ledgers, as block() used to.
+        return block(payload, reason)
     return 0
 
 

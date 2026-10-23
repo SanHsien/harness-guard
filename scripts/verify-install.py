@@ -191,6 +191,58 @@ def check_settings(jq_present):
 
 # -- Antigravity environment -----------------------------------------------
 
+# What install.py registers for Antigravity: per hook, its (event, tools the
+# matcher must cover, installed script). A matcher of None means a flat event
+# (Stop): the handler sits directly in the list and there is no matcher group.
+AGY_EXPECT = {
+    "anti-doom-loop-guard": [
+        ("PreToolUse", {"run_command", "replace_file_content"}, "anti_doom_loop_guard.py")],
+    "danger-zone-guard": [("PreToolUse", {"run_command"}, "danger_zone_guard.py")],
+    "test-gate-guard": [("PreToolUse", {"run_command"}, "test_gate_guard.py")],
+    "no-emoji-guard": [
+        ("PreToolUse", {"write_to_file", "replace_file_content", "multi_replace_file_content"},
+         "no-emoji-guard.py")],
+    "claim-guard": [
+        ("PostToolUse", {"run_command", "grep_search"}, "claim_ledger_tracker.py"),
+        ("Stop", None, "claim_evidence_guard.py")],
+    "lint-gate": [("Stop", None, "lint_gate.py")],
+}
+AGY_FLAT = ("SessionStart", "PreInvocation", "PostInvocation", "Stop")
+
+
+def agy_handlers(entries, flat):
+    """(matcher, handler) pairs of one event, in either layout."""
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict):
+            continue
+        if flat:
+            if "command" in entry:
+                yield None, entry
+        else:
+            for hook in entry.get("hooks") or []:
+                if isinstance(hook, dict):
+                    yield entry.get("matcher") or "", hook
+
+
+def agy_layout_problems(name, entry):
+    """Why Antigravity would reject this named hook, per its documented layout."""
+    problems = []
+    for event, value in entry.items():
+        if event == "enabled":
+            continue
+        if event in AGY_FLAT:
+            if not isinstance(value, list) or any(
+                    not isinstance(h, dict) or not isinstance(h.get("command"), str) for h in value):
+                problems.append("%s: %s must be a flat list of handlers with a 'command'" % (name, event))
+        elif event in ("PreToolUse", "PostToolUse"):
+            handlers = [h for group in (value if isinstance(value, list) else [])
+                        if isinstance(group, dict) for h in (group.get("hooks") or [])]
+            if not handlers or any(not isinstance(h, dict) or not isinstance(h.get("command"), str)
+                                   for h in handlers):
+                problems.append("%s: %s needs groups of {matcher, hooks: [handler]} with a 'command'"
+                                % (name, event))
+    return problems
+
 
 def check_antigravity():
     section("Google Antigravity (AGY)")
@@ -212,30 +264,183 @@ def check_antigravity():
         record(False, "Antigravity hooks.json is valid JSON", str(exc))
         return
     record(True, "Antigravity hooks.json is valid JSON", str(path))
-    entry = data.get("anti-doom-loop-guard") if isinstance(data, dict) else None
-    if entry is None:
-        note("Antigravity anti-doom-loop-guard", "not registered, skipped")
+    if not isinstance(data, dict):
+        record(False, "Antigravity hooks.json is a JSON object")
         return
+    record("hooks" not in data,
+           'Antigravity hooks.json has no Claude Code layout top-level "hooks" key',
+           'Antigravity reads every top-level key as a hook name and rejects the whole file, '
+           'so none of the hooks in it run' if "hooks" in data else "")
+    note("herdr", "herdr's own agent-state hook is separate and not checked here; it uses events "
+                  "Antigravity does not have")
 
-    groups = (entry or {}).get("PreToolUse") if isinstance(entry, dict) else None
-    commands = [h.get("command", "") for g in groups or [] if isinstance(g, dict)
-                for h in g.get("hooks") or [] if isinstance(h, dict)]
-    record(bool(commands), "Antigravity anti-doom-loop-guard is registered on PreToolUse",
-           "%d handler(s)" % len(commands))
-    quoted = [c for c in commands if '"' in c or "'" in c]
-    record(not quoted, "Antigravity hook command has no quotes (Antigravity may split it without a shell)",
-           quoted[0][:80] if quoted else "")
-    if isinstance(entry, dict) and entry.get("enabled") is False:
-        note("Antigravity anti-doom-loop-guard", 'switched off ("enabled": false), so it protects nothing')
-    matchers = {m for g in groups or [] if isinstance(g, dict)
-                for m in (g.get("matcher") or "").split("|")}
-    record({"run_command", "replace_file_content"} <= matchers,
-           "Antigravity matcher covers run_command and the edit tools",
-           "" if {"run_command", "replace_file_content"} <= matchers else "matchers: %s" % sorted(matchers))
-    script = find_hook_in(GEMINI_DIR / "config" / "hooks", DOOM_HOOK)
-    record(bool(script), "Antigravity anti-doom-loop-guard script exists")
-    if script:
-        live_fire_doom_loop("antigravity", "Antigravity", script)
+    registered = [name for name in AGY_EXPECT if name in data]
+    if not registered:
+        note("Antigravity hooks", "none of this kit's hooks is registered, skipped")
+    for name in registered:
+        check_antigravity_hook(name, data[name])
+
+
+def check_antigravity_hook(name, entry):
+    if not isinstance(entry, dict):
+        record(False, "Antigravity %s entry is an object" % name)
+        return
+    problems = agy_layout_problems(name, entry)
+    record(not problems, "Antigravity %s uses Antigravity's event layout" % name, "; ".join(problems))
+    if entry.get("enabled") is False:
+        note("Antigravity %s" % name, 'switched off ("enabled": false), so it protects nothing')
+
+    scripts = {}
+    for event, tools, filename in AGY_EXPECT[name]:
+        flat = event in AGY_FLAT
+        pairs = list(agy_handlers(entry.get(event), flat))
+        commands = [h.get("command", "") for _m, h in pairs]
+        record(bool(commands), "Antigravity %s is registered on %s" % (name, event),
+               "%d handler(s)" % len(commands))
+        quoted = [c for c in commands if '"' in c or "'" in c]
+        record(not quoted, "Antigravity hook command has no quotes (Antigravity may split it without a shell)",
+               ("%s: %s" % (name, quoted[0][:80])) if quoted else "")
+        if tools is not None:
+            matchers = {m for matcher, _h in pairs for m in matcher.split("|")}
+            ok = tools <= matchers
+            record(ok, "Antigravity %s matcher covers %s" % (name, ", ".join(sorted(tools))),
+                   "" if ok else "matchers: %s" % sorted(matchers))
+        script = find_hook_in(GEMINI_DIR / "config" / "hooks", filename)
+        record(bool(script), "Antigravity %s script exists (%s)" % (name, filename))
+        scripts[filename] = script
+
+    if not all(scripts.values()):
+        return
+    live_fire_antigravity(name, scripts)
+
+
+# -- live fire in Antigravity's own payload shape --------------------------------
+
+
+def agy_common(conversation):
+    return {
+        "conversationId": conversation,
+        "workspacePaths": [str(SCRATCH)],
+        "transcriptPath": str(SCRATCH / (conversation + ".jsonl")),
+        "artifactDirectoryPath": str(SCRATCH / "artifacts"),
+        "modelName": "auto",
+    }
+
+
+def agy_pre(tool, args, conversation="verify-agy"):
+    return dict(agy_common(conversation), toolCall={"name": tool, "args": args}, stepIdx=1)
+
+
+def agy_stop(conversation, reason="NO_TOOL_CALL"):
+    return dict(agy_common(conversation), executionNum=1, terminationReason=reason, error="", fullyIdle=True)
+
+
+def agy_json(proc):
+    if proc is None or proc.returncode != 0:
+        return None
+    try:
+        data = json.loads(proc.stdout or "")
+    except (TypeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def agy_denies(proc):
+    data = agy_json(proc)
+    return bool(data) and data.get("decision") == "deny" and bool(data.get("reason"))
+
+
+def agy_continues(proc):
+    data = agy_json(proc)
+    return bool(data) and data.get("decision") == "continue" and bool(data.get("reason"))
+
+
+def agy_silent(proc):
+    """`{}` exactly. {"decision": "allow"} would approve the call without asking."""
+    return proc is not None and proc.returncode == 0 and (proc.stdout or "").strip() == "{}"
+
+
+def agy_env():
+    (SCRATCH / "state").mkdir(exist_ok=True)
+    return {"HARNESS_GUARD_STATE_DIR": str(SCRATCH / "state")}
+
+
+def live_fire_antigravity(name, scripts):
+    if name == "anti-doom-loop-guard":
+        live_fire_doom_loop("antigravity", "Antigravity", scripts["anti_doom_loop_guard.py"])
+    elif name in ("danger-zone-guard", "test-gate-guard"):
+        script = next(iter(scripts.values()))
+        bad, good = (("rm -rf /", "rm -rf dist/") if name == "danger-zone-guard"
+                     else ("pytest ; git push", "pytest && git push"))
+        blocked = run_hook(script, agy_pre("run_command", {"CommandLine": bad}), env=agy_env())
+        allowed = run_hook(script, agy_pre("run_command", {"CommandLine": good}), env=agy_env())
+        record(agy_denies(blocked), "Antigravity %s denies `%s`" % (name, bad), process_detail(blocked))
+        record(agy_silent(allowed), "Antigravity %s allows `%s` with {}" % (name, good), process_detail(allowed))
+    elif name == "no-emoji-guard":
+        script = scripts["no-emoji-guard.py"]
+        probe = str(SCRATCH / "a.md")
+        reason = switched_off(script, probe)
+        if reason:
+            note("Antigravity no-emoji-guard", "installed and loaded, but switched off (%s), so it "
+                 "allows writes. That is a setting, not a fault." % reason)
+            return
+        blocked = run_hook(script, agy_pre("write_to_file", {
+            "TargetFile": probe, "CodeContent": "ship it \U0001F680"}), env=agy_env())
+        allowed = run_hook(script, agy_pre("write_to_file", {
+            "TargetFile": probe, "CodeContent": "ship it"}), env=agy_env())
+        record(agy_denies(blocked), "Antigravity no-emoji-guard denies a write containing emoji",
+               process_detail(blocked))
+        record(agy_silent(allowed), "Antigravity no-emoji-guard allows a clean write with {}",
+               process_detail(allowed))
+    elif name == "claim-guard":
+        live_fire_antigravity_claim(scripts["claim_ledger_tracker.py"], scripts["claim_evidence_guard.py"])
+    elif name == "lint-gate":
+        live_fire_antigravity_lint(scripts["lint_gate.py"])
+
+
+def live_fire_antigravity_claim(tracker, guard):
+    def say(conversation, text):
+        line = {"index": 1, "type": "PLANNER_RESPONSE", "status": "DONE", "text": text}
+        (SCRATCH / (conversation + ".jsonl")).write_text(json.dumps(line) + "\n", encoding="utf-8")
+
+    note("Antigravity claim-guard", "the Stop payload has no assistant message, so the guard reads the "
+         "transcript file; its line format is not in the official docs. These checks use a transcript "
+         "of the documented step shape -- they prove the adapter, not a real transcript")
+    say("verify-agy-empty", "I ran the tests, all passing.")
+    empty = run_hook(guard, agy_stop("verify-agy-empty"), env=agy_env())
+    record(agy_continues(empty), "Antigravity claim-guard continues 'tests pass' with an empty ledger",
+           process_detail(empty))
+
+    say("verify-agy-logged", "I ran the tests, all passing.")
+    logged = run_hook(tracker, dict(agy_pre("run_command", {"CommandLine": "pytest -q"}, "verify-agy-logged"),
+                                    stepIdx=2), env=agy_env())
+    after = run_hook(guard, agy_stop("verify-agy-logged"), env=agy_env())
+    record(agy_silent(logged), "Antigravity claim-ledger-tracker answers {}", process_detail(logged))
+    record(agy_silent(after), "Antigravity claim-guard allows the same claim once the ledger has a test run",
+           process_detail(after))
+
+
+def live_fire_antigravity_lint(script):
+    failing_check = "%s -c \"print('found 3 errors')\"" % sys.executable
+    project = SCRATCH / "agy-lint-project"
+    quiet = SCRATCH / "agy-quiet-project"
+    for directory in (project, quiet):
+        directory.mkdir(exist_ok=True)
+    (project / ".lint-gate.json").write_text(
+        json.dumps({"cmd": failing_check, "fail": "[1-9][0-9]* errors?"}), encoding="utf-8")
+
+    def stop(directory, conversation):
+        return dict(agy_stop(conversation), workspacePaths=[str(directory)])
+
+    inert = run_hook(script, stop(quiet, "verify-agy-lint-quiet"), env=agy_env())
+    first = run_hook(script, stop(project, "verify-agy-lint"), env=agy_env())
+    again = run_hook(script, stop(project, "verify-agy-lint"), env=agy_env())
+    record(agy_silent(inert), "Antigravity lint-gate does nothing in a project with no .lint-gate.json",
+           process_detail(inert))
+    record(agy_continues(first), "Antigravity lint-gate continues when the project's check fails",
+           process_detail(first))
+    record(agy_silent(again), "Antigravity lint-gate lets the identical failure through the second time",
+           process_detail(again))
 
 
 def check_cursor_config():

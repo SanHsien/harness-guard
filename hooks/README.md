@@ -39,6 +39,15 @@ unknown events fail open, and `ANTI_DOOM_LOOP_THRESHOLD` changes the threshold. 
 `python hooks/anti-doom-loop-guard/tests/run-tests.py`. Install only this hook with
 `python scripts/install.py --agent <claude|codex|cursor|antigravity> --hooks anti-doom-loop-guard`.
 
+**Antigravity adapters for the other guards.** `danger-zone-guard`, `test-gate-guard`, `no-emoji-guard`,
+`claim-guard` and `lint-gate` recognise Antigravity by `toolCall` / `conversationId` (never by a field other agents
+also send) and answer in its contract: `PreToolUse` deny `{"decision":"deny","reason":...}`, `Stop` refuse
+`{"decision":"continue","reason":...}`, allow `{}` (never `{"decision":"allow"}`, which auto-approves). Registered
+with `install.py --agent antigravity --hooks <name>`; matchers and limits (notably: the `Stop` payload has no
+assistant message, so `claim-guard` reads `transcriptPath`, whose format is not in the official docs) are in
+[`../docs/antigravity-install.en.md`](../docs/antigravity-install.en.md). Tests:
+`python hooks/tests/run-antigravity-tests.py`.
+
 `danger-zone-guard/` blocks catastrophic deletions, force pushes to a protected
 branch, and credential exfiltration. The force-push rule -- and only that rule --
 has an escape hatch: put `# force-push-ok: <reason>` in the command. Squashing a
