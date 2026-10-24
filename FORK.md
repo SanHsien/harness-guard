@@ -30,7 +30,7 @@
 | Antigravity／Gemini 支援 | `docs/antigravity-install.md`、`gemini-md-template/`、`install.py` 多 agent 目標 |
 | Cursor／Codex 安裝器 | `install.py --agent cursor|codex`；Cursor 寫扁平 `hooks.json`，Codex 合併進既有 `hooks.json` 並用絕對路徑 |
 | 兩套新技能 | `verification-protocol`、`task-orchestrator` |
-| `AGENTS.md` | 改寫為單一真相源，任何 agent 讀這份就夠；`CLAUDE.md` 縮成 Claude Code 薄補丁 |
+| `AGENTS.md` | 改寫為唯一指令檔，任何 agent 讀這份就夠；上游的 `CLAUDE.md` 已刪除 |
 | 文件語言 | 繁體中文為主，英文放 `*.en.md` 鏡像 |
 
 ---
@@ -73,7 +73,7 @@ git merge upstream/main
 ```
 
 衝突會出現在被改過的上游檔案：`README.md`（主檔已換中文，英文在 `README.en.md`）、
-`AGENTS.md`、`CLAUDE.md`、`hooks/README.md`、`.gitignore`。README 衝突最大，解法是把上游
+`AGENTS.md`、`CLAUDE.md`（保留刪除）、`hooks/README.md`、`.gitignore`。README 衝突最大，解法是把上游
 新內容併進 `README.en.md`，再把對應段落翻進 `README.md`。
 
 合併後必須重新證明一次：

@@ -1,7 +1,6 @@
 # AGENTS.md
 
 給 Claude Code、OpenAI Codex、Google Antigravity / Gemini、Cursor 與其他 AI coding agent 在這個 repo 工作時的主要指引。
-Claude Code 專屬路徑與 hook 事件補充見 [`CLAUDE.md`](CLAUDE.md)；衝突時以本檔為準。
 
 這份檔案有兩個用途：
 
