@@ -8,6 +8,19 @@ Entries marked `fork` are this fork's changes relative to
 
 ---
 
+## 2026-10-25
+
+### Fixed
+
+- **Re-running the installer did not update a registration whose matcher changed (`fork`).** Once a
+  script's exact command sat in any matcher group, the installer reported "already registered", so an
+  install made before a hook's matcher widened (for instance `anti-doom-loop-guard` gaining the edit
+  tools in c38bfd7, which lets an edit reset the count) never picked it up and the count still never
+  reset. Claude Code, Codex, Cursor and Antigravity now count a hook as registered only under the same
+  command and the same matcher; a registration of the same script under another matcher is removed and
+  re-added under the current one (counted in `removed N stale`), and the user's own hooks in that group
+  are left alone.
+
 ## 2026-10-23
 
 ### Fixed

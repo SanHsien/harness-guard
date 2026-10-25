@@ -565,6 +565,35 @@ class AntiDoomLoopGuardInstallTests(unittest.TestCase):
             self.assertNotIn("some-other-python", commands[0])
             self.assertTrue(commands[0].endswith('%s"' % HOOK_FILE), commands[0])
 
+    def test_claude_moves_a_registration_under_an_outdated_matcher(self):
+        # The pre-c38bfd7 matcher left edits out, so the count never reset.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            claude = home / ".claude"
+            claude.mkdir()
+            script = claude / "hooks" / HOOK_FILE
+            interpreter = "python" if platform.system() == "Windows" else "python3"
+            settings = self._manual_settings('%s "%s"' % (interpreter, script))
+            settings["hooks"]["PreToolUse"][0]["matcher"] = "Bash|Read"
+            settings["hooks"]["PreToolUse"][0]["hooks"].append(
+                {"type": "command", "command": "keep-me"})
+            settings_path = claude / "settings.json"
+            settings_path.write_text(json.dumps(settings), encoding="utf-8")
+
+            dry = self._run(home, ["--agent", "claude", "--hooks", HOOK_NAME, "--dry-run"])
+            self.assertIn("will register", dry.stdout)
+            for _ in range(2):
+                real = self._run(home, ["--agent", "claude", "--hooks", HOOK_NAME])
+                self.assertEqual(real.returncode, 0, real.stdout + real.stderr)
+            self.assertIn("nothing new to register", real.stdout)
+
+            pre = json.loads(settings_path.read_text(encoding="utf-8"))["hooks"]["PreToolUse"]
+            by_matcher = {g["matcher"]: [h["command"] for h in g["hooks"]] for g in pre}
+            self.assertEqual(by_matcher["Bash|Read"], ["keep-me"])
+            current = by_matcher["Bash|PowerShell|Read|Edit|Write|MultiEdit|NotebookEdit"]
+            self.assertEqual(len(current), 1)
+            self.assertIn(HOOK_FILE, current[0])
+
     def test_claude_installs_only_this_hook_with_the_documented_matcher(self):
         with tempfile.TemporaryDirectory() as tmp:
             home = Path(tmp)
@@ -661,6 +690,25 @@ class AntiDoomLoopGuardInstallTests(unittest.TestCase):
             outcomes = [self._fire(script, shell) for _ in range(3)]
             self.assertEqual([p.returncode for p in outcomes], [0, 0, 0])
             self.assertEqual(json.loads(outcomes[2].stdout)["permission"], "deny")
+
+    def test_cursor_moves_an_entry_under_an_outdated_matcher(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            cursor = home / ".cursor"
+            cursor.mkdir()
+            script = cursor / "hooks" / HOOK_FILE
+            interpreter = "python" if platform.system() == "Windows" else "python3"
+            (cursor / "hooks.json").write_text(json.dumps({"version": 1, "hooks": {"preToolUse": [
+                {"command": '%s "%s"' % (interpreter, script), "timeout": 10, "matcher": "Shell|Read"},
+            ]}}), encoding="utf-8")
+            args = ["--agent", "cursor", "--cursor-dir", str(cursor), "--hooks", HOOK_NAME, "--skills", "none"]
+
+            for _ in range(2):
+                proc = self._run(home, args)
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("nothing new to register", proc.stdout)
+            entries = json.loads((cursor / "hooks.json").read_text(encoding="utf-8"))["hooks"]["preToolUse"]
+            self.assertEqual([e["matcher"] for e in entries], ["Shell|Read|Write|Delete"])
 
     # -- Antigravity ---------------------------------------------------------
 
@@ -823,11 +871,37 @@ class AntigravityGuardInstallTests(unittest.TestCase):
         if any(ch.isspace() for ch in str(path)):
             self.skipTest("Antigravity cannot quote a hook command; the temp path has a space")
 
-    def _doom_entry(self, config_dir):
+    def _doom_entry(self, config_dir, matcher=None):
         script = config_dir / "hooks" / HOOK_FILE
         command = "%s %s" % ("python" if platform.system() == "Windows" else "python3", script)
-        return {"PreToolUse": [{"matcher": "run_command|view_file", "hooks": [
+        if matcher is None:
+            matcher = installer_module.ANTIGRAVITY_HOOKS[HOOK_NAME][0]["matcher"]
+        return {"PreToolUse": [{"matcher": matcher, "hooks": [
             {"type": "command", "command": command, "timeout": 10}]}]}
+
+    def test_a_registration_under_an_outdated_matcher_is_moved_not_kept(self):
+        # Before c38bfd7 the doom-loop guard was registered for run_command and
+        # view_file only, so it never saw an edit reset its count. A re-run must
+        # move it to the current matcher, not report it as already registered.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            self._skip_if_space(home)
+            config = home / ".gemini" / "config"
+            config.mkdir(parents=True)
+            (config / "hooks.json").write_text(json.dumps(
+                {"anti-doom-loop-guard": self._doom_entry(config, "run_command|view_file")}),
+                encoding="utf-8")
+
+            dry = self._run(home, ["--dry-run", "--hooks", "anti-doom-loop-guard"])
+            self.assertEqual(dry.returncode, 0, dry.stdout + dry.stderr)
+            self.assertIn("will register", dry.stdout)
+
+            for _ in range(2):  # the second run must find it registered and add nothing
+                proc = self._run(home, ["--hooks", "anti-doom-loop-guard"])
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            merged = json.loads((config / "hooks.json").read_text(encoding="utf-8"))
+            self.assertEqual(merged["anti-doom-loop-guard"], self._doom_entry(config))
+            self.assertIn("nothing new to register", proc.stdout)
 
     def _fire(self, script, payload, **env_extra):
         env = dict(os.environ)

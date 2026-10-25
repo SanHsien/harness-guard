@@ -8,6 +8,16 @@
 
 ---
 
+## 2026-10-25
+
+### 修正
+
+- **重跑安裝器不會更新 matcher 已改的登記（`fork`）。** 同一支腳本、同一條命令只要已在任何 matcher
+  群組裡，安裝器就回報「already registered」；hook 需要看到的工具清單後來變寬（例如
+  `anti-doom-loop-guard` 在 c38bfd7 加入編輯工具，讓改檔能重置計數），舊安裝重跑也拿不到，計數照樣
+  不重置。現在 Claude Code、Codex、Cursor、Antigravity 都只把「同命令且同 matcher」算已登記；舊 matcher
+  下的同腳本登記會被移除並改登到現行 matcher（計入 `removed N stale`），同群組裡使用者自己的 hook 不動。
+
 ## 2026-10-23
 
 ### 修正

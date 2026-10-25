@@ -445,19 +445,28 @@ def hook_script_path(command):
     return match.group(1).lower().replace("\\", "/") if match else command.lower()
 
 
-def drop_stale_registrations(settings, event, command, flat=False):
-    """Remove entries running the same script with different arguments."""
+def drop_stale_registrations(settings, event, command, flat=False, matcher=None):
+    """Remove entries running the same script with different arguments.
+
+    An entry running this exact command under another matcher goes too: the
+    hook's matcher is part of what it needs to see (claim-guard reads edits,
+    anti-doom-loop-guard resets on them), and a re-run that kept the old group
+    would report "already registered" while the hook kept missing those tools.
+    """
     script = hook_script_path(command)
     removed = 0
     for entry in list(settings.get("hooks", {}).get(event) or []):
         if flat:
-            if (isinstance(entry, dict) and not same_command(entry.get("command"), command)
-                    and hook_script_path(entry.get("command", "")) == script):
+            if (isinstance(entry, dict)
+                    and hook_script_path(entry.get("command", "")) == script
+                    and (not same_command(entry.get("command"), command)
+                         or entry.get("matcher") != matcher)):
                 settings["hooks"][event].remove(entry)
                 removed += 1
             continue
+        same_group = entry.get("matcher") == matcher
         kept = [h for h in entry.get("hooks", []) or []
-                if same_command(h.get("command"), command)
+                if (same_group and same_command(h.get("command"), command))
                 or hook_script_path(h.get("command", "")) != script]
         removed += len(entry.get("hooks", []) or []) - len(kept)
         entry["hooks"] = kept
@@ -468,17 +477,20 @@ def drop_stale_registrations(settings, event, command, flat=False):
     return removed
 
 
-def already_registered(settings, event, command):
+def already_registered(settings, event, command, matcher=None):
     for entry in (settings.get("hooks", {}).get(event) or []):
+        if entry.get("matcher") != matcher:
+            continue
         for hook in entry.get("hooks", []) or []:
             if same_command(hook.get("command"), command):
                 return True
     return False
 
 
-def already_registered_cursor(settings, event, command):
+def already_registered_cursor(settings, event, command, matcher=None):
     for entry in settings.get("hooks", {}).get(event) or []:
-        if isinstance(entry, dict) and same_command(entry.get("command"), command):
+        if (isinstance(entry, dict) and same_command(entry.get("command"), command)
+                and entry.get("matcher") == matcher):
             return True
     return False
 
@@ -655,7 +667,7 @@ def install_for_claude(args):
             target = hooks_dir / source.name
             command = build_command(target)
             state = "already registered" if already_registered(
-                settings, spec["event"], command
+                settings, spec["event"], command, spec["matcher"]
             ) else "will register"
             print("%-20s %-12s %s" % (name, spec["event"], command))
             print("%-20s %-12s %s" % ("", "", state))
@@ -689,11 +701,12 @@ def install_for_claude(args):
         # Runs whether or not this exact command is present: an older
         # registration of the same script with different arguments has to go,
         # or the hook runs twice and one of those runs is the old behaviour.
-        stale += drop_stale_registrations(settings, spec["event"], command)
+        stale += drop_stale_registrations(settings, spec["event"], command,
+                                          matcher=spec["matcher"])
     if stale:
         print("removed %d outdated registration(s) of the same script" % stale)
     for spec, _source, _target, command, state in planned:
-        if already_registered(settings, spec["event"], command):
+        if already_registered(settings, spec["event"], command, spec["matcher"]):
             continue
         register(settings, spec, command)
         added += 1
@@ -800,7 +813,7 @@ def install_for_cursor(args):
             target = hooks_dir / source.name
             command = build_command(target)
             state = "already registered" if already_registered_cursor(
-                settings, spec["event"], command
+                settings, spec["event"], command, spec.get("matcher")
             ) else "will register"
             print("%-20s %-22s %s" % (name, spec["event"], command))
             print("%-20s %-22s %s" % ("", "", state))
@@ -839,11 +852,12 @@ def install_for_cursor(args):
     added = 0
     stale = 0
     for spec, _source, _target, command, state in planned:
-        stale += drop_stale_registrations(settings, spec["event"], command, flat=True)
+        stale += drop_stale_registrations(settings, spec["event"], command, flat=True,
+                                          matcher=spec.get("matcher"))
     if stale:
         print("removed %d outdated registration(s) of the same script" % stale)
     for spec, _source, _target, command, state in planned:
-        if already_registered_cursor(settings, spec["event"], command):
+        if already_registered_cursor(settings, spec["event"], command, spec.get("matcher")):
             continue
         register_cursor(settings, spec, command)
         added += 1
@@ -899,7 +913,7 @@ def install_for_codex(args):
                 tuple(spec.get("args", ())) + (tuple(spec.get("args_windows", ())) if IS_WINDOWS else ()),
             )
             state = "already registered" if already_registered(
-                settings, spec["event"], command
+                settings, spec["event"], command, spec["matcher"]
             ) else "will register"
             print("%-20s %-12s %s" % (name, spec["event"], command))
             print("%-20s %-12s %s" % ("", "", state))
@@ -929,11 +943,12 @@ def install_for_codex(args):
         # Runs whether or not this exact command is present: an older
         # registration of the same script with different arguments has to go,
         # or the hook runs twice and one of those runs is the old behaviour.
-        stale += drop_stale_registrations(settings, spec["event"], command)
+        stale += drop_stale_registrations(settings, spec["event"], command,
+                                          matcher=spec["matcher"])
     if stale:
         print("removed %d outdated registration(s) of the same script" % stale)
     for spec, _source, _target, command, state in planned:
-        if already_registered(settings, spec["event"], command):
+        if already_registered(settings, spec["event"], command, spec["matcher"]):
             continue
         register(settings, spec, command)
         added += 1
@@ -989,6 +1004,10 @@ def antigravity_handlers(entries):
 
 def antigravity_registered(config, name, spec, command):
     entries = (config.get(name) or {}).get(spec["event"]) or []
+    if spec["event"] not in ANTIGRAVITY_FLAT_EVENTS:
+        # A grouped event counts only under the spec's own matcher.
+        entries = [group for group in entries
+                   if isinstance(group, dict) and group.get("matcher") == spec["matcher"]]
     return any(same_command(hook.get("command"), command)
                for hook in antigravity_handlers(entries))
 
@@ -1003,8 +1022,12 @@ def drop_stale_antigravity(config, name, spec, command):
             continue
         if isinstance(entry.get("hooks"), list):
             hooks = entry["hooks"]
+            # Under another matcher even the exact command is moved, as in
+            # drop_stale_registrations.
+            same_group = entry.get("matcher") == spec["matcher"]
             kept = [h for h in hooks
-                    if not isinstance(h, dict) or same_command(h.get("command"), command)
+                    if not isinstance(h, dict)
+                    or (same_group and same_command(h.get("command"), command))
                     or hook_script_path(h.get("command", "")) != script]
             removed += len(hooks) - len(kept)
             entry["hooks"] = kept
