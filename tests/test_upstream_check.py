@@ -82,6 +82,30 @@ class TicketCollection(unittest.TestCase):
             self.assertIsNone(checker.collect_new_tickets(BASELINE, "pr"))
 
 
+class BaselineValidation(unittest.TestCase):
+    def load(self, **overrides):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "baseline.json"
+            path.write_text(json.dumps(dict(BASELINE, **overrides)), encoding="utf-8")
+            return checker.load_baseline(path)
+
+    def test_a_valid_baseline_loads(self):
+        self.assertEqual(self.load()["reviewed_pr_through"], 2)
+
+    def test_a_malformed_watermark_is_a_check_error(self):
+        # Reached render_markdown's int() before, outside the catch-all: exit 1.
+        for value in ("abc", "3", -1, True, 2.5):
+            with self.subTest(value=value), self.assertRaises(checker.UpstreamCheckError):
+                self.load(repo="https://gitlab.com/a/b.git", reviewed_pr_through=value)
+
+    def test_a_non_string_sha_is_a_check_error(self):
+        with self.assertRaises(checker.UpstreamCheckError):
+            self.load(reviewed_through=1234567890)
+
+
 class RewrittenHistory(unittest.TestCase):
     """A reviewed commit that upstream no longer contains must stop the check."""
 
