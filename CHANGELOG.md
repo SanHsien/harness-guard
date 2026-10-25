@@ -8,6 +8,13 @@
 
 ---
 
+## 2026-10-26
+
+### 修正
+
+- `fork` test-gate-guard：`pytest && echo ok ; git commit`、`pytest ; ls && git push` 這類「`&&` 與 `;` 混用」的串接，原本因為中間出現 `&&` 就放行，紅燈測試仍會提交；現在只要測試與 `git commit`／`push` 之間有 `;` 或換行就攔。`git -C 路徑 push`、`git -c k=v commit`、`git --no-pager push` 等帶選項的寫法原本看不到，現在會攔。`<<<` here-string 不再被當成 heredoc 而吃掉後面的整段指令；跳脫的引號（`\"`）不再讓引號配對錯位。行尾 `&&`、`||`、`\` 後換行視為同一條指令的延續，不誤攔。
+- `fork` danger-zone-guard：強制推送判斷改成逐個 `git push` 看參數，不再要求旗標緊接在 `push` 後面。`git push origin main --force`、`git -C repo push -f origin main`、`git push origin +main`、`git push --force origin "main"` 原本都會漏攔；`git push -f origin feature/release-notes`（分支名只是含有 release）與 `git push -f origin feat; echo main`（main 屬於另一條指令）原本被誤攔，現在放行。
+
 ## 2026-10-25
 
 ### 修正
