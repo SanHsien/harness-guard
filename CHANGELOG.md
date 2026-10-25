@@ -10,6 +10,10 @@
 
 ## 2026-10-26
 
+### 新增
+
+- `fork` verification-protocol 技能新增第 5 節「委派工作：以閘門結果為證據」：經 agent-relay 委派的工作，只有驗收閘門回 `ok` 才算完成；`skipped`（收件端沒設閘門，relay 會當成通過）、`verification-failed`、`unverified`、`guarded`、`stub-rejected`、`tdd-not-proven`、`policy-violation` 都不算；要求治理但 agent-governance-toolkit 沒載入時閘門刻意回 `unverified`，應安裝而不是改用降級；標「未執行」的檢查不算通過。
+
 ### 修正
 
 - `fork` test-gate-guard：`pytest && echo ok ; git commit`、`pytest ; ls && git push` 這類「`&&` 與 `;` 混用」的串接，原本因為中間出現 `&&` 就放行，紅燈測試仍會提交；現在只要測試與 `git commit`／`push` 之間有 `;` 或換行就攔。`git -C 路徑 push`、`git -c k=v commit`、`git --no-pager push` 等帶選項的寫法原本看不到，現在會攔。`<<<` here-string 不再被當成 heredoc 而吃掉後面的整段指令；跳脫的引號（`\"`）不再讓引號配對錯位。行尾 `&&`、`|`、`\` 後換行視為同一條指令的延續，不誤攔（`||` 後換行仍攔：它在測試失敗時才執行）。反斜線跳脫只套用在 POSIX shell；PowerShell 的反斜線是路徑字元（跳脫字元是反引號），所以 `"C:\repo\"` 這種結尾帶反斜線的引號路徑不會再蓋住後面的 `; git push`；PowerShell 的行尾續行是反引號。Codex、Cursor、Antigravity 不會說自己用哪種 shell，這時兩種讀法都試、任一命中就攔（含引號的模稜兩可指令寧可多攔）。

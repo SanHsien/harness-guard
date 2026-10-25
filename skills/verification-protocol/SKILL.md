@@ -55,6 +55,25 @@ the minimum evidence and stop conditions, then stop as soon as they are met. A s
 smoke entity or repeated query is not extra confidence unless it proves a distinct
 requirement.
 
+## 5. Delegated work: the gate's verdict is the evidence
+
+When work is handed to another agent through agent-relay (`C:\GitHub\agent-relay`),
+its acceptance gate (`agent_relay/gates.py`, SPEC section 11) is what proves the work,
+not the worker's summary. The sender asks for a failing test first with `--tdd`; the
+receiving side sets the gate itself in `dispatch.verify` (the verify command, plus
+`governance` for agent-governance-toolkit path, credential and subprocess policy).
+Then read the verdict:
+
+- Only `ok` counts as done. `skipped` means the receiver had no gate configured: relay
+  treats it as passing, but it is no evidence, so it is "not done" here.
+  `verification-failed`, `unverified`, `guarded`, `stub-rejected`, `tdd-not-proven` and
+  `policy-violation` are all "not done".
+- If governance was asked for but the toolkit did not load, the gate returns
+  `unverified` on purpose. Install it (`AGENT_GOVERNANCE_PATH` or
+  `C:/GitHub/agent-governance-toolkit`) rather than switching to
+  `governance_fallback: "builtin"`; a degraded run must be reported as degraded.
+- A check marked "not run" is not a pass, whatever else the report says.
+
 ## The loop
 
 1. Finish the change.

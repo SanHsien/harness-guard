@@ -10,6 +10,10 @@ Entries marked `fork` are this fork's changes relative to
 
 ## 2026-10-26
 
+### Added
+
+- `fork` verification-protocol skill: new section 5, "Delegated work: the gate's verdict is the evidence". Work handed off through agent-relay counts as done only when the acceptance gate returns `ok`; `skipped` (no gate configured on the receiver, which relay treats as passing), `verification-failed`, `unverified`, `guarded`, `stub-rejected`, `tdd-not-proven` and `policy-violation` do not. When governance was requested but agent-governance-toolkit did not load, the gate returns `unverified` on purpose: install the toolkit instead of switching to the builtin fallback. A check marked "not run" is not a pass.
+
 ### Fixed
 
 - `fork` test-gate-guard: chains that mix `&&` and `;` (`pytest && echo ok ; git commit`, `pytest ; ls && git push`) were let through because an `&&` appeared anywhere between, so a red test still committed. Any `;` or newline between the test and the `git commit`/`push` now blocks. Git options before the subcommand (`git -C path push`, `git -c k=v commit`, `git --no-pager push`) were invisible and are now matched. A `<<<` here-string is no longer read as a heredoc that swallows the rest of the command, and an escaped quote (`\"`) no longer throws quote pairing off. A newline after a trailing `&&`, `|` or `\` continues the command and is not flagged (after `||` it is still flagged: the next command runs only when the tests fail). Backslash escaping applies to POSIX shells only; in PowerShell a backslash is a path character (the escape is a backtick), so a quoted path ending in one, like `"C:\repo\"`, no longer hides a following `; git push`; PowerShell continues a line with a backtick. Codex, Cursor and Antigravity do not name their shell, so for them the command is read both ways and either hit blocks (an ambiguous quoted command errs toward blocking).
