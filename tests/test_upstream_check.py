@@ -180,6 +180,27 @@ class RewrittenHistory(unittest.TestCase):
         with self.assertRaisesRegex(checker.UpstreamCheckError, "shallow"):
             checker.collect_new_commits(baseline, shallow, "HEAD")
 
+    def test_fetch_from_a_local_upstream_path_with_a_space(self):
+        """Real git, not a mock: "C:\\Program Files\\up"-style paths must fetch."""
+        from pathlib import Path
+
+        spaced = Path(self._tmp.name) / "My Repos" / "up"
+        spaced.parent.mkdir()
+        self.repo.rename(spaced)
+        self.repo = spaced
+        reviewed = self.commit("reviewed")
+        self.commit("修正：中文標題")
+        clone = Path(self._tmp.name) / "fork"
+        clone.mkdir()
+        subprocess.run(["git", "init", "--quiet"], cwd=clone, check=True, capture_output=True)
+        baseline = dict(BASELINE, repo=str(spaced), reviewed_through=reviewed,
+                        branch=self.git("rev-parse", "--abbrev-ref", "HEAD"))
+
+        ref = checker.fetch_upstream(baseline, clone)
+        commits = checker.collect_new_commits(baseline, clone, ref)
+
+        self.assertEqual([c["subject"] for c in commits], ["修正：中文標題"])
+
     def test_an_unknown_reviewed_commit_is_an_error(self):
         self.commit("only commit")
         baseline = dict(BASELINE, reviewed_through="1" * 40)

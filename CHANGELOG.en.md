@@ -17,6 +17,10 @@ Entries marked `fork` are this fork's changes relative to
   end in a traceback with exit 1, which `--strict` callers read as "unreviewed commits". All of them now write
   "Check failed" / "Not checked" and exit 2; a rewritten upstream history is reported as rewritten and a shallow
   clone as shallow, instead of listing what looks like an ordinary run of new commits.
+  The baseline is validated on load too: `reviewed_through` must be a full SHA, the PR/issue watermarks
+  non-negative integers, and `repo` / `branch` may not start with `-` (git would read that as an option such as
+  `--upload-pack=...`). A local upstream path may contain spaces (e.g. `C:\Program Files\up`); a branch name may
+  not. The report is written with `errors="replace"`, so a lone surrogate in a title still leaves a report file.
 - **Windows: Claude Code's PowerShell tool bypassed `danger-zone-guard` and `test-gate-guard` entirely (`fork`).**
   Both were registered for the `Bash` matcher only and the scripts only recognised `Bash`-style tool
   names, so `git push --force` or `pytest ; git push` run through the PowerShell tool went through, and
