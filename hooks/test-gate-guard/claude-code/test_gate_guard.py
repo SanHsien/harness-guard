@@ -61,7 +61,9 @@ GIT_WRITE = re.compile(
 # would blank everything after it.
 HEREDOC = re.compile(r"(?<!<)<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 # A newline right after one of these continues the command; it is not a new one.
-CONTINUATION = re.compile(r"(?:&&|\|\|?|\\)[ \t]*\n")
+# `||` is left out on purpose: `pytest ||\n git push` runs the push only when the
+# tests fail.
+CONTINUATION = re.compile(r"(?:&&|(?<!\|)\|(?!\|)|\\)[ \t]*\n")
 
 MESSAGE = (
     "TEST GATE: the test command `{test}` and `{git}` are joined with `;` or a "
@@ -91,7 +93,7 @@ def read_payload():
     return json.loads(raw.decode("utf-8", "replace"))
 
 
-def strip_literals(command):
+def strip_literals(command, powershell=False):
     """Blank out heredoc bodies and quoted strings -- those are data, not commands.
 
     This hook produced a false positive on its first day in service: a work-log
@@ -117,13 +119,16 @@ def strip_literals(command):
     blanked = "".join(chars)
     out = list(blanked)
     quote = None
+    # PowerShell escapes with a backtick; a backslash there is a path character
+    # (`"C:\repo\"` closes at its last quote).
+    escape = "`" if powershell else "\\"
     skip = False
     for i, ch in enumerate(blanked):
         if skip:
             skip = False  # the character after a backslash is not a quote
             if quote is not None:
                 out[i] = " "
-        elif ch == "\\" and quote != "'":
+        elif ch == escape and quote != "'":
             skip = True
             if quote is not None:
                 out[i] = " "
@@ -137,9 +142,9 @@ def strip_literals(command):
     return "".join(out)
 
 
-def verdict(command):
+def verdict(command, powershell=False):
     """Return the (test, git) pair that should be blocked, or None."""
-    command = strip_literals(command)
+    command = strip_literals(command, powershell)
     for git_match in GIT_WRITE.finditer(command):
         head = command[: git_match.start()]
         test_matches = list(TEST_CMD.finditer(head))
@@ -258,7 +263,7 @@ def main():
     if not command:
         return allow(payload)
 
-    hit = verdict(command)
+    hit = verdict(command, tool_name == "PowerShell")
     if hit:
         return deny(payload, MESSAGE.format(test=hit[0], git=hit[1]))
     return allow(payload)

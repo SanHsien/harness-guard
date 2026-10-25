@@ -51,7 +51,9 @@ GIT_WRITE = re.compile(
 # would blank everything after it.
 HEREDOC = re.compile(r"(?<!<)<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 # A newline right after one of these continues the command; it is not a new one.
-CONTINUATION = re.compile(r"(?:&&|\|\|?|\\)[ \t]*\n")
+# `||` is left out on purpose: `pytest ||\n git push` runs the push only when the
+# tests fail.
+CONTINUATION = re.compile(r"(?:&&|(?<!\|)\|(?!\|)|\\)[ \t]*\n")
 SHELL_TOOLS = ("Bash", "shell", "exec", "exec_command")
 
 MESSAGE = (
@@ -82,7 +84,7 @@ def read_payload():
     return json.loads(raw.decode("utf-8", "replace"))
 
 
-def strip_literals(command):
+def strip_literals(command, powershell=False):
     """Blank out heredoc bodies and quoted strings -- those are data, not commands."""
     chars = list(command)
 
@@ -102,13 +104,16 @@ def strip_literals(command):
     blanked = "".join(chars)
     out = list(blanked)
     quote = None
+    # PowerShell escapes with a backtick; a backslash there is a path character
+    # (`"C:\repo\"` closes at its last quote).
+    escape = "`" if powershell else "\\"
     skip = False
     for i, ch in enumerate(blanked):
         if skip:
             skip = False  # the character after a backslash is not a quote
             if quote is not None:
                 out[i] = " "
-        elif ch == "\\" and quote != "'":
+        elif ch == escape and quote != "'":
             skip = True
             if quote is not None:
                 out[i] = " "
@@ -122,8 +127,8 @@ def strip_literals(command):
     return "".join(out)
 
 
-def verdict(command):
-    command = strip_literals(command)
+def verdict(command, powershell=False):
+    command = strip_literals(command, powershell)
     for git_match in GIT_WRITE.finditer(command):
         head = command[: git_match.start()]
         test_matches = list(TEST_CMD.finditer(head))

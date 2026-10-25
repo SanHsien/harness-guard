@@ -57,8 +57,23 @@ CASES = [
     (False, 'echo "a \\" ; pytest ; git push"'),
     # A newline after an operator continues the command
     (False, "pytest &&\n git push"),
-    (False, "pytest \\n -x && git push"),
+    (False, "pytest \\\n -x && git push"),
+    (True, "pytest ||\n git push"),
 ]
+
+
+# PowerShell only: a backslash is a path character there, so a quoted Windows
+# path ending in one must not keep the string open and hide what follows.
+POWERSHELL_CASES = [
+    (True, 'Invoke-Pester -Path "C:\\repo\\tests\\" ; git push'),
+    (True, 'pytest "C:\\repo\\" ; git commit -m x'),
+    (False, 'Invoke-Pester -Path "C:\\repo\\tests\\" && git push'),
+    (False, 'git commit -m "note `" ; pytest ; git push"'),
+]
+
+
+# Backslash escapes quotes in POSIX shells only; PowerShell uses a backtick.
+BASH_ONLY = {'echo \\"; pytest ; git push', 'echo "a \\" ; pytest ; git push"'}
 
 
 def run(hook, command, tool_name):
@@ -72,6 +87,8 @@ def check(label, hook, tool_name, blocked_from):
     print("-- %s (%s)" % (label, hook.name))
     failures = 0
     for should_block, command in CASES:
+        if tool_name == "PowerShell" and command in BASH_ONLY:
+            continue
         proc = run(hook, command, tool_name)
         blocked = blocked_from(proc)
         ok = blocked == should_block
@@ -96,6 +113,7 @@ def main():
             "Claude Code build, PowerShell tool", CLAUDE_HOOK, "PowerShell",
             lambda p: p.returncode == 2,
         )
+    total += check_powershell_paths()
     if CODEX_HOOK.exists():
         total += check(
             "Codex build",
@@ -106,6 +124,19 @@ def main():
     total += check_cursor_payload()
     print("total failures:", total)
     return 1 if total else 0
+
+
+def check_powershell_paths():
+    print("-- PowerShell tool, backslash paths (%s)" % CLAUDE_HOOK.name)
+    failures = 0
+    for should_block, command in POWERSHELL_CASES:
+        blocked = run(CLAUDE_HOOK, command, "PowerShell").returncode == 2
+        ok = blocked == should_block
+        failures += not ok
+        print("%s expected=%-5s got=%-5s %s"
+              % ("PASS" if ok else "FAIL", should_block, blocked, command[:56]))
+    print("failures: %d\n" % failures)
+    return failures
 
 
 def check_cursor_payload():
