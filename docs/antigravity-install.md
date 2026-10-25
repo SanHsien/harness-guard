@@ -44,7 +44,7 @@ python scripts/install.py --agent antigravity --hooks anti-doom-loop-guard
 | `danger-zone-guard` | `PreToolUse` | `run_command` | deny | 讀 `toolCall.args.CommandLine`，規則同 Claude 版 |
 | `test-gate-guard` | `PreToolUse` | `run_command` | deny | 同上：`pytest ; git push` 擋、`&&` 放行 |
 | `no-emoji-guard` | `PreToolUse` | `write_to_file\|replace_file_content\|multi_replace_file_content` | deny | 檢查 `CodeContent`、`ReplacementContent`、`ReplacementChunks[].ReplacementContent`，路徑看 `TargetFile`；`no-emoji-guard.json` 放在腳本旁 |
-| `claim-guard`（記帳） | `PostToolUse` | `run_command\|grep_search\|find_by_name\|list_dir` | 只記錄，回 `{}` | 記下跑過哪些驗證指令、做過哪些搜尋；`error` 非空（工具失敗）的呼叫不記，失敗的測試不算證據 |
+| `claim-guard`（記帳） | `PostToolUse` | `run_command\|grep_search\|find_by_name\|list_dir\|write_to_file\|replace_file_content\|multi_replace_file_content` | 只記錄，回 `{}` | 記下跑過哪些驗證指令、做過哪些搜尋、改過哪些檔（改檔晚於最後一次驗證，查驗端視為驗證過期）；`error` 非空（工具失敗）的呼叫不記，失敗的測試不算證據 |
 | `claim-guard`（查驗） | `Stop` | 無（Stop 不用 matcher） | continue | 見下方「限制」第 1 點：**能攔，但取不到訊息的方式未被官方文件保證** |
 | `lint-gate` | `Stop` | 無 | continue | 專案根目錄（`workspacePaths[0]`）有 `.lint-gate.json` 才會跑；失敗時把輸出交回 agent |
 | `anti-doom-loop-guard` | `PreToolUse` | `run_command\|view_file\|write_to_file\|replace_file_content\|multi_replace_file_content` | deny | 同一個 `run_command` 或 `view_file` 連續 3 次、中間沒有別的工具呼叫才否決；改檔工具讓計數歸零 |

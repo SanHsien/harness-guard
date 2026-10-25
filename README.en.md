@@ -29,7 +29,7 @@ These guardrails are defense-in-depth, not a sandbox or formal policy engine. Th
 
 | Hook | What it does |
 |---|---|
-| `claim-guard` | records tool evidence and reconciles completion claims before the turn ends |
+| `claim-guard` | records tool evidence (searches, tests, edits) and reconciles completion claims before the turn ends; a verification followed by more edits no longer counts |
 | `test-gate-guard` | blocks unsafe test + `git commit` / `git push` command chaining |
 | `danger-zone-guard` | blocks selected catastrophic deletions, force-pushes to protected branches, and sensitive-file exfiltration |
 | `lint-gate` | runs project checks before wrap-up; Windows can opt in per project with `.lint-gate.json` |

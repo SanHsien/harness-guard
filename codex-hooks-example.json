@@ -33,7 +33,7 @@
 
     "PostToolUse": [
       {
-        "matcher": "Bash|Grep|Glob|exec|shell",
+        "matcher": "Bash|Grep|Glob|exec|shell|exec_command|shell_command|WebSearch|WebFetch|web_fetch|apply_patch|Write|Edit|MultiEdit",
         "hooks": [
           {
             "type": "command",

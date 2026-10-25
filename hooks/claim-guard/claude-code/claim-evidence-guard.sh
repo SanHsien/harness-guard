@@ -6,7 +6,9 @@
 #
 # It checks two things:
 #   1. It claimed "I tested it" / "verification passed" / "confirmed working"
-#      → the ledger must have a real record of a verification command being run
+#      → the ledger must have a real record of a verification command being run,
+#        and no file may have been edited after the last one (that verification
+#        did not cover the code as it is now)
 #   2. It claimed "not found" / "doesn't exist"
 #      → the ledger must have a real record of a search being performed
 # If it doesn't add up, the turn is blocked from ending, and it's told what's
@@ -36,12 +38,18 @@ SID=$(echo "$INPUT" | jq -r '.session_id // "default"' 2>/dev/null) || exit 0
 
 VERIFY_LEDGER="$LEDGER_DIR/${SID}.verify"
 SEARCH_LEDGER="$LEDGER_DIR/${SID}.search"
+EDIT_LEDGER="$LEDGER_DIR/${SID}.edit"
 
-cleanup() { rm -f "$VERIFY_LEDGER" "$SEARCH_LEDGER"; }
+cleanup() { rm -f "$VERIFY_LEDGER" "$SEARCH_LEDGER" "$EDIT_LEDGER"; }
 
 STOP_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false' 2>/dev/null)
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty' 2>/dev/null)
 [[ -z "$LAST_MSG" ]] && exit 0
+# Quoted text is a mention, not a claim: drop 「…」 and `…` spans before matching.
+# jq's regex is Unicode-aware whatever the locale; if it fails, the full message is kept.
+if STRIPPED=$(printf '%s' "$LAST_MSG" | jq -Rrs 'gsub("「[^」]*」"; "") | gsub("`[^`]*`"; "")' 2>/dev/null); then
+    LAST_MSG=$STRIPPED
+fi
 
 block_reason() {
     jq -n --arg reason "$1" '{decision:"block",reason:$reason}'
@@ -135,6 +143,15 @@ if echo "$LAST_MSG" | grep -iqE "$VERIFY_TRIGGERS"; then
     if [[ ! -s "$VERIFY_LEDGER" && "$STOP_ACTIVE" != "true" ]]; then
         cleanup
         block_reason "CLAIM-EVIDENCE GUARD: You claimed verification or tests passed, but this session's ledger has no verification command. Verify it first or mark it as not yet verified."
+    fi
+    # Stale verification: files were edited after the last verification command
+    if [[ "$STOP_ACTIVE" != "true" && -s "$EDIT_LEDGER" && "$EDIT_LEDGER" -nt "$VERIFY_LEDGER" ]]; then
+        LAST_EDIT=$(tail -1 "$EDIT_LEDGER"); LAST_VERIFY=$(tail -1 "$VERIFY_LEDGER")
+        cleanup
+        block_reason "CLAIM-EVIDENCE GUARD (stale verification): you claimed verified / tests pass, but files were edited after the last verification command, so it did not cover the current code.
+  Last verification: $LAST_VERIFY
+  Later edit: $LAST_EDIT
+Re-run the verification before claiming it; if this change needs no test (docs, comments), say edited, not re-verified."
     fi
     QUALITY_ERROR=$(check_quality_summary_gate)
     [[ -z "$QUALITY_ERROR" ]] || block_reason "$QUALITY_ERROR"

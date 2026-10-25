@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# PostToolUse: record verification and search actions for the current Codex turn.
+# PostToolUse: record verification, search and file-write actions for the current Codex turn.
+# Each ledger's mtime is when that kind of event last happened; the Stop guard compares
+# .edit against .verify to tell whether a verification still covers the current code.
 set -u
 
 ledger_dir="$HOME/.cache/codex-guard-hooks"
@@ -13,11 +15,27 @@ tool="$(printf '%s' "$input" | jq -r '.tool_name // empty' 2>/dev/null)"
 turn_id="$(printf '%s' "$input" | jq -r '.turn_id // .session_id // "default"' 2>/dev/null)"
 verify_ledger="$ledger_dir/${turn_id}.verify"
 search_ledger="$ledger_dir/${turn_id}.search"
+edit_ledger="$ledger_dir/${turn_id}.edit"
 
 case "$tool" in
+  apply_patch|Write|Edit|MultiEdit|NotebookEdit)
+    fp="$(printf '%s' "$input" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' 2>/dev/null)"
+    mkdir -p "$ledger_dir"
+    printf '%s %s %.160s\n' "$(date +%H:%M:%S)" "$tool" "$fp" >> "$edit_ledger"
+    ;;
   Grep|Glob)
     mkdir -p "$ledger_dir"
     printf '%s %s\n' "$(date +%H:%M:%S)" "$tool" >> "$search_ledger"
+    ;;
+  WebSearch)
+    query_text="$(printf '%s' "$input" | jq -r '.tool_input.query // empty' 2>/dev/null)"
+    mkdir -p "$ledger_dir"
+    printf '%s WebSearch %.120s\n' "$(date +%H:%M:%S)" "$query_text" >> "$search_ledger"
+    ;;
+  web_fetch|WebFetch)
+    url_text="$(printf '%s' "$input" | jq -r '.tool_input.url // empty' 2>/dev/null)"
+    mkdir -p "$ledger_dir"
+    printf '%s WebFetch %.120s\n' "$(date +%H:%M:%S)" "$url_text" >> "$search_ledger"
     ;;
   Bash|Exec|exec|exec_command|shell|shell_command|run_command|Shell)
     command_text="$(printf '%s' "$input" | jq -r '.tool_input.command // .tool_input.CommandLine // .tool_input.cmd // .command // empty' 2>/dev/null)"

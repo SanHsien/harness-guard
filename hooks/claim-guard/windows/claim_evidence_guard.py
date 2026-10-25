@@ -5,7 +5,8 @@ Runs when the assistant is about to end the turn, and reconciles the ledger
 written by claim_ledger_tracker.py against what was actually said:
 
   1. Claimed "tested it" / "verification passed" / "confirmed working"
-     -> the ledger must contain a real verification command
+     -> the ledger must contain a real verification command, and no file may
+        have been edited after the last one (it would not cover the current code)
   2. Claimed "not found" / "does not exist"
      -> the ledger must contain a real search
 
@@ -97,6 +98,18 @@ VERIFY_BLOCK = (
     "confirmation'."
 )
 
+STALE_BLOCK = (
+    "CLAIM-EVIDENCE GUARD (stale verification): you claimed verified / tests "
+    "pass, but files were edited after the last verification command, so it "
+    "did not cover the current code.\n  Last verification: %s\n  Later edit: %s\n"
+    "Re-run the verification before claiming it; if this change needs no test "
+    "(docs, comments), say edited, not re-verified."
+)
+
+# Quoted text is a mention, not a claim: 「驗證通過」 or `tests pass` names the
+# phrase rather than asserting it.
+QUOTED = re.compile(r"「[^」]*」|`[^`]*`")
+
 SEARCH_BLOCK = (
     "CLAIM-EVIDENCE GUARD: You asserted something 'does not exist / cannot be "
     "found', but this session's ledger has no record of any search action "
@@ -129,6 +142,33 @@ def has_records(path):
         return path.stat().st_size > 0
     except OSError:
         return False
+
+
+def mtime_ns(path):
+    try:
+        return path.stat().st_mtime_ns
+    except OSError:
+        return None
+
+
+def last_line(path):
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    return lines[-1] if lines else ""
+
+
+def edited_since_verify(verify_ledger, edit_ledger):
+    """True when the last file edit came after the last verification command.
+
+    Each ledger's mtime is when its last line was appended, so the comparison
+    is between the latest edit and the latest verification.
+    """
+    if not has_records(edit_ledger):
+        return False
+    edit, verify = mtime_ns(edit_ledger), mtime_ns(verify_ledger)
+    return edit is not None and verify is not None and edit > verify
 
 
 def cleanup(*paths):
@@ -307,7 +347,7 @@ def block(payload, reason, *ledgers):
     return 0
 
 
-def evaluate(payload, last, second_pass, verify_ledger, search_ledger):
+def evaluate(payload, last, second_pass, verify_ledger, search_ledger, edit_ledger=None):
     """Reconcile the last message with the ledger. Returns a block reason, or None.
 
     Ledgers are cleaned up here, in both outcomes, exactly where the checks
@@ -315,27 +355,35 @@ def evaluate(payload, last, second_pass, verify_ledger, search_ledger):
     Claude Code says so with `stop_hook_active`, Antigravity has to be told by
     the caller.
     """
+    if edit_ledger is None:
+        edit_ledger = verify_ledger.with_suffix(".edit")
+    ledgers = (verify_ledger, search_ledger, edit_ledger)
+    last = QUOTED.sub("", last)
     if VERIFY_TRIGGERS.search(last):
         if not has_records(verify_ledger) and not second_pass:
-            cleanup(verify_ledger, search_ledger)
+            cleanup(*ledgers)
             return VERIFY_BLOCK
+        if not second_pass and edited_since_verify(verify_ledger, edit_ledger):
+            reason = STALE_BLOCK % (last_line(verify_ledger), last_line(edit_ledger))
+            cleanup(*ledgers)
+            return reason
         repo_root = target_repo_root(payload)
         quality_err = check_quality_summary_gate(repo_root)
         if quality_err:
-            cleanup(verify_ledger, search_ledger)
+            cleanup(*ledgers)
             return quality_err
 
     # A second pass may relax only the session-ledger requirement. Machine
     # evidence remains fail-closed until the claim is revised or Full is rerun.
     if second_pass:
-        cleanup(verify_ledger, search_ledger)
+        cleanup(*ledgers)
         return None
 
     if NEG_TRIGGERS.search(last) and not has_records(search_ledger):
-        cleanup(verify_ledger, search_ledger)
+        cleanup(*ledgers)
         return SEARCH_BLOCK
 
-    cleanup(verify_ledger, search_ledger)
+    cleanup(*ledgers)
     return None
 
 

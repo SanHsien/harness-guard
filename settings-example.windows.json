@@ -35,7 +35,7 @@
 
     "PostToolUse": [
       {
-        "matcher": "Bash|Grep|Glob",
+        "matcher": "Bash|PowerShell|Grep|Glob|WebSearch|WebFetch|Write|Edit|MultiEdit|NotebookEdit|mcp__claude-in-chrome__.*",
         "hooks": [
           {
             "type": "command",

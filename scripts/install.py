@@ -57,7 +57,10 @@ HOOKS = {
                 "posix": "hooks/claim-guard/claude-code/claim-ledger-tracker.sh",
             },
             "event": "PostToolUse",
-            "matcher": "Bash|Grep|Glob",
+            # Edits are recorded so a verification that ran before the last
+            # edit no longer counts; web lookups count as searches.
+            "matcher": "Bash|PowerShell|Grep|Glob|WebSearch|WebFetch"
+                       "|Write|Edit|MultiEdit|NotebookEdit|mcp__claude-in-chrome__.*",
             "timeout": 10,
         },
         {
@@ -209,7 +212,8 @@ CODEX_HOOKS = {
             # Codex build and needs no flag.
             "args_windows": ("--codex",),
             "event": "PostToolUse",
-            "matcher": "Bash|Grep|Glob|exec|exec_command|shell|shell_command",
+            "matcher": "Bash|Grep|Glob|exec|exec_command|shell|shell_command"
+                       "|WebSearch|WebFetch|web_fetch|apply_patch|Write|Edit|MultiEdit",
             "timeout": 10,
         },
         {
@@ -332,10 +336,12 @@ ANTIGRAVITY_HOOKS = {
     "claim-guard": [
         {
             # The tracker only needs the command text and `error`, both in the
-            # PostToolUse payload. The matcher lists the shell and the search tools.
+            # PostToolUse payload. The matcher lists the shell, the search and
+            # the file-editing tools (an edit after a test run makes it stale).
             "source": "hooks/claim-guard/windows/claim_ledger_tracker.py",
             "event": "PostToolUse",
-            "matcher": "run_command|grep_search|find_by_name|list_dir",
+            "matcher": "run_command|grep_search|find_by_name|list_dir"
+                       "|write_to_file|replace_file_content|multi_replace_file_content",
             "timeout": 10,
         },
         {

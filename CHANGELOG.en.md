@@ -20,6 +20,23 @@ Entries marked `fork` are this fork's changes relative to
   command and the same matcher; a registration of the same script under another matcher is removed and
   re-added under the current one (counted in `removed N stale`), and the user's own hooks in that group
   are left alone.
+- **claim-guard: "tests pass" still counted as backed after more edits (ported from upstream e9a4734).**
+  The tracker now records edits too (Claude `Write|Edit|MultiEdit|NotebookEdit`, Codex `apply_patch`,
+  Cursor `Write|Delete`, Antigravity `write_to_file|replace_file_content|multi_replace_file_content`), and the
+  check blocks once, naming both, when the last edit came after the last verification; the second pass
+  (`stop_hook_active`) still lets it through. Both the shell and the Python builds.
+- **claim-guard: mentioning a trigger phrase counted as making the claim (ported from upstream e9a4734).**
+  Text inside 「」 or backticks is dropped before matching, so "I added `tests pass` to the trigger list"
+  is no longer blocked. The shell builds use `jq`'s Unicode regex, so no locale is assumed.
+
+### Added
+
+- **claim-guard records more kinds of evidence (ported from upstream 7b0df03 / e9a4734)**: `WebSearch` /
+  `WebFetch` (Codex's `web_fetch`) count as searches; `mcp__claude-in-chrome__*` and `playwright test` /
+  `agent-browser` count as verification; on Windows, Claude Code's `PowerShell` tool is recorded like
+  `Bash`. The installer's tracker matchers widen to match (Claude, Codex, Antigravity), a re-run of
+  `install.py` moves an old-matcher registration over, and `verify-install.py` checks that the matcher
+  covers the edit tools.
 
 ## 2026-10-23
 

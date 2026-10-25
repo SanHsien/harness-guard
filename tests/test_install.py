@@ -397,7 +397,7 @@ class CodexVerifierTests(unittest.TestCase):
             self.assertIn("Live fire (Codex payload shape)", proc.stdout)
             self.assertIn("Codex claim-guard blocks", proc.stdout)
             self.assertIn(
-                "PASS Codex claim tracker matcher accepts exec_command and shell_command",
+                "PASS Codex claim tracker matcher accepts exec_command, shell_command and apply_patch",
                 proc.stdout,
             )
             self.assertIn("Codex lint-gate blocks", proc.stdout)
@@ -430,9 +430,26 @@ class CodexVerifierTests(unittest.TestCase):
 
             self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
             self.assertIn(
-                "FAIL Codex claim tracker matcher accepts exec_command and shell_command",
+                "FAIL Codex claim tracker matcher accepts exec_command, shell_command and apply_patch",
                 proc.stdout,
             )
+
+    def test_codex_claim_tracker_matcher_without_apply_patch_fails(self):
+        # Without apply_patch the tracker never sees an edit, so a test run
+        # followed by more edits would still count as current evidence.
+        with tempfile.TemporaryDirectory() as tmp:
+            codex_dir, env = self._installed_codex(Path(tmp))
+            hooks_path = codex_dir / "hooks.json"
+            settings = json.loads(hooks_path.read_text(encoding="utf-8"))
+            for entry in settings["hooks"]["PostToolUse"]:
+                if any("claim" in hook.get("command", "") for hook in entry.get("hooks", [])):
+                    entry["matcher"] = "Bash|Grep|Glob|exec|exec_command|shell|shell_command"
+            hooks_path.write_text(json.dumps(settings), encoding="utf-8")
+
+            proc = self._verify(env)
+
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            self.assertIn("FAIL Codex claim tracker matcher accepts", proc.stdout)
 
     def test_codex_registered_missing_hook_fails_verification(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -939,7 +956,8 @@ class AntigravityGuardInstallTests(unittest.TestCase):
                              {"write_to_file", "replace_file_content", "multi_replace_file_content"})
             tracker = merged["claim-guard"]["PostToolUse"]
             self.assertEqual(set(tracker[0]["matcher"].split("|")),
-                             {"run_command", "grep_search", "find_by_name", "list_dir"})
+                             {"run_command", "grep_search", "find_by_name", "list_dir",
+                              "write_to_file", "replace_file_content", "multi_replace_file_content"})
             # Stop is a flat list of handlers: no matcher group around them.
             for name in ("claim-guard", "lint-gate"):
                 stop = merged[name]["Stop"]
@@ -1117,6 +1135,28 @@ class AntiDoomLoopGuardVerifierTests(unittest.TestCase):
                     self.assertIn(
                         "PASS %s anti-doom-loop-guard blocks the third identical command in a row" % label,
                         proc.stdout)
+
+    def test_claude_claim_tracker_must_see_edits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            env = self._env(home)
+            proc = subprocess.run(
+                [sys.executable, str(INSTALLER), "--agent", "claude", "--hooks", "claim-guard",
+                 "--skills", "none"],
+                cwd=str(REPO), env=env, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=60,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            ok = self._verify(env, "claude")
+            self.assertIn("PASS claim-ledger-tracker matcher covers Edit and Write", ok.stdout)
+
+            settings_path = home / ".claude" / "settings.json"
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+            settings["hooks"]["PostToolUse"][0]["matcher"] = "Bash|Grep|Glob"  # the old one
+            settings_path.write_text(json.dumps(settings), encoding="utf-8")
+            old = self._verify(env, "claude")
+            self.assertEqual(old.returncode, 1, old.stdout + old.stderr)
+            self.assertIn("FAIL claim-ledger-tracker matcher covers Edit and Write", old.stdout)
 
     def test_antigravity_command_with_quotes_fails_verification(self):
         with tempfile.TemporaryDirectory() as tmp:

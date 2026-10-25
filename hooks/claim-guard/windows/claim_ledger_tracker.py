@@ -2,9 +2,10 @@
 """claim_ledger_tracker.py -- Windows-native port of claim-ledger-tracker.sh.
 
 Same job as the shell version: after every tool call, quietly append a line to
-a ledger recording which verification commands were actually run and which
-searches were actually performed. Its partner, claim_evidence_guard.py, reads
-that ledger at the end of the turn.
+a ledger recording which verification commands were actually run, which
+searches were actually performed, and which files were edited. Its partner,
+claim_evidence_guard.py, reads that ledger at the end of the turn; a file edited
+after the last verification means that verification no longer covers the code.
 
 Why a separate port instead of running the .sh file:
 
@@ -66,9 +67,20 @@ SHELL_TOOLS = (
     "shell_command",
     "run_command",
     "Shell",
+    "PowerShell",  # Claude Code's PowerShell tool on Windows
 )
 # Antigravity's search tools are grep_search, find_by_name and list_dir.
 SEARCH_TOOLS = ("Grep", "Glob", "grep_search", "GlobTool", "find_by_name", "list_dir")
+# Looking something up on the web is a search too (Codex spells the fetch web_fetch).
+WEB_TOOLS = ("WebSearch", "WebFetch", "web_fetch")
+# Tools that change a file: Claude Code, Codex (apply_patch), Cursor (Write,
+# Delete) and Antigravity (write_to_file and the two replace tools).
+EDIT_TOOLS = (
+    "Write", "Edit", "MultiEdit", "NotebookEdit", "apply_patch", "Delete",
+    "write_to_file", "replace_file_content", "multi_replace_file_content",
+)
+# Driving a real browser checks live state, so it counts as verification.
+BROWSER_VERIFY_PREFIX = "mcp__claude-in-chrome__"
 
 # Verification-type commands: tests, builds, status and health checks, diffs,
 # live runs. The first group is carried over from the shell version unchanged;
@@ -81,7 +93,7 @@ VERIFY_CMD = re.compile(
     r"|git\s+(-C\s+\S+\s+)?(status|diff|log)"
     r"|systemctl (status|is-active)"
     r"|test -[fedrwx]|grep -[qcl]|wc -[lcw]"
-    r"|python3? (-c|-m)|node -e|cmp -s|diff -r"
+    r"|python3? (-c|-m)|node -e|cmp -s|diff -r|agent-browser"
     # Windows-native equivalents
     r"|dotnet test|Invoke-Pester|Invoke-ScriptAnalyzer"
     r"|Test-Path|Get-Command|Get-Process|Get-Service"
@@ -182,6 +194,20 @@ def extract_command(payload):
     )
 
 
+def tool_args(payload):
+    tool_input = payload.get("tool_input") or (payload.get("toolCall") or {}).get("args") or {}
+    return tool_input if isinstance(tool_input, dict) else {}
+
+
+def edited_path(payload):
+    args = tool_args(payload)
+    for key in ("file_path", "notebook_path", "path", "TargetFile", "AbsolutePath"):
+        value = args.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return ""
+
+
 def main():
     # Codex treats an empty response as an anomaly, and Antigravity's
     # PostToolUse contract is "an empty JSON object". This hook only ever
@@ -213,6 +239,28 @@ def main():
 
     verify_ledger = LEDGER_DIR / (sid + ".verify")
     search_ledger = LEDGER_DIR / (sid + ".search")
+    edit_ledger = LEDGER_DIR / (sid + ".edit")
+
+    if tool in EDIT_TOOLS:
+        append(edit_ledger, ("%s %s" % (tool, edited_path(payload)[:160])).rstrip())
+        if codex:
+            sys.stdout.write("{}\n")
+        return 0
+
+    if tool.startswith(BROWSER_VERIFY_PREFIX):
+        append(verify_ledger, tool)
+        if codex:
+            sys.stdout.write("{}\n")
+        return 0
+
+    if tool in WEB_TOOLS:
+        args = tool_args(payload)
+        target = args.get("query") or args.get("url") or ""
+        label = "WebSearch" if tool == "WebSearch" else "WebFetch"
+        append(search_ledger, ("%s %s" % (label, str(target)[:120])).rstrip())
+        if codex:
+            sys.stdout.write("{}\n")
+        return 0
 
     if tool in SEARCH_TOOLS:
         append(search_ledger, tool)

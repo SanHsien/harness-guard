@@ -36,6 +36,7 @@ CODEX_DIR = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex")
 SETTINGS = CLAUDE_DIR / "settings.json"
 HOOKS_DIR = CLAUDE_DIR / "hooks"
 
+CLAIM_TRACKER = re.compile(r"claim[-_]ledger[-_]tracker\.(py|sh)")
 JQ_DEPENDENT = re.compile(r"claim-(evidence-guard|ledger-tracker)|lint-gate\.sh")
 SCRATCH = Path(tempfile.mkdtemp(prefix="harness-verify-"))
 
@@ -186,6 +187,20 @@ def check_settings(jq_present):
             path = Path(os.path.expanduser(raw.replace("\\", "/")))
             if not path.exists():
                 record(False, "hook file referenced by settings exists", raw)
+
+    # The tracker has to see edits, or a test run followed by more edits still
+    # counts as evidence for the code as it is now.
+    tracker_matchers = [
+        entry.get("matcher") or ""
+        for entry in (data.get("hooks") or {}).get("PostToolUse") or []
+        if isinstance(entry, dict) and any(
+            CLAIM_TRACKER.search(str(hook.get("command") or ""))
+            for hook in entry.get("hooks", []) or [] if isinstance(hook, dict))
+    ]
+    if tracker_matchers:
+        ok = any({"Edit", "Write"} <= set(m.split("|")) for m in tracker_matchers)
+        record(ok, "claim-ledger-tracker matcher covers Edit and Write",
+               "" if ok else "matchers: %s -- re-run install.py to update it" % tracker_matchers)
     return commands
 
 
@@ -203,7 +218,8 @@ AGY_EXPECT = {
         ("PreToolUse", {"write_to_file", "replace_file_content", "multi_replace_file_content"},
          "no-emoji-guard.py")],
     "claim-guard": [
-        ("PostToolUse", {"run_command", "grep_search"}, "claim_ledger_tracker.py"),
+        ("PostToolUse", {"run_command", "grep_search", "write_to_file", "replace_file_content"},
+         "claim_ledger_tracker.py"),
         ("Stop", None, "claim_evidence_guard.py")],
     "lint-gate": [("Stop", None, "lint_gate.py")],
 }
@@ -715,14 +731,14 @@ def check_codex_live_fire():
         )
         if tracker and guard:
             tracker_matchers = registered_matchers(*tracker_names)
-            required_aliases = {"exec_command", "shell_command"}
+            required_aliases = {"exec_command", "shell_command", "apply_patch"}
             matcher_ok = any(
                 required_aliases.issubset(set(matcher.split("|")))
                 for matcher in tracker_matchers
             )
             record(
                 matcher_ok,
-                "Codex claim tracker matcher accepts exec_command and shell_command",
+                "Codex claim tracker matcher accepts exec_command, shell_command and apply_patch",
                 ""
                 if matcher_ok
                 else "matchers: %s" % (tracker_matchers or ["<missing>"]),

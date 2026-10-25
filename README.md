@@ -29,7 +29,7 @@ Harness Guard 專注在幾個容易造成實際損失的情境：
 
 | Hook | 作用 |
 |---|---|
-| `claim-guard` | 記錄搜尋／測試等工具證據，結束前對帳完成宣稱 |
+| `claim-guard` | 記錄搜尋／測試／改檔等工具證據，結束前對帳完成宣稱；最後一次驗證之後又改過檔，該驗證不算數 |
 | `test-gate-guard` | 阻止測試與 `git commit` / `git push` 用 `;` 或換行錯誤串接 |
 | `danger-zone-guard` | 攔截特定災難性刪除、保護分支強推與敏感檔外洩 |
 | `lint-gate` | turn 結束前執行專案指定檢查；Windows 可用 `.lint-gate.json` 啟用 |

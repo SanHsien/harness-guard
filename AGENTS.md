@@ -170,7 +170,7 @@ python scripts/verify-install.py
 
 - `PreToolUse` + matcher `Write|Edit|MultiEdit` → no-emoji-guard
 - `PreToolUse` + matcher `Bash` → test-gate-guard、danger-zone-guard
-- `PostToolUse` + matcher `Bash|Grep|Glob` → claim-ledger-tracker
+- `PostToolUse` + matcher `Bash|PowerShell|Grep|Glob|WebSearch|WebFetch|Write|Edit|MultiEdit|NotebookEdit|mcp__claude-in-chrome__.*` → claim-ledger-tracker（記驗證、搜尋與改檔；改檔晚於最後一次驗證 = 該驗證過期）
 - `Stop` → claim-evidence-guard、lint-gate
 
 放行是安靜結束（exit 0），攔截是 `exit 2` + 訊息寫 stderr；claim-evidence-guard 例外，

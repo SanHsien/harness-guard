@@ -17,6 +17,19 @@
   `anti-doom-loop-guard` 在 c38bfd7 加入編輯工具，讓改檔能重置計數），舊安裝重跑也拿不到，計數照樣
   不重置。現在 Claude Code、Codex、Cursor、Antigravity 都只把「同命令且同 matcher」算已登記；舊 matcher
   下的同腳本登記會被移除並改登到現行 matcher（計入 `removed N stale`），同群組裡使用者自己的 hook 不動。
+- **claim-guard：測試跑完再改檔，「測試通過」仍被當成有證據（移植自上游 e9a4734）。** 記帳端現在
+  也記改檔（Claude `Write|Edit|MultiEdit|NotebookEdit`、Codex `apply_patch`、Cursor `Write|Delete`、
+  Antigravity `write_to_file|replace_file_content|multi_replace_file_content`），查驗端在「最後一次改檔晚於
+  最後一次驗證」時擋一次並列出兩者；第二次（`stop_hook_active`）照舊放行。shell 版與 Python 版都有。
+- **claim-guard：提到觸發詞也被當成宣稱（移植自上游 e9a4734）。** 「」與反引號 `` ` `` 內的文字先去掉再比對，
+  寫「我把 `tests pass` 加進觸發清單」不再被擋。shell 版用 `jq` 的 Unicode regex，不依賴 locale。
+
+### 新增
+
+- **claim-guard 記帳端多記幾種證據（移植自上游 7b0df03／e9a4734）**：`WebSearch`／`WebFetch`（Codex 的
+  `web_fetch`）算搜尋；`mcp__claude-in-chrome__*` 與 `playwright test`／`agent-browser` 算驗證；Windows 上
+  Claude Code 的 `PowerShell` 工具與 `Bash` 同樣記帳。安裝器的 tracker matcher 隨之加寬（Claude、Codex、
+  Antigravity），重跑 `install.py` 會把舊 matcher 的登記搬過去；`verify-install.py` 會檢查 matcher 涵蓋改檔工具。
 
 ## 2026-10-23
 

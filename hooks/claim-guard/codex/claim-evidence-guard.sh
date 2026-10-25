@@ -15,13 +15,19 @@ turn_id="$(printf '%s' "$input" | jq -r '.turn_id // .session_id // "default"' 2
 }
 verify_ledger="$ledger_dir/${turn_id}.verify"
 search_ledger="$ledger_dir/${turn_id}.search"
-cleanup() { rm -f "$verify_ledger" "$search_ledger"; }
+edit_ledger="$ledger_dir/${turn_id}.edit"
+cleanup() { rm -f "$verify_ledger" "$search_ledger" "$edit_ledger"; }
 
 stop_active="$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null)"
 last_message="$(printf '%s' "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null)"
 if [ -z "$last_message" ]; then
   printf '{}\n'
   exit 0
+fi
+# Quoted text is a mention, not a claim: drop 「…」 and `…` spans before matching.
+# jq's regex is Unicode-aware whatever the locale; if it fails, the full message is kept.
+if stripped="$(printf '%s' "$last_message" | jq -Rrs 'gsub("「[^」]*」"; "") | gsub("`[^`]*`"; "")' 2>/dev/null)"; then
+  last_message="$stripped"
 fi
 
 block_reason() {
@@ -114,6 +120,16 @@ if printf '%s' "$last_message" | grep -iqE "$verify_triggers"; then
   if [ ! -s "$verify_ledger" ] && [ "$stop_active" != "true" ]; then
     cleanup
     block_reason "CLAIM-EVIDENCE GUARD: The reply claims verification or tests passed, but no verification command was recorded this turn. Verify it first or mark it as not yet verified."
+  fi
+  # Stale verification: the last file write came after the last verification
+  if [ "$stop_active" != "true" ] && [ -s "$edit_ledger" ] && [ "$edit_ledger" -nt "$verify_ledger" ]; then
+    last_edit="$(tail -1 "$edit_ledger")"
+    last_verify="$(tail -1 "$verify_ledger")"
+    cleanup
+    block_reason "CLAIM-EVIDENCE GUARD (stale verification): the reply claims verification or tests passed, but the last file write came after the last verification, so that verification does not cover the current code.
+  Last verification: $last_verify
+  Write after it: $last_edit
+Re-run the verification before claiming; if this change needs none (docs or comments only), say \"changed, not re-verified\" instead."
   fi
   quality_error="$(check_quality_summary_gate)"
   [ -z "$quality_error" ] || block_reason "$quality_error"
