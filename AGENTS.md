@@ -12,7 +12,7 @@
 Harness Guard 是 cross-agent AI coding guardrails kit。核心產品是：
 
 - 5 個可執行 guardrail hooks；
-- 11 套可選 workflow skills；
+- 12 套可選 workflow skills；
 - Claude / Gemini 規則檔範本；
 - `scripts/install.py` 可重現安裝；
 - `scripts/verify-install.py` 對已安裝 Claude Code hooks 做 live-fire 驗證。
