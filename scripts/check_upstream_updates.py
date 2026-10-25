@@ -42,8 +42,17 @@ def load_baseline(path: Path = BASELINE_PATH) -> dict:
     missing = sorted(required - baseline.keys())
     if missing:
         raise UpstreamCheckError(f"baseline missing fields: {', '.join(missing)}")
-    if not isinstance(baseline["reviewed_through"], str) or len(baseline["reviewed_through"]) != 40:
+    reviewed = baseline["reviewed_through"]
+    if not isinstance(reviewed, str) or re.fullmatch(r"[0-9a-fA-F]{40}", reviewed) is None:
         raise UpstreamCheckError("reviewed_through must be a full 40-character SHA")
+    for key in ("repo", "branch"):
+        value = baseline[key]
+        # Both reach git as arguments; a value starting with "-" would be read
+        # as an option (e.g. --upload-pack=...).
+        if not isinstance(value, str) or not value or value.startswith("-") or any(
+            ch.isspace() for ch in value
+        ):
+            raise UpstreamCheckError(f"{key} must be a plain, non-empty string, got {value!r}")
     for key in ("reviewed_pr_through", "reviewed_issue_through"):
         value = baseline.get(key, 0)
         # bool is an int subclass; a watermark of `true` is a typo, not #1.
@@ -70,7 +79,7 @@ def fetch_upstream(baseline: dict, repo_dir: Path) -> str:
     branch = baseline["branch"]
     ref = f"{UPSTREAM_REF_PREFIX}/{branch}"
     run_git(
-        ["fetch", "--quiet", baseline["repo"], f"+refs/heads/{branch}:{ref}"],
+        ["fetch", "--quiet", "--", baseline["repo"], f"+refs/heads/{branch}:{ref}"],
         repo_dir,
     )
     return ref
@@ -362,7 +371,7 @@ def main() -> int:
     report = render_markdown(baseline, commits, prs, issues, error)
     try:
         Path(args.output).write_text(report, encoding="utf-8")
-    except OSError as exc:
+    except (OSError, ValueError) as exc:  # ValueError: e.g. a lone surrogate in a title
         # Still exit 2, not a traceback's 1: --strict reads 1 as "unreviewed".
         error = error or f"could not write the report to {args.output}: {exc}"
         report = render_markdown(baseline, commits, prs, issues, error)

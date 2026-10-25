@@ -102,8 +102,15 @@ class BaselineValidation(unittest.TestCase):
                 self.load(repo="https://gitlab.com/a/b.git", reviewed_pr_through=value)
 
     def test_a_non_string_sha_is_a_check_error(self):
-        with self.assertRaises(checker.UpstreamCheckError):
-            self.load(reviewed_through=1234567890)
+        for value in (1234567890, "g" * 40, "--upload-pack=x".ljust(40, "a")):
+            with self.subTest(value=value), self.assertRaises(checker.UpstreamCheckError):
+                self.load(reviewed_through=value)
+
+    def test_repo_and_branch_cannot_be_read_as_git_options(self):
+        for key, value in (("repo", "--upload-pack=touch /tmp/x"), ("branch", "-x"),
+                           ("branch", "main extra"), ("repo", None), ("branch", "")):
+            with self.subTest(key=key, value=value), self.assertRaises(checker.UpstreamCheckError):
+                self.load(**{key: value})
 
 
 class RewrittenHistory(unittest.TestCase):
@@ -245,6 +252,18 @@ class ExitCodes(unittest.TestCase):
              mock.patch.object(checker, "collect_new_commits", return_value=[]), \
              mock.patch.object(checker, "collect_new_tickets", side_effect=[[], []]), \
              mock.patch("sys.argv", ["check", "--strict", "--output", f"{directory}/missing/r.md"]):
+            self.assertEqual(checker.main(), 2)
+
+    def test_an_unencodable_report_still_exits_2(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(checker, "load_baseline", return_value=BASELINE), \
+             mock.patch.object(checker, "fetch_upstream", return_value="ref"), \
+             mock.patch.object(checker, "collect_new_commits", return_value=[]), \
+             mock.patch.object(checker, "collect_new_tickets",
+                               side_effect=[[{"number": 3, "title": "\ud800 bad"}], []]), \
+             mock.patch("sys.argv", ["check", "--strict", "--output", f"{directory}/r.md"]):
             self.assertEqual(checker.main(), 2)
 
     def test_a_non_utf8_console_does_not_crash_the_report(self):
