@@ -90,7 +90,8 @@ class RewrittenHistory(unittest.TestCase):
         from pathlib import Path
 
         self._tmp = tempfile.TemporaryDirectory()
-        self.repo = Path(self._tmp.name)
+        self.repo = Path(self._tmp.name) / "upstream"
+        self.repo.mkdir()
         self.git("init", "--quiet")
         self.git("config", "user.email", "test@example.invalid")
         self.git("config", "user.name", "test")
@@ -131,11 +132,10 @@ class RewrittenHistory(unittest.TestCase):
         reviewed = self.commit("reviewed")
         self.commit("next")
         self.commit("tip")
-        shallow = self.repo.parent / (self.repo.name + "-shallow")
+        shallow = self.repo.parent / "shallow"  # inside the temp dir, removed with it
         subprocess.run(["git", "clone", "--quiet", "--depth", "1",
                         self.repo.as_uri(), str(shallow)],
                        check=True, capture_output=True)
-        self.addCleanup(lambda: __import__("shutil").rmtree(shallow, ignore_errors=True))
         # The reviewed commit object exists but its link to the tip is cut off.
         subprocess.run(["git", "fetch", "--quiet", "--depth", "1", "origin", reviewed],
                        cwd=shallow, check=True, capture_output=True)
@@ -211,6 +211,33 @@ class ExitCodes(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("Check failed", report)
         self.assertIn("KeyError", report)
+
+    def test_an_unwritable_report_path_still_exits_2(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(checker, "load_baseline", return_value=BASELINE), \
+             mock.patch.object(checker, "fetch_upstream", return_value="ref"), \
+             mock.patch.object(checker, "collect_new_commits", return_value=[]), \
+             mock.patch.object(checker, "collect_new_tickets", side_effect=[[], []]), \
+             mock.patch("sys.argv", ["check", "--strict", "--output", f"{directory}/missing/r.md"]):
+            self.assertEqual(checker.main(), 2)
+
+    def test_a_non_utf8_console_does_not_crash_the_report(self):
+        import io
+        import tempfile
+
+        commit = {"sha": "a" * 40, "short": "aaaaaaa", "date": "2026-10-25",
+                  "subject": "\u4fee\u6b63 hook", "files": []}
+        console = io.TextIOWrapper(io.BytesIO(), encoding="cp1252")
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(checker, "load_baseline", return_value=BASELINE), \
+             mock.patch.object(checker, "fetch_upstream", return_value="ref"), \
+             mock.patch.object(checker, "collect_new_commits", return_value=[commit]), \
+             mock.patch.object(checker, "collect_new_tickets", side_effect=[[], []]), \
+             mock.patch("sys.stdout", console), \
+             mock.patch("sys.argv", ["check", "--strict", "--output", f"{directory}/r.md"]):
+            self.assertEqual(checker.main(), 1)  # a new commit under --strict, not a crash
 
     def test_a_clean_check_succeeds(self):
         import tempfile

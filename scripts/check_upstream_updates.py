@@ -15,6 +15,7 @@ import argparse
 import json
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -86,24 +87,24 @@ def require_reviewed_ancestor(reviewed: str, ref: str, repo_dir: Path) -> None:
     )
     if result.returncode == 0:
         return
-    if result.returncode == 1:
-        shallow = subprocess.run(
+    shallow = subprocess.run(
             ["git", "rev-parse", "--is-shallow-repository"],
             cwd=repo_dir,
             capture_output=True,
             text=True,
             encoding="utf-8",
-            errors="replace",
+        errors="replace",
+    )
+    if shallow.stdout.strip() == "true":
+        # A shallow clone cuts history off (or leaves the reviewed commit out
+        # entirely), so ancestry cannot be proven either way. Saying "rewritten"
+        # would send someone hunting for a force push that never happened.
+        raise UpstreamCheckError(
+            "this clone is shallow, so the ancestry of reviewed_through "
+            f"{reviewed[:7]} cannot be checked; check out with full history "
+            "(actions/checkout fetch-depth: 0)."
         )
-        if shallow.stdout.strip() == "true":
-            # A shallow clone cuts history off, so ancestry cannot be proven
-            # either way. Saying "rewritten" here would send someone hunting
-            # for a force push that never happened.
-            raise UpstreamCheckError(
-                "this clone is shallow, so the ancestry of reviewed_through "
-                f"{reviewed[:7]} cannot be checked; check out with full history "
-                "(actions/checkout fetch-depth: 0)."
-            )
+    if result.returncode == 1:
         raise UpstreamCheckError(
             f"reviewed_through {reviewed[:7]} is not an ancestor of upstream {ref}: "
             "upstream history was rewritten. Re-review against the new history "
@@ -352,8 +353,18 @@ def main() -> int:
         }
 
     report = render_markdown(baseline, commits, prs, issues, error)
-    output = Path(args.output)
-    output.write_text(report, encoding="utf-8")
+    try:
+        Path(args.output).write_text(report, encoding="utf-8")
+    except OSError as exc:
+        # Still exit 2, not a traceback's 1: --strict reads 1 as "unreviewed".
+        print(f"ERROR: could not write the report to {args.output}: {exc}", file=sys.stderr)
+        error = error or str(exc)
+    # Upstream subjects are often not ASCII; a console in a legacy code page
+    # must not turn printing the report into a crash with exit 1.
+    try:
+        sys.stdout.reconfigure(errors="replace")
+    except (AttributeError, ValueError):
+        pass
     print(report)
 
     if error:

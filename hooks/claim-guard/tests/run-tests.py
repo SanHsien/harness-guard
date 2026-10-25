@@ -284,6 +284,10 @@ class LedgerFlowMixin:
         self.assertAllowed(self.stop(QUOTED_ONLY))
         self.assertBlocked(self.stop(CLAIM))  # the same phrase unquoted still needs evidence
 
+    def test_a_browser_test_run_counts_as_verification(self) -> None:
+        self.track(self.shell("npx playwright test"))
+        self.assertAllowed(self.stop(CLAIM))
+
     def test_a_web_search_counts_as_a_search(self) -> None:
         self.track(self.web_search("harness guard changelog"))
         self.assertAllowed(self.stop("That option does not exist in the current release."))
