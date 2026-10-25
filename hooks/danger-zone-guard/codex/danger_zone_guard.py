@@ -38,10 +38,13 @@ DANGEROUS_RM = re.compile(
 )
 
 # 2. Dangerous Git force push to main / master
-DANGEROUS_GIT = re.compile(
-    r"\bgit\s+push\s+(?:-[a-zA-Z]*f[a-zA-Z]*|--force|--force-with-lease)\b.*?\b(main|master|prod|production|release)\b",
+# The segment of one `git push` command: from `push` to the next separator.
+# Options git takes before the subcommand (`git -C repo push`) are skipped.
+GIT_PUSH = re.compile(
+    r"\bgit\s+(?:(?:-[Cc]\s+(?:\"\s*\"|'\s*'|\S+)|--?[A-Za-z][\w-]*(?:=\S+)?)\s+)*push\b([^;&|\n]*)",
     re.IGNORECASE,
 )
+PROTECTED_BRANCHES = frozenset({"main", "master", "prod", "production", "release"})
 
 # 3. Secret / credential exfiltration patterns
 # Escape hatch for the force-push rule only, mirroring fork_pr_guard's
@@ -143,6 +146,38 @@ def unquote(command):
     return command.replace('"', " ").replace("'", " ")
 
 
+def find_force_push(without_heredocs, as_commands):
+    """Return the text of a force push to a protected branch, or None.
+
+    The push segments are located in `as_commands` (quoted text blanked, so a
+    commit message that mentions a force push is not one). Their arguments are
+    then read from the same span of the unblanked text with the quote characters
+    dropped, because `git push --force origin "main"` pushes exactly as much as
+    the unquoted form. Flag and branch may come in either order.
+    """
+    for match in GIT_PUSH.finditer(as_commands):
+        start, end = match.span(1)
+        tokens = without_heredocs[start:end].replace('"', " ").replace("'", " ").split()
+        forced = False
+        protected = False
+        for token in tokens:
+            if token.startswith("--"):
+                forced = forced or token.lower().startswith("--force")
+            elif token.startswith("-"):
+                forced = forced or "f" in token[1:].lower()
+            else:
+                if token.startswith("+"):
+                    forced = True
+                    token = token[1:]
+                branch = token.split(":")[-1]
+                if branch.startswith("refs/heads/"):
+                    branch = branch[len("refs/heads/"):]
+                protected = protected or branch.lower() in PROTECTED_BRANCHES
+        if forced and protected:
+            return match.group(0).strip()
+    return None
+
+
 def inspect_command(command, repo_root=None):
     """Check command against dangerous patterns. Returns reason string or None."""
     without_heredocs = blank_heredocs(command)
@@ -153,12 +188,12 @@ def inspect_command(command, repo_root=None):
 
     as_commands = blank_quoted(without_heredocs)
 
-    git_match = DANGEROUS_GIT.search(as_commands)
-    if git_match and not FORCE_PUSH_OK.search(command):
+    force_push = find_force_push(without_heredocs, as_commands)
+    if force_push and not FORCE_PUSH_OK.search(command):
         return (
             "Forced push to protected branch (`%s`). When the force push is the "
             "operation that was actually asked for, state that in the command "
-            "with `# force-push-ok: <reason>`." % git_match.group(0).strip()
+            "with `# force-push-ok: <reason>`." % force_push
         )
 
     exfil_match = SECRET_EXFIL.search(as_commands)

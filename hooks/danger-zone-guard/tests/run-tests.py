@@ -52,6 +52,18 @@ CASES = [
     ("rm -rf node_modules", False, "remove local node_modules"),
     ("git push origin feat/my-branch", False, "standard git push on feature branch"),
     ("git push --force-with-lease origin feat/my-branch", False, "force push to feature branch"),
+    # The force flag and the branch may come in either order, behind git's own
+    # options, or in quotes; a branch merely named like a protected one is not it.
+    ("git push origin main --force", True, "force flag after the branch"),
+    ("git push origin main -f", True, "short force flag after the branch"),
+    ("git -C repo push --force origin main", True, "git -C before push"),
+    ("git push origin +main", True, "+refspec forces the push"),
+    ('git push --force origin "main"', True, "quoted branch name"),
+    ("git push --force origin HEAD:refs/heads/main", True, "full refspec to main"),
+    ("git push origin feat --force", False, "force flag on a feature branch"),
+    ("git push -f origin feature/release-notes", False, "branch name merely contains release"),
+    ("git push -f origin feat; echo main", False, "main belongs to another command"),
+    ("git push -u origin main", False, "plain push to main"),
     ("cat .env.example", False, "read example env file"),
     ("echo 'rm -rf /' > warning.txt", False, "quoted string mentioning danger command"),
     ("cat >> doc.md << 'EOF'\nNever run rm -rf / on production\nEOF", False, "heredoc mentioning danger command"),
