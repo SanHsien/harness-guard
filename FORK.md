@@ -97,7 +97,11 @@ python scripts/verify-install.py
 | `3baf40e` feat(skills): add phantom-pushback | 2026-08-21 | **採用**。偵測「AI 虛構一個你沒說過的立場再來反駁你」的收尾段落，是上游原創、非修本 fork 改過的東西，與本 kit 的 guardrail 定位一致。skill 目錄原樣取用；README 的技能數與清單改寫進本 fork 的雙語結構。安裝器自動列舉 `skills/`，四個 agent target 的 dry-run 都確認會安裝。 |
 | `6de7c3a` fix(no-emoji-guard): UTF-8 stdout | 2026-08-20 | **採用**（322a428）。這是本 fork 送回上游的 encoding 修正的後續。 |
 | `8c0765a` chore: stop tracking `__pycache__` | 2026-08-20 | **無需移植**。本 fork 的 `.gitignore` 早已排除 `__pycache__/` 與 `*.py[cod]`。 |
-| `7b0df03` feat: sync kit with current personal harness | 2026-09-04 | **adoption pending: 大型功能同步，無法在本機驗證**。17 檔：新增第四個 hook `write-manifest`（僅 bash 版，Claude Code + Codex；本 fork 需另寫 `hooks/write-manifest/windows/` 並接進 installer、`settings-example.windows.json` 與 CI）、`claim-ledger-tracker` 加記 WebSearch/WebFetch、checkpoint lite mode 與 `stage-own-edits.sh`（依賴 write-manifest）、polite Mode C、explain document-mode、first-principles 0.4.0 精簡、asd-ste100 文件修正、README／AGENTS／CLAUDE 計數。這些多數互相依賴 write-manifest，逐項挑會拆散功能；README 需併入 `README.en.md` 再翻進中文主檔。重查條件：維護者決定採用 write-manifest 並補 Windows 版時，走 `git merge upstream/main` 並跑上列四組測試。 |
+| `7b0df03` feat: sync kit with current personal harness | 2026-09-04 | **部分採用**（2026-10-25）。`claim-ledger-tracker` 記 WebSearch／WebFetch 已移植到三種 build（bdca63b）；explain document mode、polite Mode C、first-principles 0.4.0 隨上游最新版同步（f303caf，本 fork 這幾個 skill 與上游 3baf40e 原本一字不差）。`write-manifest` 與依賴它的 checkpoint lite mode／`stage-own-edits.sh` **不做**，理由與重查條件見 [`docs/DECISIONS.md`](docs/DECISIONS.md)。 |
+| `e9a4734` feat: slim kit to core tools with plugin marketplace install | 2026-10-22 | **部分採用**。claim-guard 的「改檔晚於最後一次驗證 = 驗證過期」與「「」／反引號內是提及不是宣稱」已確認本 fork 也有這兩個缺陷，移植到 Claude／Codex shell 版與 Python 版，補 regression test（bdca63b）；explain／polite／neat-freak 文字同步（f303caf）。subagent 帳本、`block-outgoing-comms`、`humanizer`、plugin marketplace、退役 6 項、README 改寫**不做**，見 `docs/DECISIONS.md`。 |
+| `7474dfd` docs: lead with claim-guard, split closure skills into their own plugin | 2026-10-22 | **不採用**。只改 marketplace 與上游 README 版面，見 `docs/DECISIONS.md`。 |
+| `365f5c3` chore: remove retired/ folder | 2026-10-22 | **不採用**。本 fork 沒有退役那些項目；上游保存在 tag `retired-archive-2026-10-22`。 |
+| `adc8928` refactor(closure): merge neat-freak into checkpoint | 2026-10-25 | **不採用**（暫緩）。建立在 checkpoint 新版（依賴 write-manifest）之上，與該項一起處理，見 `docs/DECISIONS.md`。 |
 
 審視後才推進 `scripts/upstream_baseline.json`；不要為了讓紅燈消失直接改 SHA。
 
@@ -153,3 +157,15 @@ python scripts/verify-install.py
 - commit：`3baf40e`（未變，`3baf40e..upstream/main` 為 0）
 - PR：**#2**、issue：**#1**（首次真正查過並逐筆判斷）
 - 分支：上游仍只有 `main` 一條（2026-08-23 確認）
+
+## 2026-10-25：上游 7b0df03 → adc8928
+
+commit 逐筆決策見上表與 [`docs/DECISIONS.md`](docs/DECISIONS.md)；水位推進到 `adc8928`。
+
+- PR：`git ls-remote` 上游只有 `refs/pull/2/head`，GitHub 的 PR ref 關閉後仍保留，所以從未有過 #2 以後的 PR。
+  水位維持 **#2**。
+- issue：本工作階段沒有上游的 API 權限；2026-10-24 的 Upstream check（帶 `GH_TOKEN`、`--state all`）回報
+  #1 以上沒有新項目。水位維持 **#1**，推進 baseline 後的那次 workflow 會再查一次。
+- 分支：上游仍只有 `main`；另有 tag `retired-archive-2026-10-22`（退役項目的保存點，不需追）。
+- 檢查器本身補了兩個 fail-closed 缺口（4bf6666）：沒有 `gh` 時不再崩潰成「有未審 commit」，上游改寫歷史時
+  明確報錯而不是列出一段看似正常的新 commit。
