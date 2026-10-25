@@ -69,11 +69,19 @@ POWERSHELL_CASES = [
     (True, 'pytest "C:\\repo\\" ; git commit -m x'),
     (False, 'Invoke-Pester -Path "C:\\repo\\tests\\" && git push'),
     (False, 'git commit -m "note `" ; pytest ; git push"'),
+    (False, 'pytest `\n -x && git push'),
 ]
 
 
-# Backslash escapes quotes in POSIX shells only; PowerShell uses a backtick.
-BASH_ONLY = {'echo \\"; pytest ; git push', 'echo "a \\" ; pytest ; git push"'}
+# Backslash escapes quotes and continues lines in POSIX shells only; PowerShell
+# uses a backtick.
+BASH_ONLY = {
+    'echo \\"; pytest ; git push',
+    'echo "a \\" ; pytest ; git push"',
+    "pytest \\\n -x && git push",
+}
+# Codex, Cursor and Antigravity do not name their shell, so the hook reads their
+# commands both ways and blocks on either hit. These cases are ambiguous there.
 
 
 def run(hook, command, tool_name):
@@ -87,7 +95,7 @@ def check(label, hook, tool_name, blocked_from):
     print("-- %s (%s)" % (label, hook.name))
     failures = 0
     for should_block, command in CASES:
-        if tool_name == "PowerShell" and command in BASH_ONLY:
+        if tool_name in ("PowerShell", "shell") and command in BASH_ONLY:
             continue
         proc = run(hook, command, tool_name)
         blocked = blocked_from(proc)
@@ -114,6 +122,7 @@ def main():
             lambda p: p.returncode == 2,
         )
     total += check_powershell_paths()
+    total += check_unknown_shell()
     if CODEX_HOOK.exists():
         total += check(
             "Codex build",
@@ -139,10 +148,42 @@ def check_powershell_paths():
     return failures
 
 
+# Callers that do not say which shell they run (Codex, Cursor, Antigravity) get
+# both readings, so a PowerShell path ending in a backslash cannot hide a push.
+UNKNOWN_SHELL_COMMAND = 'Invoke-Pester -Path "C:\\repo\\tests\\" ; git push'
+
+
+def check_unknown_shell():
+    print("-- callers that do not name their shell")
+    failures = 0
+    payloads = [
+        ("Cursor", CLAUDE_HOOK, {"hook_event_name": "beforeShellExecution",
+                                 "cursor_version": "1.0", "command": UNKNOWN_SHELL_COMMAND}),
+        ("Antigravity", CLAUDE_HOOK, {"toolCall": {"name": "run_command",
+                                                   "args": {"CommandLine": UNKNOWN_SHELL_COMMAND}},
+                                      "conversationId": "c"}),
+        ("Codex", CODEX_HOOK, {"tool_name": "shell",
+                               "tool_input": {"command": UNKNOWN_SHELL_COMMAND}}),
+    ]
+    for name, hook, payload in payloads:
+        if not hook.exists():
+            continue
+        proc = subprocess.run([sys.executable, str(hook)], input=json.dumps(payload),
+                              capture_output=True, text=True)
+        blocked = (proc.returncode == 2 or '"block"' in proc.stdout
+                   or '"decision": "deny"' in proc.stdout)
+        failures += not blocked
+        print("%s %s blocks the backslash-path chain" % ("PASS" if blocked else "FAIL", name))
+    print("failures: %d\n" % failures)
+    return failures
+
+
 def check_cursor_payload():
     print("-- Cursor beforeShellExecution payload (%s)" % CLAUDE_HOOK.name)
     failures = 0
     for should_block, command in CASES:
+        if command in BASH_ONLY:
+            continue
         payload = json.dumps({
             "hook_event_name": "beforeShellExecution",
             "cursor_version": "1.0",

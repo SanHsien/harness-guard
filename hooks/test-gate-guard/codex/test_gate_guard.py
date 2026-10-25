@@ -54,6 +54,8 @@ HEREDOC = re.compile(r"(?<!<)<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 # `||` is left out on purpose: `pytest ||\n git push` runs the push only when the
 # tests fail.
 CONTINUATION = re.compile(r"(?:&&|(?<!\|)\|(?!\|)|\\)[ \t]*\n")
+# PowerShell continues a line with a backtick, not a backslash.
+CONTINUATION_PS = re.compile(r"(?:&&|(?<!\|)\|(?!\|)|`)[ \t]*\n")
 SHELL_TOOLS = ("Bash", "shell", "exec", "exec_command")
 
 MESSAGE = (
@@ -127,14 +129,30 @@ def strip_literals(command, powershell=False):
     return "".join(out)
 
 
-def verdict(command, powershell=False):
+def verdict(command, shell=None):
+    """Judge a command; `shell` is "posix", "powershell" or None when unknown.
+
+    The two shells disagree on what escapes a quote (backslash vs backtick), so
+    a caller that does not say which one it runs gets both readings and a hit in
+    either blocks. Over-blocking an ambiguous quote beats letting a red test
+    commit.
+    """
+    modes = {"posix": (False,), "powershell": (True,)}.get(shell, (False, True))
+    for powershell in modes:
+        hit = _verdict(command, powershell)
+        if hit:
+            return hit
+    return None
+
+
+def _verdict(command, powershell):
     command = strip_literals(command, powershell)
     for git_match in GIT_WRITE.finditer(command):
         head = command[: git_match.start()]
         test_matches = list(TEST_CMD.finditer(head))
         if not test_matches:
             continue
-        separator = CONTINUATION.sub(" ", head[test_matches[-1].end():])
+        separator = (CONTINUATION_PS if powershell else CONTINUATION).sub(" ", head[test_matches[-1].end():])
         # Any `;` or newline between the two lets the commit run after a red
         # test, even when an `&&` also appears (`pytest && echo ok ; git push`).
         if ";" not in separator and "\n" not in separator:
