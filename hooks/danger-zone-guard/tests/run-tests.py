@@ -65,13 +65,13 @@ CASES = [
 ]
 
 
-def test_claude_build():
-    print("-- Claude Code build (danger_zone_guard.py)")
+def test_claude_build(tool_name="Bash"):
+    print("-- Claude Code build (danger_zone_guard.py, tool %s)" % tool_name)
     failures = 0
     for cmd, should_block, label in CASES:
         proc = subprocess.run(
             [sys.executable, str(CLAUDE_HOOK)],
-            input=json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}}),
+            input=json.dumps({"tool_name": tool_name, "tool_input": {"command": cmd}}),
             capture_output=True,
             text=True,
             encoding="utf-8",
@@ -140,6 +140,8 @@ def main():
         pass
 
     claude_failures = test_claude_build()
+    # Claude Code's PowerShell tool on Windows was ignored outright before.
+    claude_failures += test_claude_build("PowerShell")
     codex_failures = test_codex_build()
     cursor_failures = test_cursor_payload()
     total = claude_failures + codex_failures + cursor_failures

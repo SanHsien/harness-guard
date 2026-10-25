@@ -169,7 +169,7 @@ python scripts/verify-install.py
 ## 本 repo（dogfooding）用到的 hook 事件
 
 - `PreToolUse` + matcher `Write|Edit|MultiEdit` → no-emoji-guard
-- `PreToolUse` + matcher `Bash` → test-gate-guard、danger-zone-guard
+- `PreToolUse` + matcher `Bash|PowerShell` → test-gate-guard、danger-zone-guard
 - `PostToolUse` + matcher `Bash|PowerShell|Grep|Glob|WebSearch|WebFetch|Write|Edit|MultiEdit|NotebookEdit|mcp__claude-in-chrome__.*` → claim-ledger-tracker（記驗證、搜尋與改檔；改檔晚於最後一次驗證 = 該驗證過期）
 - `Stop` → claim-evidence-guard、lint-gate
 

@@ -12,6 +12,10 @@
 
 ### 修正
 
+- **Windows：Claude Code 的 PowerShell 工具完全繞過 `danger-zone-guard` 與 `test-gate-guard`（`fork`）。**
+  兩者只登記 `Bash` matcher，腳本也只認 `Bash` 等工具名，所以經 PowerShell 工具跑的 `git push --force`、
+  `pytest ; git push` 一律放行——而 `;` 正是 PowerShell 常用的分隔符。matcher 改為 `Bash|PowerShell`，
+  兩支腳本把 `PowerShell` 當 shell 工具；重跑 `install.py` 會把舊 matcher 的登記搬過去。
 - **重跑安裝器不會更新 matcher 已改的登記（`fork`）。** 同一支腳本、同一條命令只要已在任何 matcher
   群組裡，安裝器就回報「already registered」；hook 需要看到的工具清單後來變寬（例如
   `anti-doom-loop-guard` 在 c38bfd7 加入編輯工具，讓改檔能重置計數），舊安裝重跑也拿不到，計數照樣

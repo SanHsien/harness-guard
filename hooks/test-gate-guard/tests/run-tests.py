@@ -74,6 +74,11 @@ def main():
         total += check(
             "Claude Code build", CLAUDE_HOOK, "Bash", lambda p: p.returncode == 2
         )
+        # Claude Code's PowerShell tool on Windows, where `;` is the usual separator.
+        total += check(
+            "Claude Code build, PowerShell tool", CLAUDE_HOOK, "PowerShell",
+            lambda p: p.returncode == 2,
+        )
     if CODEX_HOOK.exists():
         total += check(
             "Codex build",

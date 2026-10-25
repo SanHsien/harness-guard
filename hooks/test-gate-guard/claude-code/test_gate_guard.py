@@ -136,7 +136,8 @@ def verdict(command):
     return None
 
 
-SHELL_TOOLS = ("Bash", "Exec", "exec", "shell", "run_command", "Shell")
+# PowerShell is Claude Code's shell tool on Windows when it is enabled.
+SHELL_TOOLS = ("Bash", "PowerShell", "Exec", "exec", "shell", "run_command", "Shell")
 
 
 # Cursor's own event names. `hook_event_name` alone does not identify Cursor:

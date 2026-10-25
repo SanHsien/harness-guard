@@ -12,6 +12,11 @@ Entries marked `fork` are this fork's changes relative to
 
 ### Fixed
 
+- **Windows: Claude Code's PowerShell tool bypassed `danger-zone-guard` and `test-gate-guard` entirely (`fork`).**
+  Both were registered for the `Bash` matcher only and the scripts only recognised `Bash`-style tool
+  names, so `git push --force` or `pytest ; git push` run through the PowerShell tool went through, and
+  `;` is PowerShell's usual separator. The matcher is now `Bash|PowerShell` and both scripts treat
+  `PowerShell` as a shell tool; re-running `install.py` moves an old-matcher registration over.
 - **Re-running the installer did not update a registration whose matcher changed (`fork`).** Once a
   script's exact command sat in any matcher group, the installer reported "already registered", so an
   install made before a hook's matcher widened (for instance `anti-doom-loop-guard` gaining the edit
