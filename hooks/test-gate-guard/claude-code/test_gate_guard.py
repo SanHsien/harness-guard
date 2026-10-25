@@ -51,8 +51,17 @@ TEST_CMD = re.compile(
     r"|ruff\s+check|mypy|flake8|eslint|tsc(?:\s+--noEmit)?"
     r")\b"
 )
-GIT_WRITE = re.compile(r"\bgit\s+(?:commit|push)\b")
-HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+# Options git accepts before the subcommand (`git -C repo push`). Quoted option
+# values are blanked by strip_literals, so `-C "my repo"` arrives as `-C "       "`.
+GIT_WRITE = re.compile(
+    r"\bgit\s+(?:(?:-[Cc]\s+(?:\"\s*\"|'\s*'|\S+)|--?[A-Za-z][\w-]*(?:=\S+)?)\s+)*"
+    r"(?:commit|push)\b"
+)
+# `(?<!<)` keeps a here-string (`<<<word`) from being read as a heredoc, which
+# would blank everything after it.
+HEREDOC = re.compile(r"(?<!<)<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
+# A newline right after one of these continues the command; it is not a new one.
+CONTINUATION = re.compile(r"(?:&&|\|\|?|\\)[ \t]*\n")
 
 MESSAGE = (
     "TEST GATE: the test command `{test}` and `{git}` are joined with `;` or a "
@@ -108,8 +117,17 @@ def strip_literals(command):
     blanked = "".join(chars)
     out = list(blanked)
     quote = None
+    skip = False
     for i, ch in enumerate(blanked):
-        if quote is None:
+        if skip:
+            skip = False  # the character after a backslash is not a quote
+            if quote is not None:
+                out[i] = " "
+        elif ch == "\\" and quote != "'":
+            skip = True
+            if quote is not None:
+                out[i] = " "
+        elif quote is None:
             if ch in "'\"":
                 quote = ch
         elif ch == quote:
@@ -127,9 +145,9 @@ def verdict(command):
         test_matches = list(TEST_CMD.finditer(head))
         if not test_matches:
             continue
-        separator = head[test_matches[-1].end():]
-        if "&&" in separator:
-            continue  # already gated
+        separator = CONTINUATION.sub(" ", head[test_matches[-1].end():])
+        # Any `;` or newline between the two lets the commit run after a red
+        # test, even when an `&&` also appears (`pytest && echo ok ; git push`).
         if ";" not in separator and "\n" not in separator:
             continue  # not a chain
         return test_matches[-1].group(0), git_match.group(0)

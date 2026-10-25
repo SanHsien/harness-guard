@@ -8,7 +8,7 @@ this hook actually produced in service and must never produce again. The
 heredoc and quoted-string cases are the second kind: a work log that merely
 mentions `pytest ; git push` is text, not a command.
 
-Expected result: 12 passed, 0 failed, for each build.
+Expected result: no failures, for each build.
 """
 import json
 import subprocess
@@ -41,6 +41,23 @@ CASES = [
     (True, "playwright test ; git commit -m 'fix e2e'"),
     (False, "playwright test && git commit -m 'fix e2e'"),
     (True, "deno test ; git push"),
+    # An `&&` elsewhere in the chain does not gate a commit that follows `;`
+    (True, "pytest && echo ok ; git commit -m x"),
+    (True, "pytest ; ls && git push"),
+    # git options before the subcommand
+    (True, "pytest ; git -C repo push"),
+    (True, "pytest ; git -c user.name=x commit -m x"),
+    (True, "pytest ; git --no-pager push"),
+    (True, 'pytest ; git -C "my repo" push'),
+    (False, "pytest && git -C repo push"),
+    # A here-string is not a heredoc; it must not hide what follows
+    (True, "cat <<<hi\npytest ; git push"),
+    # Escaped quotes do not open or close a string
+    (True, 'echo \\"; pytest ; git push'),
+    (False, 'echo "a \\" ; pytest ; git push"'),
+    # A newline after an operator continues the command
+    (False, "pytest &&\n git push"),
+    (False, "pytest \\n -x && git push"),
 ]
 
 
