@@ -48,9 +48,10 @@ def load_baseline(path: Path = BASELINE_PATH) -> dict:
     for key in ("repo", "branch"):
         value = baseline[key]
         # Both reach git as arguments; a value starting with "-" would be read
-        # as an option (e.g. --upload-pack=...).
-        if not isinstance(value, str) or not value or value.startswith("-") or any(
-            ch.isspace() for ch in value
+        # as an option (e.g. --upload-pack=...). Spaces are fine in a local repo
+        # path (arguments go as a list), but never valid in a branch name.
+        if not isinstance(value, str) or not value or value.startswith("-") or (
+            key == "branch" and any(ch.isspace() for ch in value)
         ):
             raise UpstreamCheckError(f"{key} must be a plain, non-empty string, got {value!r}")
     for key in ("reviewed_pr_through", "reviewed_issue_through"):
@@ -370,8 +371,9 @@ def main() -> int:
 
     report = render_markdown(baseline, commits, prs, issues, error)
     try:
-        Path(args.output).write_text(report, encoding="utf-8")
-    except (OSError, ValueError) as exc:  # ValueError: e.g. a lone surrogate in a title
+        # errors="replace": a lone surrogate in a title still leaves a report file.
+        Path(args.output).write_text(report, encoding="utf-8", errors="replace")
+    except (OSError, ValueError) as exc:  # ValueError: e.g. a NUL in the output path
         # Still exit 2, not a traceback's 1: --strict reads 1 as "unreviewed".
         error = error or f"could not write the report to {args.output}: {exc}"
         report = render_markdown(baseline, commits, prs, issues, error)

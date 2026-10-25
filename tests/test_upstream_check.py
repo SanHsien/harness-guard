@@ -106,6 +106,11 @@ class BaselineValidation(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(checker.UpstreamCheckError):
                 self.load(reviewed_through=value)
 
+    def test_a_local_repo_path_with_a_space_is_accepted(self):
+        for repo in ("C:\\Program Files\\up", "/home/me/My Repos/up", "git@github.com:o/r.git"):
+            with self.subTest(repo=repo):
+                self.assertEqual(self.load(repo=repo, branch="release/1.x")["repo"], repo)
+
     def test_repo_and_branch_cannot_be_read_as_git_options(self):
         for key, value in (("repo", "--upload-pack=touch /tmp/x"), ("branch", "-x"),
                            ("branch", "main extra"), ("repo", None), ("branch", "")):
@@ -254,8 +259,9 @@ class ExitCodes(unittest.TestCase):
              mock.patch("sys.argv", ["check", "--strict", "--output", f"{directory}/missing/r.md"]):
             self.assertEqual(checker.main(), 2)
 
-    def test_an_unencodable_report_still_exits_2(self):
+    def test_an_unencodable_title_still_writes_the_report(self):
         import tempfile
+        from pathlib import Path
 
         with tempfile.TemporaryDirectory() as directory, \
              mock.patch.object(checker, "load_baseline", return_value=BASELINE), \
@@ -264,7 +270,8 @@ class ExitCodes(unittest.TestCase):
              mock.patch.object(checker, "collect_new_tickets",
                                side_effect=[[{"number": 3, "title": "\ud800 bad"}], []]), \
              mock.patch("sys.argv", ["check", "--strict", "--output", f"{directory}/r.md"]):
-            self.assertEqual(checker.main(), 2)
+            self.assertEqual(checker.main(), 1)  # a new item under --strict
+            self.assertIn("#3", Path(directory, "r.md").read_text(encoding="utf-8"))
 
     def test_a_non_utf8_console_does_not_crash_the_report(self):
         import io
