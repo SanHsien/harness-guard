@@ -12,6 +12,10 @@
 
 ### 修正
 
+- **上游檢查器 `check_upstream_updates.py`：沒查成的情況一律 exit 2（`fork`）。** 以前沒裝 `gh`、`gh` 輸出形狀不對、
+  寫不出報告、主控台編碼或 stdout 壞掉都會變成 traceback + exit 1，`--strict` 呼叫端讀成「有未審 commit」。
+  現在都寫出「Check failed／Not checked」並 exit 2；上游改寫歷史時明確報 rewritten，shallow clone 則報 shallow，
+  不再列出一段看似正常的新 commit。
 - **Windows：Claude Code 的 PowerShell 工具完全繞過 `danger-zone-guard` 與 `test-gate-guard`（`fork`）。**
   兩者只登記 `Bash` matcher，腳本也只認 `Bash` 等工具名，所以經 PowerShell 工具跑的 `git push --force`、
   `pytest ; git push` 一律放行——而 `;` 正是 PowerShell 常用的分隔符。matcher 改為 `Bash|PowerShell`，

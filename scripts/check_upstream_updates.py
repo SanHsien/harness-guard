@@ -88,11 +88,11 @@ def require_reviewed_ancestor(reviewed: str, ref: str, repo_dir: Path) -> None:
     if result.returncode == 0:
         return
     shallow = subprocess.run(
-            ["git", "rev-parse", "--is-shallow-repository"],
-            cwd=repo_dir,
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
+        ["git", "rev-parse", "--is-shallow-repository"],
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
         errors="replace",
     )
     if shallow.stdout.strip() == "true":
@@ -357,25 +357,29 @@ def main() -> int:
         Path(args.output).write_text(report, encoding="utf-8")
     except OSError as exc:
         # Still exit 2, not a traceback's 1: --strict reads 1 as "unreviewed".
-        print(f"ERROR: could not write the report to {args.output}: {exc}", file=sys.stderr)
-        error = error or str(exc)
+        error = error or f"could not write the report to {args.output}: {exc}"
+        report = render_markdown(baseline, commits, prs, issues, error)
+    unavailable = [
+        name for name, value in (("pull requests", prs), ("issues", issues)) if value is None
+    ]
+    if not error and unavailable:
+        # Fail closed. A report that could not enumerate tickets must not be
+        # allowed to read as a clean bill of health.
+        report += f"\nERROR: gh could not enumerate upstream {' and '.join(unavailable)}.\n"
     # Upstream subjects are often not ASCII; a console in a legacy code page
-    # must not turn printing the report into a crash with exit 1.
+    # must not turn printing the report into a crash with exit 1. Neither may a
+    # closed or broken stdout: the exit code is the result, the print is a copy.
     try:
         sys.stdout.reconfigure(errors="replace")
     except (AttributeError, ValueError):
         pass
-    print(report)
-
-    if error:
+    try:
+        print(report)
+        sys.stdout.flush()
+    except (OSError, ValueError, AttributeError):
         return 2
-    unavailable = [
-        name for name, value in (("pull requests", prs), ("issues", issues)) if value is None
-    ]
-    if unavailable:
-        # Fail closed. A report that could not enumerate tickets must not be
-        # allowed to read as a clean bill of health.
-        print(f"ERROR: gh could not enumerate upstream {' and '.join(unavailable)}.")
+
+    if error or unavailable:
         return 2
     if args.strict and (commits or prs or issues):
         return 1

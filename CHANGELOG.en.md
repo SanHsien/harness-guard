@@ -12,6 +12,11 @@ Entries marked `fork` are this fork's changes relative to
 
 ### Fixed
 
+- **Upstream checker `check_upstream_updates.py`: a check that could not run always exits 2 (`fork`).** A missing
+  `gh`, `gh` output of the wrong shape, an unwritable report, a console encoding error or a broken stdout used to
+  end in a traceback with exit 1, which `--strict` callers read as "unreviewed commits". All of them now write
+  "Check failed" / "Not checked" and exit 2; a rewritten upstream history is reported as rewritten and a shallow
+  clone as shallow, instead of listing what looks like an ordinary run of new commits.
 - **Windows: Claude Code's PowerShell tool bypassed `danger-zone-guard` and `test-gate-guard` entirely (`fork`).**
   Both were registered for the `Bash` matcher only and the scripts only recognised `Bash`-style tool
   names, so `git push --force` or `pytest ; git push` run through the PowerShell tool went through, and

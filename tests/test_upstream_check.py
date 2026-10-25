@@ -239,6 +239,25 @@ class ExitCodes(unittest.TestCase):
              mock.patch("sys.argv", ["check", "--strict", "--output", f"{directory}/r.md"]):
             self.assertEqual(checker.main(), 1)  # a new commit under --strict, not a crash
 
+    def test_a_broken_stdout_exits_2_not_1(self):
+        import tempfile
+
+        class Broken:
+            def write(self, _text):
+                raise BrokenPipeError(32, "Broken pipe")
+
+            def flush(self):
+                raise BrokenPipeError(32, "Broken pipe")
+
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(checker, "load_baseline", return_value=BASELINE), \
+             mock.patch.object(checker, "fetch_upstream", return_value="ref"), \
+             mock.patch.object(checker, "collect_new_commits", return_value=[]), \
+             mock.patch.object(checker, "collect_new_tickets", side_effect=[[], []]), \
+             mock.patch("sys.stdout", Broken()), \
+             mock.patch("sys.argv", ["check", "--output", f"{directory}/r.md"]):
+            self.assertEqual(checker.main(), 2)
+
     def test_a_clean_check_succeeds(self):
         import tempfile
 
