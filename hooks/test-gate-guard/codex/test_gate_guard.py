@@ -56,6 +56,8 @@ HEREDOC = re.compile(r"(?<!<)<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 CONTINUATION = re.compile(r"(?:&&|(?<!\|)\|(?!\|)|\\)[ \t]*\n")
 # PowerShell continues a line with a backtick, not a backslash.
 CONTINUATION_PS = re.compile(r"(?:&&|(?<!\|)\|(?!\|)|`)[ \t]*\n")
+# Unknown shell: a line-ending continuation character is unambiguous either way.
+CONTINUATION_ANY = re.compile(r"(?:&&|(?<!\|)\|(?!\|)|\\|`)[ \t]*\n")
 SHELL_TOOLS = ("Bash", "shell", "exec", "exec_command")
 
 MESSAGE = (
@@ -139,20 +141,22 @@ def verdict(command, shell=None):
     """
     modes = {"posix": (False,), "powershell": (True,)}.get(shell, (False, True))
     for powershell in modes:
-        hit = _verdict(command, powershell)
+        hit = _verdict(command, powershell, shell is None)
         if hit:
             return hit
     return None
 
 
-def _verdict(command, powershell):
+def _verdict(command, powershell, any_continuation=False):
     command = strip_literals(command, powershell)
     for git_match in GIT_WRITE.finditer(command):
         head = command[: git_match.start()]
         test_matches = list(TEST_CMD.finditer(head))
         if not test_matches:
             continue
-        separator = (CONTINUATION_PS if powershell else CONTINUATION).sub(" ", head[test_matches[-1].end():])
+        continuation = (CONTINUATION_ANY if any_continuation
+                        else CONTINUATION_PS if powershell else CONTINUATION)
+        separator = continuation.sub(" ", head[test_matches[-1].end():])
         # Any `;` or newline between the two lets the commit run after a red
         # test, even when an `&&` also appears (`pytest && echo ok ; git push`).
         if ";" not in separator and "\n" not in separator:

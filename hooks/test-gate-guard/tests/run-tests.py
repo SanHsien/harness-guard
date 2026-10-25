@@ -78,8 +78,10 @@ POWERSHELL_CASES = [
 BASH_ONLY = {
     'echo \\"; pytest ; git push',
     'echo "a \\" ; pytest ; git push"',
-    "pytest \\\n -x && git push",
 }
+# Line continuation by a trailing backslash is POSIX-only too, but callers that do
+# not name their shell must still accept either continuation character.
+CONTINUATION_CASES = ["pytest \\\n -x && git push", "pytest `\n -x && git push"]
 # Codex, Cursor and Antigravity do not name their shell, so the hook reads their
 # commands both ways and blocks on either hit. These cases are ambiguous there.
 
@@ -96,6 +98,8 @@ def check(label, hook, tool_name, blocked_from):
     failures = 0
     for should_block, command in CASES:
         if tool_name in ("PowerShell", "shell") and command in BASH_ONLY:
+            continue
+        if tool_name == "PowerShell" and command == CONTINUATION_CASES[0]:
             continue
         proc = run(hook, command, tool_name)
         blocked = blocked_from(proc)
@@ -165,15 +169,24 @@ def check_unknown_shell():
         ("Codex", CODEX_HOOK, {"tool_name": "shell",
                                "tool_input": {"command": UNKNOWN_SHELL_COMMAND}}),
     ]
+    for command in CONTINUATION_CASES:
+        payloads.append(("Cursor, continued line", CLAUDE_HOOK, {
+            "hook_event_name": "beforeShellExecution", "cursor_version": "1.0",
+            "command": command, "_allow": True}))
+        payloads.append(("Codex, continued line", CODEX_HOOK, {
+            "tool_name": "shell", "tool_input": {"command": command}, "_allow": True}))
     for name, hook, payload in payloads:
+        allow = payload.pop("_allow", False)
         if not hook.exists():
             continue
         proc = subprocess.run([sys.executable, str(hook)], input=json.dumps(payload),
                               capture_output=True, text=True)
         blocked = (proc.returncode == 2 or '"block"' in proc.stdout
                    or '"decision": "deny"' in proc.stdout)
-        failures += not blocked
-        print("%s %s blocks the backslash-path chain" % ("PASS" if blocked else "FAIL", name))
+        ok = blocked != allow
+        failures += not ok
+        print("%s %s %s" % ("PASS" if ok else "FAIL", name,
+                            "allows" if allow else "blocks the backslash-path chain"))
     print("failures: %d\n" % failures)
     return failures
 
