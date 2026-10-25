@@ -20,7 +20,7 @@
   群組裡，安裝器就回報「already registered」；hook 需要看到的工具清單後來變寬（例如
   `anti-doom-loop-guard` 在 c38bfd7 加入編輯工具，讓改檔能重置計數），舊安裝重跑也拿不到，計數照樣
   不重置。現在 Claude Code、Codex、Cursor、Antigravity 都只把「同命令且同 matcher」算已登記；舊 matcher
-  下的同腳本登記會被移除並改登到現行 matcher（計入 `removed N stale`），同群組裡使用者自己的 hook 不動。
+  下的同腳本登記會被移除並改登到現行 matcher（輸出 `removed N outdated registration(s)`），同群組裡使用者自己的 hook 不動。
 - **claim-guard：測試跑完再改檔，「測試通過」仍被當成有證據（移植自上游 e9a4734）。** 記帳端現在
   也記改檔（Claude `Write|Edit|MultiEdit|NotebookEdit`、Codex `apply_patch`、Cursor `Write|Delete`、
   Antigravity `write_to_file|replace_file_content|multi_replace_file_content`），查驗端在「最後一次改檔晚於

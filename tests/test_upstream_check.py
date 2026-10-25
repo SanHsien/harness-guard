@@ -70,6 +70,12 @@ class TicketCollection(unittest.TestCase):
         with mock.patch.object(subprocess, "run", return_value=gh_result(stdout="not json")):
             self.assertIsNone(checker.collect_new_tickets(BASELINE, "pr"))
 
+    def test_output_of_the_wrong_shape_returns_none(self):
+        for stdout in ('{"number": 3}', '[{"title": "no number"}]', '[3]', '[{"number": "3", "title": "x"}]'):
+            with self.subTest(stdout=stdout), \
+                 mock.patch.object(subprocess, "run", return_value=gh_result(stdout=stdout)):
+                self.assertIsNone(checker.collect_new_tickets(BASELINE, "pr"))
+
     def test_a_missing_gh_binary_returns_none_instead_of_raising(self):
         missing = FileNotFoundError(2, "No such file or directory", "gh")
         with mock.patch.object(subprocess, "run", side_effect=missing):
@@ -120,6 +126,23 @@ class RewrittenHistory(unittest.TestCase):
 
         with self.assertRaisesRegex(checker.UpstreamCheckError, "rewritten"):
             checker.collect_new_commits(baseline, self.repo, "HEAD")
+
+    def test_a_shallow_clone_is_reported_as_shallow_not_rewritten(self):
+        reviewed = self.commit("reviewed")
+        self.commit("next")
+        self.commit("tip")
+        shallow = self.repo.parent / (self.repo.name + "-shallow")
+        subprocess.run(["git", "clone", "--quiet", "--depth", "1",
+                        self.repo.as_uri(), str(shallow)],
+                       check=True, capture_output=True)
+        self.addCleanup(lambda: __import__("shutil").rmtree(shallow, ignore_errors=True))
+        # The reviewed commit object exists but its link to the tip is cut off.
+        subprocess.run(["git", "fetch", "--quiet", "--depth", "1", "origin", reviewed],
+                       cwd=shallow, check=True, capture_output=True)
+        baseline = dict(BASELINE, reviewed_through=reviewed)
+
+        with self.assertRaisesRegex(checker.UpstreamCheckError, "shallow"):
+            checker.collect_new_commits(baseline, shallow, "HEAD")
 
     def test_an_unknown_reviewed_commit_is_an_error(self):
         self.commit("only commit")
@@ -172,6 +195,22 @@ class ExitCodes(unittest.TestCase):
             code = self.run_main([None, None], f"{directory}/report.md")
 
         self.assertEqual(code, 2)
+
+    def test_an_unexpected_error_fails_closed_with_a_report(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as directory, \
+             mock.patch.object(checker, "load_baseline", return_value=BASELINE), \
+             mock.patch.object(checker, "fetch_upstream", return_value="ref"), \
+             mock.patch.object(checker, "collect_new_commits", side_effect=KeyError("x")), \
+             mock.patch("sys.argv", ["check", "--strict", "--output", f"{directory}/report.md"]):
+            code = checker.main()
+            report = Path(directory, "report.md").read_text(encoding="utf-8")
+
+        self.assertEqual(code, 2)
+        self.assertIn("Check failed", report)
+        self.assertIn("KeyError", report)
 
     def test_a_clean_check_succeeds(self):
         import tempfile

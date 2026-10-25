@@ -87,6 +87,23 @@ def require_reviewed_ancestor(reviewed: str, ref: str, repo_dir: Path) -> None:
     if result.returncode == 0:
         return
     if result.returncode == 1:
+        shallow = subprocess.run(
+            ["git", "rev-parse", "--is-shallow-repository"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if shallow.stdout.strip() == "true":
+            # A shallow clone cuts history off, so ancestry cannot be proven
+            # either way. Saying "rewritten" here would send someone hunting
+            # for a force push that never happened.
+            raise UpstreamCheckError(
+                "this clone is shallow, so the ancestry of reviewed_through "
+                f"{reviewed[:7]} cannot be checked; check out with full history "
+                "(actions/checkout fetch-depth: 0)."
+            )
         raise UpstreamCheckError(
             f"reviewed_through {reviewed[:7]} is not an ancestor of upstream {ref}: "
             "upstream history was rewritten. Re-review against the new history "
@@ -163,6 +180,7 @@ def collect_new_tickets(baseline: dict, kind: str) -> list[dict] | None:
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors="replace",
         )
     except OSError:
         # `gh` not installed at all. Uncaught, this was a traceback before the
@@ -175,6 +193,13 @@ def collect_new_tickets(baseline: dict, kind: str) -> list[dict] | None:
         items = json.loads(result.stdout)
     except ValueError:
         return None
+    if not isinstance(items, list) or not all(
+        isinstance(item, dict)
+        and isinstance(item.get("number"), int)
+        and isinstance(item.get("title"), str)
+        for item in items
+    ):
+        return None  # not the shape asked for: unchecked, not "nothing new"
     return sorted(
         (item for item in items if item["number"] > watermark),
         key=lambda item: item["number"],
@@ -312,8 +337,13 @@ def main() -> int:
         commits = collect_new_commits(baseline, args.repo_dir, ref)
         prs = collect_new_tickets(baseline, "pr")
         issues = collect_new_tickets(baseline, "issue")
-    except UpstreamCheckError as exc:
-        error = str(exc)
+    except Exception as exc:  # noqa: BLE001 -- any failure is "not checked", exit 2
+        # UpstreamCheckError carries its own message; anything else would
+        # otherwise escape as a traceback with exit 1, which --strict callers
+        # read as "unreviewed commits", and no report would be written.
+        error = str(exc) if isinstance(exc, UpstreamCheckError) else (
+            f"unexpected {type(exc).__name__}: {exc}"
+        )
         baseline = {
             "repo": "unknown",
             "branch": "unknown",

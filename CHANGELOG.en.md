@@ -23,7 +23,7 @@ Entries marked `fork` are this fork's changes relative to
   tools in c38bfd7, which lets an edit reset the count) never picked it up and the count still never
   reset. Claude Code, Codex, Cursor and Antigravity now count a hook as registered only under the same
   command and the same matcher; a registration of the same script under another matcher is removed and
-  re-added under the current one (counted in `removed N stale`), and the user's own hooks in that group
+  re-added under the current one (reported as `removed N outdated registration(s)`), and the user's own hooks in that group
   are left alone.
 - **claim-guard: "tests pass" still counted as backed after more edits (ported from upstream e9a4734).**
   The tracker now records edits too (Claude `Write|Edit|MultiEdit|NotebookEdit`, Codex `apply_patch`,

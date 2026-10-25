@@ -59,5 +59,7 @@ jobs:
       - name: Require review when upstream changed
         if: steps.upstream.outcome == 'failure'
         run: |
-          echo "::error::Upstream has commits that have not been reviewed. See the workflow summary, then record the decision in FORK.md and advance scripts/upstream_baseline.json."
+          # Exit 1 = unreviewed upstream work; exit 2 = the check itself could not
+          # run (no gh, rewritten or shallow history, ...). The summary says which.
+          echo "::error::Upstream check did not pass: either upstream has unreviewed work, or the check could not run. See the workflow summary; record review decisions in FORK.md / docs/DECISIONS.md and advance scripts/upstream_baseline.json only after verification."
           exit 1
