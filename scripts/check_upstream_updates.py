@@ -68,8 +68,38 @@ def fetch_upstream(baseline: dict, repo_dir: Path) -> str:
     return ref
 
 
+def require_reviewed_ancestor(reviewed: str, ref: str, repo_dir: Path) -> None:
+    """Fail unless the reviewed commit is still in upstream's history.
+
+    `git log reviewed..upstream` does not complain when upstream rewrote its
+    history: it quietly lists whatever is not reachable from the old commit, so
+    a force-pushed branch would read as a short, ordinary list of new commits
+    while the commits this fork reviewed were no longer upstream at all.
+    """
+    result = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", reviewed, ref],
+        cwd=repo_dir,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if result.returncode == 0:
+        return
+    if result.returncode == 1:
+        raise UpstreamCheckError(
+            f"reviewed_through {reviewed[:7]} is not an ancestor of upstream {ref}: "
+            "upstream history was rewritten. Re-review against the new history "
+            "before moving the baseline."
+        )
+    raise UpstreamCheckError(
+        f"git merge-base --is-ancestor {reviewed[:7]} {ref} failed: {result.stderr.strip()}"
+    )
+
+
 def collect_new_commits(baseline: dict, repo_dir: Path, ref: str) -> list[dict]:
     reviewed = baseline["reviewed_through"]
+    require_reviewed_ancestor(reviewed, ref, repo_dir)
     raw = run_git(
         [
             "log",
@@ -124,15 +154,21 @@ def collect_new_tickets(baseline: dict, kind: str) -> list[dict] | None:
     if not slug:
         return None
     watermark = int(baseline.get(f"reviewed_{kind}_through", 0) or 0)
-    result = subprocess.run(
-        [
-            "gh", kind, "list", "--repo", slug, "--state", "all",
-            "--limit", "1000", "--json", "number,title",
-        ],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
+    try:
+        result = subprocess.run(
+            [
+                "gh", kind, "list", "--repo", slug, "--state", "all",
+                "--limit", "1000", "--json", "number,title",
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+    except OSError:
+        # `gh` not installed at all. Uncaught, this was a traceback before the
+        # report was written, which a --strict caller reads as exit 1, "upstream
+        # has unreviewed commits" -- the wrong failure, with no report to show.
+        return None
     if result.returncode != 0:
         return None
     try:

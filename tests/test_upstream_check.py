@@ -70,6 +70,64 @@ class TicketCollection(unittest.TestCase):
         with mock.patch.object(subprocess, "run", return_value=gh_result(stdout="not json")):
             self.assertIsNone(checker.collect_new_tickets(BASELINE, "pr"))
 
+    def test_a_missing_gh_binary_returns_none_instead_of_raising(self):
+        missing = FileNotFoundError(2, "No such file or directory", "gh")
+        with mock.patch.object(subprocess, "run", side_effect=missing):
+            self.assertIsNone(checker.collect_new_tickets(BASELINE, "pr"))
+
+
+class RewrittenHistory(unittest.TestCase):
+    """A reviewed commit that upstream no longer contains must stop the check."""
+
+    def setUp(self):
+        import tempfile
+        from pathlib import Path
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.repo = Path(self._tmp.name)
+        self.git("init", "--quiet")
+        self.git("config", "user.email", "test@example.invalid")
+        self.git("config", "user.name", "test")
+        self.git("config", "commit.gpgsign", "false")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def git(self, *args):
+        return subprocess.run(
+            ["git", *args], cwd=self.repo, check=True, capture_output=True, text=True
+        ).stdout.strip()
+
+    def commit(self, message):
+        self.git("commit", "--quiet", "--allow-empty", "-m", message)
+        return self.git("rev-parse", "HEAD")
+
+    def test_new_commits_on_top_of_the_reviewed_one_are_listed(self):
+        reviewed = self.commit("reviewed")
+        self.commit("new upstream work")
+        baseline = dict(BASELINE, reviewed_through=reviewed)
+
+        commits = checker.collect_new_commits(baseline, self.repo, "HEAD")
+
+        self.assertEqual([c["subject"] for c in commits], ["new upstream work"])
+
+    def test_a_force_pushed_branch_is_an_error_not_a_short_list(self):
+        base = self.commit("base")
+        reviewed = self.commit("reviewed, later rewritten away")
+        self.git("reset", "--quiet", "--hard", base)
+        self.commit("rewritten history")
+        baseline = dict(BASELINE, reviewed_through=reviewed)
+
+        with self.assertRaisesRegex(checker.UpstreamCheckError, "rewritten"):
+            checker.collect_new_commits(baseline, self.repo, "HEAD")
+
+    def test_an_unknown_reviewed_commit_is_an_error(self):
+        self.commit("only commit")
+        baseline = dict(BASELINE, reviewed_through="1" * 40)
+
+        with self.assertRaises(checker.UpstreamCheckError):
+            checker.collect_new_commits(baseline, self.repo, "HEAD")
+
 
 class ReportWording(unittest.TestCase):
     def test_an_unavailable_check_is_reported_as_not_checked(self):
