@@ -12,7 +12,29 @@ from unittest.mock import patch
 from scripts import install
 
 ROOT = Path(__file__).resolve().parents[1]
-BASH = os.environ.get("HARNESS_TEST_BASH") or shutil.which("bash")
+
+
+def shell_for_tests():
+    explicit = os.environ.get("HARNESS_TEST_BASH")
+    if explicit:
+        return explicit
+    git_bash = Path(r"C:\Program Files\Git\bin\bash.exe")
+    if os.name == "nt" and git_bash.is_file():
+        return str(git_bash)
+    return shutil.which("bash")
+
+
+BASH = shell_for_tests()
+
+
+def shell_has_jq():
+    if not BASH:
+        return False
+    try:
+        return subprocess.run([BASH, "-c", "command -v jq"], capture_output=True,
+                              timeout=10).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
 
 class BackupTests(unittest.TestCase):
@@ -62,7 +84,7 @@ class PatchEmojiTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
 
 
-@unittest.skipUnless(BASH and shutil.which("jq"), "POSIX shell contracts require bash and jq")
+@unittest.skipUnless(shell_has_jq(), "POSIX shell contracts require jq in the selected bash")
 class ShellLedgerTests(unittest.TestCase):
     def invoke(self, agent, name, payload, env):
         script = ROOT / "hooks/claim-guard" / agent / name
