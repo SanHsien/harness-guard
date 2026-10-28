@@ -8,6 +8,14 @@
 
 ---
 
+## 2026-10-28
+
+### 修正
+
+- `fork` 安裝器每份設定備份採獨占建立的唯一檔名，同一秒重跑也不覆蓋前一份；Claude Code 與其他 targets 共用相同備份流程。
+- `fork` POSIX claim hooks 限制 session／turn ID 為安全檔名字元，避免 `../` 讓記帳或清除越出 ledger 目錄；四份 shell hooks 都遵守 `CLAIM_GUARD_LEDGER_DIR`，讓 verifier 的合成資料留在暫存目錄。
+- `fork` Codex no-emoji hook 支援 raw string、`patch`、`input` 與 `command` patch payload；apply_patch 新增內容以 `++` 開頭時不再被錯當 diff 檔頭而漏掃。既有停用設定不變。
+
 ## 2026-10-26
 
 ### 新增

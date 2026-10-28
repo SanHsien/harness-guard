@@ -8,6 +8,14 @@ Entries marked `fork` are this fork's changes relative to
 
 ---
 
+## 2026-10-28
+
+### Fixed
+
+- `fork` Installer backups use exclusively created unique filenames, preserving earlier settings even for same-second reruns. Claude Code shares the backup routine with the other targets.
+- `fork` POSIX claim hooks restrict session/turn IDs to safe filename characters so `../` cannot move ledger writes or cleanup outside their directory. All four shell hooks honor `CLAIM_GUARD_LEDGER_DIR`, keeping verifier fixtures in its scratch directory.
+- `fork` Codex no-emoji hook scans raw string, `patch`, `input`, and `command` patch payloads. Added apply_patch content starting with `++` is no longer mistaken for a diff header and skipped. Existing disabled settings remain unchanged.
+
 ## 2026-10-26
 
 ### Added

@@ -182,7 +182,7 @@ def main():
         # Codex can call apply_patch directly or through unified exec. In both
         # forms the patch body is in `command`. Only added lines are scanned --
         # scanning the whole diff would also block a patch that removes emoji.
-        command = tool_input.get("command") or ""
+        command = tool_input.get("command") or tool_input.get("patch") or tool_input.get("input") or ""
         if tool_name != "apply_patch" and "apply_patch" not in command:
             sys.exit(0)
         cwd = payload.get("cwd") or ""
@@ -196,7 +196,7 @@ def main():
             sys.exit(0)
         text = "\n".join(
             line[1:] for line in command.splitlines()
-            if line.startswith("+") and not line.startswith("+++")
+            if line.startswith("+")
         )
     else:
         path = tool_input.get("file_path") or tool_input.get("path") or ""

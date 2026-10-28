@@ -20,11 +20,12 @@
 # Adapted from AlethiaQuizForge/no-hallucination's (MIT licensed) verify-tracker
 # and search-tracker, merged into one hook with an isolated ledger path.
 
-LEDGER_DIR="$HOME/.cache/claude-guard-hooks"
+LEDGER_DIR="${CLAIM_GUARD_LEDGER_DIR:-$HOME/.cache/claude-guard-hooks}"
 
 INPUT=$(cat)
 TOOL=$(echo "$INPUT" | jq -r '.tool_name // empty')
-SID=$(echo "$INPUT" | jq -r '.session_id // "default"')
+SID=$(echo "$INPUT" | jq -r '(.session_id // "default") | tostring | gsub("[^A-Za-z0-9._-]"; "_") | .[0:80]')
+SID="${SID:-default}"
 
 VERIFY_LEDGER="$LEDGER_DIR/${SID}.verify"
 SEARCH_LEDGER="$LEDGER_DIR/${SID}.search"

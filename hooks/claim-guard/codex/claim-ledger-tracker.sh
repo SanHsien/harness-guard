@@ -4,7 +4,7 @@
 # .edit against .verify to tell whether a verification still covers the current code.
 set -u
 
-ledger_dir="$HOME/.cache/codex-guard-hooks"
+ledger_dir="${CLAIM_GUARD_LEDGER_DIR:-$HOME/.cache/codex-guard-hooks}"
 input="$(cat)"
 if ! command -v jq >/dev/null 2>&1; then
   printf '{}\n'
@@ -12,7 +12,8 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 tool="$(printf '%s' "$input" | jq -r '.tool_name // empty' 2>/dev/null)"
-turn_id="$(printf '%s' "$input" | jq -r '.turn_id // .session_id // "default"' 2>/dev/null)"
+turn_id="$(printf '%s' "$input" | jq -r '(.turn_id // .session_id // "default") | tostring | gsub("[^A-Za-z0-9._-]"; "_") | .[0:80]' 2>/dev/null)"
+turn_id="${turn_id:-default}"
 verify_ledger="$ledger_dir/${turn_id}.verify"
 search_ledger="$ledger_dir/${turn_id}.search"
 edit_ledger="$ledger_dir/${turn_id}.edit"

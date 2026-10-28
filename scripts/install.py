@@ -42,6 +42,7 @@ import re
 import shutil
 import stat
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -695,11 +696,7 @@ def install_for_claude(args):
     print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
 
     if settings_path.exists():
-        backup_dir = claude_dir / "backups"
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        backup = backup_dir / ("settings.json.bak-%s" % time.strftime("%Y%m%d-%H%M%S"))
-        shutil.copyfile(settings_path, backup)
-        print("backed up settings.json to %s" % backup)
+        backup_json(settings_path, claude_dir / "backups")
 
     added = 0
     stale = 0
@@ -749,8 +746,12 @@ def backup_json(path, backup_root):
     if not path.exists():
         return None
     backup_root.mkdir(parents=True, exist_ok=True)
-    backup = backup_root / ("%s.bak-%s" % (path.name, time.strftime("%Y%m%d-%H%M%S")))
-    shutil.copyfile(path, backup)
+    prefix = "%s.bak-%s-" % (path.name, time.strftime("%Y%m%d-%H%M%S"))
+    # Exclusive creation preserves earlier backups even for same-second reruns.
+    with path.open("rb") as source, tempfile.NamedTemporaryFile(
+            prefix=prefix, dir=backup_root, delete=False) as target:
+        backup = Path(target.name)
+        shutil.copyfileobj(source, target)
     print("backed up %s to %s" % (path.name, backup))
     return backup
 
