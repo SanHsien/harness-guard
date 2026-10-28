@@ -40,8 +40,11 @@ DANGEROUS_RM = re.compile(
 # 2. Dangerous Git force push to main / master
 # The segment of one `git push` command: from `push` to the next separator.
 # Options git takes before the subcommand (`git -C repo push`) are skipped.
+# Linear-time: an option-looking token after `-C` is never taken as its value, so
+# `-C -C -C ...` has one parse (it used to have exponentially many).
+_GIT_OPT = r"--?[A-Za-z][\w-]*(?:=\S+)?"
 GIT_PUSH = re.compile(
-    r"\bgit\s+(?:(?:-[Cc]\s+(?:\"\s*\"|'\s*'|\S+)|--?[A-Za-z][\w-]*(?:=\S+)?)\s+)*push\b([^;&|\n]*)",
+    r"\bgit\s+(?:(?:-[Cc]\s+(?:\"\s*\"|'\s*'|(?!" + _GIT_OPT + r"\s)\S+)|" + _GIT_OPT + r")\s+)*push\b([^;&|\n]*)",
     re.IGNORECASE,
 )
 PROTECTED_BRANCHES = frozenset({"main", "master", "prod", "production", "release"})

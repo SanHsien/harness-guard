@@ -3,6 +3,7 @@
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent.parent.parent
@@ -58,6 +59,8 @@ CASES = [
     ("git push origin main -f", True, "short force flag after the branch"),
     ("git -C repo push --force origin main", True, "git -C before push"),
     ("git push origin +main", True, "+refspec forces the push"),
+    ("git -C -C -C push --force origin main", True, "repeated -C before push"),
+    ("git -C a -C b --no-pager push -f origin main", True, "mixed git options before push"),
     ('git push --force origin "main"', True, "quoted branch name"),
     ("git push --force origin HEAD:refs/heads/main", True, "full refspec to main"),
     ("git push origin feat --force", False, "force flag on a feature branch"),
@@ -145,6 +148,46 @@ def test_cursor_payload():
     return failures
 
 
+def test_redos():
+    """A long run of `-C` after `git` must not stall the hook (CodeQL py/redos).
+
+    The old option pattern parsed `git -C -C -C ...` in exponentially many ways.
+    Both builds must answer within the timeout and still block a real force push.
+    """
+    print("-- ReDoS: adversarial git option runs")
+    failures = 0
+    runs = {
+        "dash-C run": "-C " * 17000,
+        "dash-C/option mix": "-C -a " * 8500,
+        "quoted -C run": '-C " " ' * 8500,
+    }
+    for hook, tool in ((CLAUDE_HOOK, "Bash"), (CODEX_HOOK, "exec")):
+        for label, run_of_opts in runs.items():
+            for tail, should_block in (("x", False), ("push --force origin main", True)):
+                cmd = "git " + run_of_opts + tail
+                started = time.monotonic()
+                try:
+                    proc = subprocess.run(
+                        [sys.executable, str(hook)],
+                        input=json.dumps({"tool_name": tool, "tool_input": {"command": cmd}}),
+                        capture_output=True, text=True, encoding="utf-8", timeout=10,
+                    )
+                except subprocess.TimeoutExpired:
+                    print("FAIL %s %s: no verdict within 10s (ReDoS)" % (hook.parent.name, label))
+                    failures += 1
+                    continue
+                elapsed = time.monotonic() - started
+                out = proc.stdout
+                got_block = (proc.returncode == 2 or '"decision": "block"' in out
+                             or '"decision":"block"' in out)
+                ok = got_block == should_block and elapsed < 10
+                failures += not ok
+                print("%-4s %s %s tail=%s blocked=%s %.2fs" % (
+                    "PASS" if ok else "FAIL", hook.parent.name, label, tail[:4], got_block, elapsed))
+    print("failures: %d\n" % failures)
+    return failures
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -156,7 +199,7 @@ def main():
     claude_failures += test_claude_build("PowerShell")
     codex_failures = test_codex_build()
     cursor_failures = test_cursor_payload()
-    total = claude_failures + codex_failures + cursor_failures
+    total = claude_failures + codex_failures + cursor_failures + test_redos()
     print("total failures: %d" % total)
     return 1 if total else 0
 

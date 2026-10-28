@@ -13,6 +13,7 @@ Expected result: no failures, for each build.
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 HOOKS_DIR = Path(__file__).resolve().parent.parent
@@ -50,6 +51,10 @@ CASES = [
     (True, "pytest ; git --no-pager push"),
     (True, 'pytest ; git -C "my repo" push'),
     (False, "pytest && git -C repo push"),
+    # Repeated `-C` must still resolve (and, see check_redos, in linear time)
+    (True, "pytest ; git -C -C -C push"),
+    (True, "pytest ; git -C a -C b -a=c --no-pager commit -m x"),
+    (False, "pytest && git -C -C -C push"),
     # A here-string is not a heredoc; it must not hide what follows
     (True, "cat <<<hi\npytest ; git push"),
     # Escaped quotes do not open or close a string
@@ -86,10 +91,11 @@ CONTINUATION_CASES = ["pytest \\\n -x && git push", "pytest `\n -x && git push"]
 # commands both ways and blocks on either hit. These cases are ambiguous there.
 
 
-def run(hook, command, tool_name):
+def run(hook, command, tool_name, timeout=None):
     payload = json.dumps({"tool_name": tool_name, "tool_input": {"command": command}})
     return subprocess.run(
-        [sys.executable, str(hook)], input=payload, capture_output=True, text=True
+        [sys.executable, str(hook)], input=payload, capture_output=True, text=True,
+        timeout=timeout,
     )
 
 
@@ -135,6 +141,7 @@ def main():
             lambda p: '"block"' in p.stdout,
         )
     total += check_cursor_payload()
+    total += check_redos()
     print("total failures:", total)
     return 1 if total else 0
 
@@ -187,6 +194,44 @@ def check_unknown_shell():
         failures += not ok
         print("%s %s %s" % ("PASS" if ok else "FAIL", name,
                             "allows" if allow else "blocks the backslash-path chain"))
+    print("failures: %d\n" % failures)
+    return failures
+
+
+def check_redos():
+    """A long run of `-C` after `git` must not stall the hook (CodeQL py/redos).
+
+    The old option pattern parsed `git -C -C -C ...` in exponentially many ways, so
+    ~50k characters of it hung the hook on every shell command. Each build must
+    finish well inside the timeout, and must still block a real chained push.
+    """
+    print("-- ReDoS: adversarial git option runs")
+    failures = 0
+    runs = {
+        "dash-C run": "-C " * 17000,
+        "dash-C/option mix": "-C -a " * 8500,
+        "quoted -C run": '-C " " ' * 8500,
+    }
+    for hook in (CLAUDE_HOOK, CODEX_HOOK):
+        if not hook.exists():
+            continue
+        tool = "Bash" if hook is CLAUDE_HOOK else "shell"
+        for label, run_of_opts in runs.items():
+            for tail, should_block in (("x", False), ("push", True)):
+                command = "pytest ; git " + run_of_opts + tail
+                started = time.monotonic()
+                try:
+                    proc = run(hook, command, tool, timeout=10)
+                except subprocess.TimeoutExpired:
+                    print("FAIL %s %s: no verdict within 10s (ReDoS)" % (hook.parent.name, label))
+                    failures += 1
+                    continue
+                elapsed = time.monotonic() - started
+                blocked = proc.returncode == 2 or '"block"' in proc.stdout
+                ok = blocked == should_block and elapsed < 10
+                failures += not ok
+                print("%s %s %s tail=%s blocked=%s %.2fs"
+                      % ("PASS" if ok else "FAIL", hook.parent.name, label, tail, blocked, elapsed))
     print("failures: %d\n" % failures)
     return failures
 

@@ -53,8 +53,11 @@ TEST_CMD = re.compile(
 )
 # Options git accepts before the subcommand (`git -C repo push`). Quoted option
 # values are blanked by strip_literals, so `-C "my repo"` arrives as `-C "       "`.
+# Linear-time: an option-looking token after `-C` is never taken as its value, so
+# `-C -C -C ...` has one parse (it used to have exponentially many).
+_GIT_OPT = r"--?[A-Za-z][\w-]*(?:=\S+)?"
 GIT_WRITE = re.compile(
-    r"\bgit\s+(?:(?:-[Cc]\s+(?:\"\s*\"|'\s*'|\S+)|--?[A-Za-z][\w-]*(?:=\S+)?)\s+)*"
+    r"\bgit\s+(?:(?:-[Cc]\s+(?:\"\s*\"|'\s*'|(?!" + _GIT_OPT + r"\s)\S+)|" + _GIT_OPT + r")\s+)*"
     r"(?:commit|push)\b"
 )
 # `(?<!<)` keeps a here-string (`<<<word`) from being read as a heredoc, which
