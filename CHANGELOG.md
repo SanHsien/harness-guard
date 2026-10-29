@@ -36,7 +36,7 @@
   寫不出報告、主控台編碼或 stdout 壞掉都會變成 traceback + exit 1，`--strict` 呼叫端讀成「有未審 commit」。
   現在都寫出「Check failed／Not checked」並 exit 2；上游改寫歷史時明確報 rewritten，shallow clone 則報 shallow，
   不再列出一段看似正常的新 commit。
-  載入 baseline 時也驗證：`reviewed_through` 必須是完整 SHA、PR／issue 水位必須是非負整數、`repo` 與 `branch`
+  載入 baseline 時也驗證：`reviewed_through` 必須是完整 SHA、PR／issue 水位必須是非負整數或 null（表示缺省）、`repo` 與 `branch`
   不得以 `-` 開頭（否則會被 git 當成 `--upload-pack=...` 之類的選項）；本機上游路徑可含空白
   （例如 `C:\Program Files\up`），分支名不行。報告以 `errors="replace"` 寫入，標題裡有孤立 surrogate 也不會沒有報告檔。
 - **Windows：Claude Code 的 PowerShell 工具完全繞過 `danger-zone-guard` 與 `test-gate-guard`（`fork`）。**
