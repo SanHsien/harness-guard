@@ -11,7 +11,6 @@
 | --- | --- | --- | --- | --- |
 | 把 `main` 最新版重裝到維護者使用中的四個 agent，並跑 live-fire 驗證 | 10-26～10-28 修了 test-gate-guard、danger-zone-guard、claim-guard、no-emoji-guard 與安裝器備份；repo 綠不代表使用者那份 hook 已是新版 | `python scripts/install.py --dry-run --agent all --hooks all --skills all` 檢視後實裝；`python scripts/verify-install.py --agent all` 全部 PASS；已安裝檔與 `main` 對應檔雜湊相同 | 維護者 | `gh api repos/SanHsien/harness-guard/compare/45165fab75b1...2cb07a94d890`（改了 `hooks/claim-guard/*`、`hooks/no-emoji-guard/codex/no-emoji-guard.py`、`scripts/install.py`）；`CHANGELOG.md` 2026-10-26 段 |
 | 決定 `skills/explain/SKILL.md` 上游原有矛盾的處理：回貢上游，或本地修正 | 上游 e9a4734 改了第 4 點「一次講完」，同檔 document mode 範例仍要求結尾提議深入；回貢需維護者當次明確同意 | 擇一：上游 PR 連結記進 `FORK.md`；或本地修正並在 `docs/DECISIONS.md` 註明偏離上游；`python -m unittest discover -s tests -p "test_*.py"` 綠 | 維護者 | `docs/DECISIONS.md:19-23` |
-| 測試隔離 `CODEX_HOME` | 單元測試繼承維護者機器的 `CODEX_HOME`，verifier 誤讀全域設定，本機閘門紅燈（75 tests 有 2 failures），須先移除該變數才綠 | 測試自行清除或覆寫 `CODEX_HOME`，在變數已設定的環境下 `python -m unittest discover -s tests -p "test_*.py"` 也全綠；補一個在設定該變數時仍通過的回歸測試 | Codex | `FORK.md:188` |
 
 ## 中期：等條件成立再做
 | 項目 | 觸發條件 | 驗收方式 | 建議執行者 | 證據 |

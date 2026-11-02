@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from scripts import install as installer_module
 
@@ -36,6 +37,8 @@ class InstallDryRunTests(unittest.TestCase):
             env["HOME"] = str(home)
             env["USERPROFILE"] = str(home)
             env["CLAUDE_CONFIG_DIR"] = str(home / ".claude")
+            # Without this, `--agent all` reads the maintainer's real Codex config through CODEX_HOME.
+            env.pop("CODEX_HOME", None)
 
             proc = subprocess.run(
                 [
@@ -355,6 +358,7 @@ class CodexVerifierTests(unittest.TestCase):
         env = dict(os.environ)
         env["HOME"] = str(home)
         env["USERPROFILE"] = str(home)
+        env["CODEX_HOME"] = str(codex_dir)
         proc = subprocess.run(
             [
                 sys.executable,
@@ -386,6 +390,23 @@ class CodexVerifierTests(unittest.TestCase):
             errors="replace",
             timeout=60,
         )
+
+    def test_codex_verifier_ignores_inherited_codex_home(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "fixture-home"
+            external = Path(tmp) / "external-codex"
+            external.mkdir()
+            settings = external / "hooks.json"
+            settings.write_text("external configuration must not be read", encoding="utf-8")
+            before = _snapshot(external)
+            with patch.dict(os.environ, {"CODEX_HOME": str(external)}):
+                codex_dir, env = self._installed_codex(home)
+                proc = self._verify(env)
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+                self.assertIn("PASS Codex claim tracker matcher accepts", proc.stdout)
+                self.assertEqual(Path(env["CODEX_HOME"]), codex_dir)
+                self.assertEqual(os.environ["CODEX_HOME"], str(external))
+            self.assertEqual(_snapshot(external), before)
 
     def test_codex_hooks_are_live_fired(self):
         with tempfile.TemporaryDirectory() as tmp:
