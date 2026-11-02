@@ -21,3 +21,21 @@
 - `skills/explain/SKILL.md`：上游 e9a4734 把第 4 點改成「不要問要不要繼續、一次講完」，但同檔
   document mode 的範例 prompt 仍寫「a closing offer to go deeper if they want it」。本 fork 原樣同步，
   保持與上游一致；要回貢或本地修正由維護者決定（FORK.md：上游的 bug 送回去，需要當次明確同意）。
+
+## 上游 adc8928 → b47f3e9（2026-11-02 審視）
+
+來源：[b47f3e9](https://github.com/agentcrew-academy/harness-starter-kit/commit/b47f3e91b5468cf84a14a92c84d0b344ec276027)。
+完整差異僅涉及新版 checkpoint 與其宣傳，沒有既有五個核心 hook 的修正。逐項決策如下；
+不將「完成審查」視為「決定採用 write-manifest」。
+
+| 項目／檔案 | 結論與理由 | 重查條件 |
+| --- | --- | --- |
+| `skills/checkpoint/SKILL.md`、`references/lite.md`：自動 lite（無事實清單且至多 5 個歸屬檔）、前景低成本 worker 與新版 manifest 欄位 | **暫緩**。本 fork 尚未引進依賴 write-manifest 的 checkpoint lite；直接換文字會指向不存在的腳本與欄位。模型選擇也應遵守使用端自己的路由規則。 | 維護者決定採用 write-manifest 與新版 checkpoint 時整組處理，驗證四個 agent 的歸屬與路由。 |
+| `references/closure-protocol.md`：開場快照、混合作者 hold list、todo 日期、鎖內重查、全部 repo 完成後才清 manifest | **暫緩**。歸屬表、Edit 重播與清理順序依賴本 fork 沒有的 write-manifest／edit-log；不能只移植規則就宣稱能安全分帳。日誌與 todo 的加強也隨整套協定一起處理。另外，上游新範例把 `git commit` 接在 `;` 之後，暫存失敗時照樣提交，這是不逐字照抄的又一個理由。 | 同上，另測多 repo、共享檔案、缺少快照與保留未提交內容。 |
+| `scripts/stage-own-edits.sh`：helper／git 失敗統一回 exit 5 | **暫緩**。本 fork 沒有此腳本；是未引進功能的錯誤處理，不是本 fork 現存缺陷。 | 引進該腳本時一起採用，補 helper 失敗、git add／update-index 失敗的回歸測試與 Windows Python 版。 |
+| `scripts/bash-writes.py`：從 transcript 找 shell／subagent 寫入候選 | **暫緩**。只讀 Claude Code transcript，shell 目標為啟發式候選，不能證明唯一作者；不涵蓋其他三個 agent 的 transcript 與 PowerShell 寫入。 | 採用新版 checkpoint 時，明訂各 agent 的來源與降級方式，測試 Windows 路徑、PowerShell、誤報與漏報。 |
+| `references/lessons.md`：重複糾正記錄、Seen 門檻、提案核准與可選月檢 | **不採用本次自動觸發**。收工自動寫 memory／重複錯誤紀錄會擴大本 fork 的收工副作用與成本；記憶及全域規則的修改應由使用者明確授權，不因糾正次數自動寫入。 | 維護者明確要求 lessons 功能，且先定義唯讀預設、寫入授權、資料保存與額度界線。 |
+| `references/sync-matrix.md`、`references/sync-protocol.md`：跨檔狀態對帳、實查 todo／memory；`scripts/enumerate.sh`：註解用詞整理 | **暫緩**。屬已暫緩的 neat-freak 併入 checkpoint 協定；本 fork 仍以獨立 neat-freak 運作。沒有需單獨搬入的執行邏輯修正。 | 新版 checkpoint／neat-freak 整組採用時，核對同步矩陣與實查證據。 |
+| `.claude-plugin/marketplace.json`、`README.md`、`README.zh-TW.md`：上述新版 checkpoint 宣傳 | **不採用**。本 fork 沒採用 marketplace 或此新版流程，不能在雙語 README 宣稱具備這些能力。 | 對應功能實作與四個 agent 驗收完成，且維護者決定提供 marketplace 安裝時。 |
+
+PR／issue 2026-11-02 沒有新項目（`--state all` 實查仍僅 PR #2、issue #1），既有決策不變。

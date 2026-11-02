@@ -169,3 +169,23 @@ commit 逐筆決策見上表與 [`docs/DECISIONS.md`](docs/DECISIONS.md)；水�
 - 分支：上游仍只有 `main`；另有 tag `retired-archive-2026-10-22`（退役項目的保存點，不需追）。
 - 檢查器本身補了兩個 fail-closed 缺口（4bf6666）：沒有 `gh` 時不再崩潰成「有未審 commit」，上游改寫歷史時
   明確報錯而不是列出一段看似正常的新 commit。
+
+## 2026-11-02：上游 adc8928 → b47f3e9
+
+已讀 [b47f3e91b5468cf84a14a92c84d0b344ec276027](https://github.com/agentcrew-academy/harness-starter-kit/commit/b47f3e91b5468cf84a14a92c84d0b344ec276027)
+的完整 diff（12 個檔案）。**暫緩新版 checkpoint，不移植任何產品檔案**；逐項理由及重查條件見
+[`docs/DECISIONS.md`](docs/DECISIONS.md#上游-adc8928--b47f3e92026-11-02-審視)。
+這次是審查水位推進，不代表合併或採用該 commit。
+
+- 觸發證據：[Upstream check run 41427188948](https://github.com/SanHsien/harness-guard/actions/runs/41427188948)
+  在 2026-11-02 為 failure；更新前本機 `python scripts/check_upstream_updates.py --strict` exit 1，列出唯一新增 commit `b47f3e9`。
+- `gh pr list --repo agentcrew-academy/harness-starter-kit --state all --limit 1000 --json number,title,state,url`
+  只有已合併 PR #2；`gh issue list` 使用同樣的 repo、state、limit 與欄位，只有已關閉 issue #1。
+  沒有新增票單，水位維持 PR **#2**／issue **#1**。
+- 先跑完整本機 CI 對應閘門，再推進 baseline 並重跑嚴格檢查；2026-11-02 這次審查沒有修改 hook、installer 或 skill 行為，
+  不產生產品 CHANGELOG，也不執行全域安裝或已安裝 hooks 的 live-fire。
+- 本機驗證：Python 3.11 compile、九組 hook suites、全 agent installer dry-run 均 exit 0；
+  unittest 首輪 75 tests 有 2 failures（繼承 `CODEX_HOME`，使 verifier 誤讀全域設定），
+  只在重跑子程序移除該變數後，同批 75 tests exit 0（`OK (skipped=2)`）。
+  claim suite 在 Windows 依原規則跳過 13 個 POSIX 案例；2026-11-02 沒有驗證 Linux runtime。
+- baseline 推進後 `python scripts/check_upstream_updates.py --strict` exit 0：無新增 commit／PR／issue 待審。
