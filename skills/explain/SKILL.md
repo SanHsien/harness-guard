@@ -33,7 +33,7 @@ It only applies when the target is a **specific file path**:
    5. Lead with the conclusion / what it means for the reader, details after.
    6. Say less and say it clearly -- don't cram in every detail.
    Structure: one-sentence summary -> plain-language breakdown (2-4 points) ->
-   what it means for you -> a closing offer to go deeper if they want it.
+   what it means for you -> a short last section with the deeper layer (do not end by asking whether to continue).
    Read this file: <absolute path>
    ```
 3. **Fall back to writing it yourself** (never hand over a rule-violating output as-is) whenever any of these hold:

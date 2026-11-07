@@ -1,16 +1,15 @@
 # 路線圖
 
 > 本 repo 後續工作的單一真相源。做完一項，就在同一個 commit 刪掉那一列；新工作只加在這裡。
-> 現況段於 2026-11-02 依 `main` `bfbcc353578a` 與 GitHub 唯讀查詢更新；2026-11-02 審完上游 `b47f3e9`（12 檔）的結果另見 `FORK.md`。
+> 現況段於 2026-11-08 依 `main` `54de47c2a4b4` 與 GitHub 唯讀查詢更新；2026-11-02 審完上游 `b47f3e9`（12 檔）的結果另見 `FORK.md`。
 
 ## 現況
-`agentcrew-academy/harness-starter-kit` 的衍生版，提供跨 Claude Code／Codex／Cursor／Antigravity 的 guardrail hooks、安裝器與 live-fire 驗證器（`AGENTS.md:10-18`）。2026-11-02 實查：本 fork open PR 0、issue 已停用；2026-11-03 `gh api` 查 Dependabot 與 code scanning open 0；`main` 為 `bfbcc353578a`，該 SHA 的 CI、CodeQL success，Upstream check failure（[run 41427188948](https://github.com/SanHsien/harness-guard/actions/runs/41427188948)）。2026-11-02 審完上游唯一新增 commit `b47f3e9`（12 檔，新版 checkpoint 延伸），baseline 已推進到該 commit，暫緩／不採用的理由見 `FORK.md` 與 `docs/DECISIONS.md`；PR／issue 水位維持 #2／#1。repo 內仍無最新版重裝到使用者全域 hooks 的驗收紀錄，重裝項目保留。
+`agentcrew-academy/harness-starter-kit` 的衍生版，提供跨 Claude Code／Codex／Cursor／Antigravity 的 guardrail hooks、安裝器與 live-fire 驗證器（`AGENTS.md:10-18`）。2026-11-08 實查：open PR 0、issue 已停用、Dependabot 與 code scanning open 0（`gh api` 回傳筆數 0）；`main` 為 `54de47c2a4b4`，該 SHA 的 CI（2026-11-02）與 CodeQL（2026-11-03）success，Upstream check 最近一次（`3ed7016b252b`）success。2026-11-02 審完上游 `b47f3e9`，baseline 已推進到該 commit，暫緩／不採用的理由見 `FORK.md` 與 `docs/DECISIONS.md`；PR／issue 水位維持 #2／#1。2026-11-08 `python scripts/verify-install.py --agent all` 在維護者機器回報 `86 checked, 4 failed`（已安裝的 hook 仍是舊版），所以重裝項目保留。`skills/explain` 上游矛盾已本地修正，決定見 `docs/DECISIONS.md` 〈上游自身的瑕疵（本地修正，未回貢）〉。
 
 ## 近期：可以直接動手
 | 項目 | 為什麼 | 驗收方式 | 建議執行者 | 證據 |
 | --- | --- | --- | --- | --- |
-| 把 `main` 最新版重裝到維護者使用中的四個 agent，並跑 live-fire 驗證 | 10-26～10-28 修了 test-gate-guard、danger-zone-guard、claim-guard、no-emoji-guard 與安裝器備份；repo 綠不代表使用者那份 hook 已是新版 | `python scripts/install.py --dry-run --agent all --hooks all --skills all` 檢視後實裝；`python scripts/verify-install.py --agent all` 全部 PASS；已安裝檔與 `main` 對應檔雜湊相同 | 維護者 | `gh api repos/SanHsien/harness-guard/compare/45165fab75b1...2cb07a94d890`（改了 `hooks/claim-guard/*`、`hooks/no-emoji-guard/codex/no-emoji-guard.py`、`scripts/install.py`）；`CHANGELOG.md` 2026-10-26 段 |
-| 決定 `skills/explain/SKILL.md` 上游原有矛盾的處理：回貢上游，或本地修正 | 上游 e9a4734 改了第 4 點「一次講完」，同檔 document mode 範例仍要求結尾提議深入；回貢需維護者當次明確同意 | 擇一：上游 PR 連結記進 `FORK.md`；或本地修正並在 `docs/DECISIONS.md` 註明偏離上游；`python -m unittest discover -s tests -p "test_*.py"` 綠 | 維護者 | `docs/DECISIONS.md:19-23` |
+| 把 `main` 最新版重裝到維護者使用中的四個 agent，並跑 live-fire 驗證 | 2026-11-08 `verify-install.py --agent all` 4 項 FAIL：claim-ledger-tracker 與 Codex tracker matcher 缺 Edit／Write／apply_patch、Antigravity claim-guard matcher 缺 `grep_search`／`replace_file_content`／`run_command`／`write_to_file`、lint-gate 專案開關測試；Codex 的 no-emoji-guard 另顯示 `"enabled": false`（既有停用設定，不屬失敗）。repo 綠不代表使用者那份 hook 已是新版；實裝會改全域 agent 設定，需在授權下由能改全域設定的 session 執行 | 先 `python scripts/install.py --dry-run --agent all --hooks all --skills all` 檢視（2026-11-08 dry-run exit 0，會替換七支 Codex hook 並補登記一筆 claim tracker）；實裝後 `python scripts/verify-install.py --agent all` 全部 PASS（exit 0）；已安裝檔與 `main` 對應檔雜湊相同；已存在的 skills 預設不覆蓋，需 `--force` 才會更新 | 艦隊規劃長（全域設定授權下） | `python scripts/verify-install.py --agent all`（2026-11-08，exit 1，86 checked／4 failed）；`CHANGELOG.md` 2026-10-26～10-28 段 |
 
 ## 中期：等條件成立再做
 | 項目 | 觸發條件 | 驗收方式 | 建議執行者 | 證據 |

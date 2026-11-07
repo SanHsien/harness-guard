@@ -8,6 +8,12 @@ Entries marked `fork` are this fork's changes relative to
 
 ---
 
+## 2026-11-08
+
+### Fixed
+
+- `fork` The document-mode example prompt in `skills/explain/SKILL.md` no longer asks for a closing offer to go deeper; it now asks for a short last section with the deeper layer and no question about continuing, matching rule 4 in the same file. Rationale for deviating from upstream is in `docs/DECISIONS.md`.
+
 ## 2026-10-28
 
 ### Fixed

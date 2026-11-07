@@ -16,11 +16,15 @@
 | claim-guard 的 subagent 帳本（`agent_id` 分帳 + `SubagentStop`） | e9a4734 | 改了語意：tracker 以 `agent_id` 分帳後，主 session 委派 subagent 跑測試再宣稱「通過」會被擋；`SubagentStop` 在 Codex、Cursor、Antigravity 沒有對應事件，只能做一半。同一 commit 的「過期驗證」與「引號內提及」已移植。 | 實際觀察到 subagent 無證據宣稱完成而主 session 照單全收時。 |
 | README、CLAUDE.md、AGENTS.md、hooks/README.md 的改寫 | e9a4734、7474dfd、365f5c3、adc8928 | 對應上游的新版面（plugin、退役 skill）；本 fork 的文件結構不同（中文主檔、`AGENTS.md` 唯一指令檔）。 | 上游改寫涉及 hook 行為或風險邊界的說法時，才逐段併入。 |
 
-## 上游自身的瑕疵（未回貢）
+## 上游自身的瑕疵（本地修正，未回貢）
 
 - `skills/explain/SKILL.md`：上游 e9a4734 把第 4 點改成「不要問要不要繼續、一次講完」，但同檔
-  document mode 的範例 prompt 仍寫「a closing offer to go deeper if they want it」。本 fork 原樣同步，
-  保持與上游一致；要回貢或本地修正由維護者決定（FORK.md：上游的 bug 送回去，需要當次明確同意）。
+  document mode 的範例 prompt 仍寫「a closing offer to go deeper if they want it」。
+  **2026-11-08 決定：本地修正，不回貢。** 範例 prompt 的結構列改為「a short last section with the
+  deeper layer (do not end by asking whether to continue)」，與同檔第 4 點一致。理由：這是單行文字矛盾，
+  回貢要維護者當次明確同意（FORK.md），本地修正沒有安裝契約或其他 agent 的相容問題；偏離只此一行，
+  之後同步上游 explain 時以這份紀錄為準逐行比對。重查條件：上游自行修掉該矛盾（採上游版並刪除本條），
+  或維護者在某次對話明確要求回貢。
 
 ## 上游 adc8928 → b47f3e9（2026-11-02 審視）
 
