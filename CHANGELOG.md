@@ -10,6 +10,10 @@
 
 ## 2026-11-08
 
+### 新增
+
+- `fork` `danger-zone-guard`（Claude Code、Codex、Cursor、Antigravity）：新增兩類防入侵與防破沙盒規則：(1) 攔截遠端腳本直管 shell 執行（`curl ... | bash/sh/pwsh/python/node`、`wget ... | sh`、PowerShell `iwr/irm ... | iex` 與 `iex (iwr ...)`）；(2) 攔截 CLI 代理破沙盒與免審批旗標（`--dangerously-bypass-approvals-and-sandbox`、`--dangerously-skip-permissions`、`--permission-mode bypassPermissions`，如第三方 Live Mode 背景自動提權）。引號與 commit 訊息中的純文字描述照常放行。
+
 ### 修正
 
 - `fork` `skills/explain/SKILL.md` document mode 範例 prompt 的結構列不再要求「結尾提議深入」，改為「最後一小段放進一步的內容、不以詢問是否繼續收尾」，與同檔第 4 點一致。偏離上游的理由見 `docs/DECISIONS.md`。

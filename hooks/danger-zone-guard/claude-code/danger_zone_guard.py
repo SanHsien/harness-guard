@@ -100,6 +100,20 @@ SECRET_EXFIL = re.compile(
     re.IGNORECASE,
 )
 
+# 4. Remote script pipe-to-shell RCE and nested agent sandbox/permission bypass
+REMOTE_PIPE_EXEC = re.compile(
+    r"\b(?:curl|wget)\b[^;&|\n]*\|\s*(?:sudo\s+)?(?:bash|sh|zsh|pwsh|powershell|python\d*(?:\.\d+)?|node)\b"
+    r"|\b(?:iwr|Invoke-WebRequest|irm|Invoke-RestMethod)\b[^;&|\n]*\|\s*(?:iex|Invoke-Expression)\b"
+    r"|\b(?:iex|Invoke-Expression)\s*\(\s*(?:iwr|Invoke-WebRequest|irm|Invoke-RestMethod)\b",
+    re.IGNORECASE,
+)
+
+SANDBOX_BYPASS_EXEC = re.compile(
+    r"(?:^|[|;&\n]|&&|\|\|)\s*(?:\w+=\S*\s+)*(?:sudo\s+)?(?:claude|codex|gemini|agy|npx)\b[^;&|\n]*?"
+    r"(?:--dangerously-bypass-approvals-and-sandbox|--dangerously-skip-permissions|--permission-mode(?:=|\s+)bypassPermissions)\b",
+    re.IGNORECASE,
+)
+
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)([A-Za-z_][A-Za-z0-9_]*)\1")
 
 MESSAGE_TEMPLATE = (
@@ -240,6 +254,14 @@ def inspect_command(command, repo_root=None):
     exfil_match = SECRET_EXFIL.search(as_commands)
     if exfil_match:
         return "Potential credential/secret transmission (`%s`)" % exfil_match.group(0).strip()
+
+    pipe_match = REMOTE_PIPE_EXEC.search(as_commands)
+    if pipe_match:
+        return "Remote script pipe-to-shell execution (`%s`). Download and inspect the script before running." % pipe_match.group(0).strip()
+
+    bypass_match = SANDBOX_BYPASS_EXEC.search(as_commands)
+    if bypass_match:
+        return "Agent sandbox/approval bypass flag (`%s`) is forbidden." % bypass_match.group(0).strip()
 
     retry_match = UNBOUNDED_RETRY.search(as_commands)
     if retry_match and not BOUNDED_LOOP_OK.search(command):

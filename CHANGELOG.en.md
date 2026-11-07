@@ -10,6 +10,10 @@ Entries marked `fork` are this fork's changes relative to
 
 ## 2026-11-08
 
+### Added
+
+- `fork` `danger-zone-guard` (Claude Code, Codex, Cursor, Antigravity): block two intrusion and sandbox-escape patterns: (1) remote script pipe-to-shell execution (`curl ... | bash/sh/pwsh/python/node`, `wget ... | sh`, PowerShell `iwr/irm ... | iex` and `iex (iwr ...)`); (2) agent CLI sandbox/permission bypass flags (`--dangerously-bypass-approvals-and-sandbox`, `--dangerously-skip-permissions`, `--permission-mode bypassPermissions`). Quoted mentions in commit messages or docs remain allowed.
+
 ### Fixed
 
 - `fork` The document-mode example prompt in `skills/explain/SKILL.md` no longer asks for a closing offer to go deeper; it now asks for a short last section with the deeper layer and no question about continuing, matching rule 4 in the same file. Rationale for deviating from upstream is in `docs/DECISIONS.md`.

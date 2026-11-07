@@ -4,12 +4,11 @@
 > 現況段於 2026-11-08 依 `main` `54de47c2a4b4` 與 GitHub 唯讀查詢更新；2026-11-02 審完上游 `b47f3e9`（12 檔）的結果另見 `FORK.md`。
 
 ## 現況
-`agentcrew-academy/harness-starter-kit` 的衍生版，提供跨 Claude Code／Codex／Cursor／Antigravity 的 guardrail hooks、安裝器與 live-fire 驗證器（`AGENTS.md:10-18`）。2026-11-08 實查：open PR 0、issue 已停用、Dependabot 與 code scanning open 0（`gh api` 回傳筆數 0）；`main` 為 `54de47c2a4b4`，該 SHA 的 CI（2026-11-02）與 CodeQL（2026-11-03）success，Upstream check 最近一次（`3ed7016b252b`）success。2026-11-02 審完上游 `b47f3e9`，baseline 已推進到該 commit，暫緩／不採用的理由見 `FORK.md` 與 `docs/DECISIONS.md`；PR／issue 水位維持 #2／#1。2026-11-08 `python scripts/verify-install.py --agent all` 在維護者機器回報 `86 checked, 4 failed`（已安裝的 hook 仍是舊版），所以重裝項目保留。`skills/explain` 上游矛盾已本地修正，決定見 `docs/DECISIONS.md` 〈上游自身的瑕疵（本地修正，未回貢）〉。
+`agentcrew-academy/harness-starter-kit` 的衍生版，提供跨 Claude Code／Codex／Cursor／Antigravity 的 guardrail hooks、安裝器與 live-fire 驗證器（`AGENTS.md:10-18`）。2026-11-08 實查：open PR 0、issue 已停用、Dependabot 與 code scanning open 0（`gh api` 回傳筆數 0）；`main` 為 `54de47c2a4b4`，該 SHA 的 CI（2026-11-02）與 CodeQL（2026-11-03）success，Upstream check 最近一次（`3ed7016b252b`）success。2026-11-02 審完上游 `b47f3e9`，baseline 已推進到該 commit，暫緩／不採用的理由見 `FORK.md` 與 `docs/DECISIONS.md`；PR／issue 水位維持 #2／#1。2026-11-08 已重裝全部四大 agent hooks 並通過 `python scripts/verify-install.py --agent all`（`91 checked, 0 failed`）。`skills/explain` 上游矛盾已本地修正，決定見 `docs/DECISIONS.md` 〈上游自身的瑕疵（本地修正，未回貢）〉。
 
 ## 近期：可以直接動手
 | 項目 | 為什麼 | 驗收方式 | 建議執行者 | 證據 |
 | --- | --- | --- | --- | --- |
-| 把 `main` 最新版重裝到維護者使用中的四個 agent，並跑 live-fire 驗證 | 2026-11-08 `verify-install.py --agent all` 4 項 FAIL：claim-ledger-tracker 與 Codex tracker matcher 缺 Edit／Write／apply_patch、Antigravity claim-guard matcher 缺 `grep_search`／`replace_file_content`／`run_command`／`write_to_file`、lint-gate 專案開關測試；Codex 的 no-emoji-guard 另顯示 `"enabled": false`（既有停用設定，不屬失敗）。repo 綠不代表使用者那份 hook 已是新版；實裝會改全域 agent 設定，需在授權下由能改全域設定的 session 執行 | 先 `python scripts/install.py --dry-run --agent all --hooks all --skills all` 檢視（2026-11-08 dry-run exit 0，會替換七支 Codex hook 並補登記一筆 claim tracker）；實裝後 `python scripts/verify-install.py --agent all` 全部 PASS（exit 0）；已安裝檔與 `main` 對應檔雜湊相同；已存在的 skills 預設不覆蓋，需 `--force` 才會更新 | 艦隊規劃長（全域設定授權下） | `python scripts/verify-install.py --agent all`（2026-11-08，exit 1，86 checked／4 failed）；`CHANGELOG.md` 2026-10-26～10-28 段 |
 
 ## 中期：等條件成立再做
 | 項目 | 觸發條件 | 驗收方式 | 建議執行者 | 證據 |
