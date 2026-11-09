@@ -8,6 +8,31 @@ Entries marked `fork` are this fork's changes relative to
 
 ---
 
+## 2026-11-09
+
+### Security fixes
+
+- `fork` Restored hook hardening made on the maintainer's machine from 2026-10-26 on. A reinstall from this repo on 2026-11-08 overwrote it with older copies, so `lint-gate`, `danger-zone-guard` and `claim-guard` became weaker.
+  - `lint-gate`: honours `.lint-gate.json` only in a repo whose origin belongs to a trusted owner (`LINT_GATE_TRUSTED_OWNERS`, default `SanHsien`). A cloned stranger's repo can no longer use that file to run its own command on every Stop.
+  - `danger-zone-guard`: blocks `rm -rf ~/`, `$HOME/`, `${HOME}`, `-r -f`, `--recursive`, rm behind an environment assignment, `Remove-Item -Recurse -Force C:\` and `Format-Volume`. The exfiltration rule now covers `--data-binary`, `-T`, PowerShell `-InFile`/`-Body`, `oauth_creds.json` and a quoted `@.env`. `release/*` and `release-*` are protected from force pushes. `<<<` is no longer read as a heredoc.
+  - `claim-guard`: negations such as "not yet verified" and "unconfirmed" are no longer read as claims.
+- `fork` `danger-zone-guard` closes gaps that every earlier build shared. Each fix started from a failing test:
+  - commands wrapped in `bash -c "..."`, `bash -lc`, `bash -c --`, `sh -c`, `(...)`, `$(...)`, `sudo -E`, `sudo -u`, `env`, `command` or `xargs`, or written as `\rm` or `/bin/rm`;
+  - `echo / | xargs rm -rf` and `rm -rf $HOME/*`;
+  - PowerShell `rm -r -fo C:\`, and `Remove-Item C:\ -Recurse -Force` with the path before the flags;
+  - `curl -F file=@.env`, `-d@.env` and `-d @./.env`, and `"$(curl -d @.env ...)"` inside double quotes (a command substitution there still runs);
+  - `bash <(curl ...)` and `bash -c "$(curl ...)"`;
+  - `codex --yolo`.
+
+  Ordinary commands still run, for example `bash -c "rm -rf ./build"`, `find ... | xargs rm -f`, `Remove-Item .\build -Recurse -Force` and `command -v rm`. The wrapper pattern gives each input one parse. Before matching, runs of three or more blanks are cut to two; the exfiltration and pipe-to-shell checks now look at one command at a time (split at real separators) and match each from the first tool word only. The old patterns, given a very long run of blanks, of `curl` words or of quoted `curl -d` fragments, ran past the 10-second hook timeout, and a timeout lets the command through. The force-push check no longer rereads a `git -C git -C ...` run from every `git` in it (49k characters used to take over 5 seconds). The sandbox-bypass check used to allow `A=value` words before the CLI whose value runs past a `;`, and that regex rescanned from every separator to the end of the input (49k characters took 24 seconds). The same rule is now checked backwards from each agent CLI word that has a bypass flag after it in its own command: same verdicts, linear time. Wrapper words and their options are read on one line only, so a run of `env` lines no longer stalls. Heredocs are read in one pass: a `<<` marker inside a body is data and no longer starts its own search for an end line (a long run of markers used to take minutes). Only a `(` or `$(` outside quotes starts a new command, so parentheses in a commit message do not. ReDoS tests cover these inputs (up to about 100k characters, each must get a verdict within the limit). As a backstop, a command still longer than 50,000 characters after heredoc bodies are blanked and blank runs shortened is blocked, with advice to run it from a script file. A timeout lets the command through, so the guard refuses rather than let a slow pattern not yet found become a way past it.
+- `fork` The Codex build of `danger-zone-guard` had stayed on the old rules. Its detection code is now a copy of the Claude Code build's, and `tests/run-tests.py` checks that the two are identical, so it cannot fall behind unnoticed again.
+- `fork` `claim-guard` is strict about quotes again: trigger words inside backticks or 「」 are checked. ``Done. All `tests pass`.`` is a claim, and so is `` `verified` ``. Only two kinds of text are not claims: negations (`not yet verified`, `isn't verified`, `unconfirmed`, `never verified`), and code identifiers of fixed shapes (`is_verified`, `verified_at`, `confirmed()`, `--confirmed`, `lib/verified.py`); `reverified`, `Built/verified` and `Done.Verified` are still claims. The Python build and both POSIX builds use the same pattern, and a test compares the pattern text. Why this departs from upstream e9a4734 is in `docs/DECISIONS.md`.
+
+### Keeping hooks from getting weaker again
+
+- `fork` `install.py` backs up an installed hook before replacing it with different content (`<agent dir>/backups/<name>.bak-<time>-<random>`). After copying, it runs the `tests/` next to the installed hooks. If that suite fails or does not finish within the time limit, the installer puts back every hook it replaced for that agent, leaves that agent's config unchanged, and exits 1; an error partway through copying is rolled back the same way. `--agent all` installs the agents one after another, each behind its own gate: an agent that already passed keeps its new hooks, and the agents after a failing one are not installed. The only way to keep the new copies anyway is `--allow-failing-hook-tests "<reason>"`, and the reason is printed. `--hook-tests-timeout` sets the time limit (default 900 seconds).
+- `fork` `verify-install.py` runs the `tests/` next to the installed hooks. After the 11-08 reinstall it reported "91 checked, 0 failed" while 10 tests in that suite were red, because it never ran the suite. A timeout is reported as incomplete, not as a pass. The lint-gate checks now give each project its own directory and set `CLAUDE_PROJECT_DIR` explicitly. Marking the whole scratch directory as a trusted repo made the results depend on the order of the checks. A new live-fire check confirms that `.lint-gate.json` is ignored in an untrusted repo.
+
 ## 2026-11-08
 
 ### Added

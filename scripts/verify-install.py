@@ -446,12 +446,26 @@ def live_fire_antigravity_claim(tracker, guard):
            process_detail(after))
 
 
+def trust_as_own_repo(directory):
+    """Give `directory` a GitHub origin under the trusted owner.
+
+    lint_gate only honours a project's .lint-gate.json when the repo's origin
+    belongs to a trusted owner (it is a command line read from the checkout).
+    A fixture that expects the project check to run must look like one of
+    those repos.
+    """
+    subprocess.run(["git", "init", "-q", str(directory)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(directory), "remote", "add", "origin",
+                    "https://github.com/SanHsien/fixture.git"], check=True, capture_output=True)
+
+
 def live_fire_antigravity_lint(script):
     failing_check = "%s -c \"print('found 3 errors')\"" % sys.executable
     project = SCRATCH / "agy-lint-project"
     quiet = SCRATCH / "agy-quiet-project"
     for directory in (project, quiet):
         directory.mkdir(exist_ok=True)
+    trust_as_own_repo(project)
     (project / ".lint-gate.json").write_text(
         json.dumps({"cmd": failing_check, "fail": "[1-9][0-9]* errors?"}), encoding="utf-8")
 
@@ -1234,15 +1248,32 @@ def check_lint_gate():
     loop = run_hook(hook, {"stop_hook_active": True}, env=env, args=args)
 
     if hook.suffix == ".py":
-        inert = run_hook(hook, {"stop_hook_active": False})
-        config = SCRATCH / ".lint-gate.json"
-        config.write_text(
-            json.dumps({"cmd": fake_check, "fail": "[1-9][0-9]* errors?"}),
-            encoding="utf-8",
-        )
-        opted_in = run_hook(hook, {"stop_hook_active": False})
-        config.unlink()
-        if inert and opted_in:
+        # Each project gets its own directory and CLAUDE_PROJECT_DIR is set
+        # explicitly. Marking SCRATCH itself as a trusted repo made every later
+        # check under SCRATCH inherit that origin, so results depended on the
+        # order the checks ran in; an inherited CLAUDE_PROJECT_DIR (this script
+        # run from inside an agent) would point the hook at another repo.
+        config = {"cmd": fake_check, "fail": "[1-9][0-9]* errors?"}
+        own = SCRATCH / "lint-own-project"
+        stranger = SCRATCH / "lint-stranger-project"
+        for directory in (own, stranger):
+            directory.mkdir(exist_ok=True)
+        trust_as_own_repo(own)
+        subprocess.run(["git", "init", "-q", str(stranger)], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(stranger), "remote", "add", "origin",
+                        "https://github.com/someone-else/fixture.git"],
+                       check=True, capture_output=True)
+        (stranger / ".lint-gate.json").write_text(json.dumps(config), encoding="utf-8")
+
+        def stop_in(directory):
+            return run_hook(hook, {"stop_hook_active": False},
+                            env={"CLAUDE_PROJECT_DIR": str(directory)})
+
+        inert = stop_in(own)
+        (own / ".lint-gate.json").write_text(json.dumps(config), encoding="utf-8")
+        opted_in = stop_in(own)
+        foreign = stop_in(stranger)
+        if inert and opted_in and foreign:
             record(
                 inert.returncode == 0,
                 "lint-gate does nothing in a project with no .lint-gate.json",
@@ -1251,6 +1282,13 @@ def check_lint_gate():
                 opted_in.returncode == 2,
                 "lint-gate blocks once a project opts in with .lint-gate.json",
             )
+            record(
+                foreign.returncode == 0,
+                "lint-gate ignores .lint-gate.json in a repo it does not trust",
+                process_detail(foreign),
+            )
+        else:
+            record(False, "lint-gate runs in a project directory")
     if not failing or not loop:
         record(False, "lint-gate runs")
         return
@@ -1305,12 +1343,108 @@ def check_anti_doom_loop_guard():
     live_fire_doom_loop("claude", "Claude Code", hook)
 
 
+def check_hook_test_suite(timeout):
+    """Run the tests that sit next to the installed hooks, if there are any.
+
+    The live-fire checks above only hold the installed hooks to what this kit
+    knows about. A hooks directory can carry its own suite for fixes made on
+    that machine; on 2026-11-08 a reinstall replaced three hooks with weaker
+    copies, those tests went red, and this script still reported 0 failures
+    because it never ran them.
+    """
+    # Absolute: the suite runs with cwd set to the agent directory, so a relative
+    # CLAUDE_CONFIG_DIR would otherwise point pytest at a path that is not there.
+    suite = HOOKS_DIR.resolve() / "tests"
+    if not suite.is_dir() or not any(suite.glob("test_*.py")):
+        note("hooks/tests", "no test suite next to the installed hooks, skipped")
+        return
+    has_pytest = subprocess.run(
+        [sys.executable, "-c", "import pytest"], capture_output=True
+    ).returncode == 0
+    if has_pytest:
+        cmd = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(suite)]
+    else:
+        cmd = [sys.executable, "-m", "unittest", "discover", "-s", str(suite), "-p", "test_*.py"]
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=timeout, cwd=str(HOOKS_DIR.resolve().parent),
+        )
+    except subprocess.TimeoutExpired:
+        # A timeout is not a test failure, and not a pass either.
+        record(False, "hooks/tests suite finished",
+               "incomplete: no result within %ds (raise --hook-tests-timeout)" % timeout)
+        return
+    tail = " | ".join((proc.stdout + proc.stderr).strip().splitlines()[-3:])
+    record(proc.returncode == 0, "hooks/tests suite passes against the installed hooks", tail)
+
+
+def load_installer():
+    """scripts/install.py, for its per-agent hook catalogs."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "harness_install", Path(__file__).resolve().parent / "install.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_installed_copies(agents):
+    """Every hook an agent has installed is byte-for-byte this checkout's copy.
+
+    Line endings aside. A hook that behaves well on the synthetic payloads can
+    still be an older or locally edited copy; on 2026-11-08 the Codex,
+    Cursor and Antigravity copies stayed weaker than the Claude Code one with
+    no check noticing. Hooks this kit does not ship are not looked at.
+    """
+    installer = load_installer()
+    repo = Path(__file__).resolve().parent.parent
+    key = "windows" if IS_WINDOWS else "posix"
+    targets = {
+        "claude": ("Claude Code", installer.HOOKS, HOOKS_DIR),
+        "codex": ("Codex", installer.CODEX_HOOKS, CODEX_DIR / "hooks"),
+        "cursor": ("Cursor", installer.CURSOR_HOOKS, CURSOR_DIR / "hooks"),
+        "antigravity": ("Antigravity", installer.ANTIGRAVITY_HOOKS, GEMINI_DIR / "config" / "hooks"),
+    }
+    for agent in agents:
+        label, catalog, hooks_dir = targets[agent]
+        if not hooks_dir.is_dir():
+            continue
+        checked, differing = 0, []
+        for specs in catalog.values():
+            for spec in specs:
+                source = spec["source"]
+                if isinstance(source, dict):
+                    source = source.get(key)
+                if not source:
+                    continue
+                installed = hooks_dir / Path(source).name
+                if not installed.exists():
+                    continue
+                checked += 1
+                ours = (repo / source).read_bytes().replace(b"\r\n", b"\n")
+                theirs = installed.read_bytes().replace(b"\r\n", b"\n")
+                if ours != theirs:
+                    differing.append(installed.name)
+        if checked:
+            record(not differing,
+                   "%s hooks are this checkout's copies (%d compared)" % (label, checked),
+                   ("differ: " + ", ".join(sorted(set(differing))) +
+                    " -- reinstall with scripts/install.py") if differing else "")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--agent",
         default="all",
         choices=["claude", "antigravity", "cursor", "codex", "all"],
+    )
+    parser.add_argument(
+        "--hook-tests-timeout",
+        type=int,
+        default=int(os.environ.get("HARNESS_VERIFY_HOOK_TESTS_TIMEOUT", "900")),
+        help="seconds allowed for the test suite next to the installed hooks",
     )
     _args = parser.parse_args()
 
@@ -1338,10 +1472,16 @@ def main():
         check_test_gate()
         check_danger_zone_guard()
         check_anti_doom_loop_guard()
+        section("Hook test suite (tests next to the installed hooks)")
+        check_hook_test_suite(_args.hook_tests_timeout)
     if _args.agent in ("cursor", "all"):
         check_cursor_live_fire()
     if _args.agent in ("codex", "all"):
         check_codex_live_fire()
+
+    section("Installed copies (each agent's hooks match this checkout)")
+    check_installed_copies(
+        ["claude", "antigravity", "cursor", "codex"] if _args.agent == "all" else [_args.agent])
 
     failed = [r for r in results if not r[0]]
     section("Result")

@@ -106,9 +106,20 @@ STALE_BLOCK = (
     "(docs, comments), say edited, not re-verified."
 )
 
-# Quoted text is a mention, not a claim: 「驗證通過」 or `tests pass` names the
-# phrase rather than asserting it.
-QUOTED = re.compile(r"「[^」]*」|`[^`]*`")
+# Words that contain "verified" / "confirmed" without claiming it: a negation
+# ("not yet verified", "unconfirmed", "never verified") or a code identifier
+# (`is_verified`, `verified_at`, `confirmed()`, `--confirmed`, `verified.py`).
+# They are removed before matching. Only those exact shapes: "reverified",
+# "Built/verified", "Done.Verified", "verified(live box)" are still claims.
+# Quoted text is NOT removed: ``Done. All `tests pass`.`` is still a claim, and
+# so is 「驗證通過」 -- wrapping a claim in quotes must not get it past the guard.
+# The POSIX builds strip the same pattern with jq; keep the two in step.
+NOT_A_CLAIM = re.compile(
+    r"(?:\bun|\bnot (?:yet )?|n\Wt (?:yet )?|\bnever |\b[A-Za-z0-9]*_|(?<![^\s`(])--)(?:verified|confirmed)"
+    r"|(?:verified|confirmed)(?:_|\(\))"
+    r"|(?<=[/`])(?:verified|confirmed)(?-i:\.(?:py|js|ts|tsx|md|json|sh|txt|ya?ml|toml|rs|go|java|rb))\b",
+    re.IGNORECASE,
+)
 
 SEARCH_BLOCK = (
     "CLAIM-EVIDENCE GUARD: You asserted something 'does not exist / cannot be "
@@ -358,7 +369,7 @@ def evaluate(payload, last, second_pass, verify_ledger, search_ledger, edit_ledg
     if edit_ledger is None:
         edit_ledger = verify_ledger.with_suffix(".edit")
     ledgers = (verify_ledger, search_ledger, edit_ledger)
-    last = QUOTED.sub("", last)
+    last = NOT_A_CLAIM.sub(" ", last)
     if VERIFY_TRIGGERS.search(last):
         if not has_records(verify_ledger) and not second_pass:
             cleanup(*ledgers)

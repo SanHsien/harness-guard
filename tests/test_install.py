@@ -1269,5 +1269,102 @@ class AntiDoomLoopGuardVerifierTests(unittest.TestCase):
             self.assertIn("FAIL Codex anti-doom-loop-guard is registered with --agent codex", proc.stdout)
 
 
+class InstalledCopyTests(unittest.TestCase):
+    """verify-install reports an installed hook that is not this checkout's copy."""
+
+    def _verify(self, home):
+        env = dict(os.environ)
+        env["HOME"] = str(home)
+        env["USERPROFILE"] = str(home)
+        env["CODEX_HOME"] = str(home / ".codex")
+        env["CLAUDE_CONFIG_DIR"] = str(home / ".claude")
+        return subprocess.run(
+            [sys.executable, str(VERIFIER), "--agent", "codex"],
+            cwd=str(REPO), env=env, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=300,
+        )
+
+    def test_a_stale_codex_hook_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            hooks = home / ".codex" / "hooks"
+            hooks.mkdir(parents=True)
+            (hooks / "danger_zone_guard.py").write_text("# an older copy\n", encoding="utf-8")
+            proc = self._verify(home)
+            self.assertIn("FAIL Codex hooks are this checkout's copies", proc.stdout)
+            self.assertIn("danger_zone_guard.py", proc.stdout)
+
+    def test_a_current_codex_hook_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            hooks = home / ".codex" / "hooks"
+            hooks.mkdir(parents=True)
+            source = REPO / "hooks" / "danger-zone-guard" / "codex" / "danger_zone_guard.py"
+            (hooks / "danger_zone_guard.py").write_bytes(source.read_bytes())
+            proc = self._verify(home)
+            self.assertIn("PASS Codex hooks are this checkout's copies (1 compared)", proc.stdout)
+
+
+class InstalledHookRegressionTests(unittest.TestCase):
+    """A reinstall must not silently replace a stronger installed hook.
+
+    2026-11-08: reinstalling from this repo overwrote three hooks that had been
+    hardened on the machine. The tests kept next to the installed hooks went red
+    and nothing noticed. The installer now backs up every hook it changes, runs
+    that suite after copying, and puts everything back when it fails.
+    """
+
+    MARKER = "# locally hardened copy\n"
+
+    def _home(self, tmp, suite_passes):
+        home = Path(tmp)
+        hooks = home / ".claude" / "hooks"
+        (hooks / "tests").mkdir(parents=True)
+        installed = hooks / "danger_zone_guard.py"
+        installed.write_text(self.MARKER + "import sys\nsys.exit(0)\n", encoding="utf-8")
+        check = ("self.assertIn(%r, hook.read_text(encoding='utf-8'))" % self.MARKER
+                 if not suite_passes else "self.assertTrue(hook.exists())")
+        (hooks / "tests" / "test_local.py").write_text(
+            "import unittest\nfrom pathlib import Path\n"
+            "hook = Path(__file__).resolve().parents[1] / 'danger_zone_guard.py'\n"
+            "class Local(unittest.TestCase):\n"
+            "    def test_hardening_is_installed(self):\n"
+            "        " + check + "\n",
+            encoding="utf-8",
+        )
+        return home, installed
+
+    def _run(self, home):
+        env = dict(os.environ)
+        env["HOME"] = str(home)
+        env["USERPROFILE"] = str(home)
+        env["CLAUDE_CONFIG_DIR"] = str(home / ".claude")
+        return subprocess.run(
+            [sys.executable, str(INSTALLER), "--hooks", "danger-zone-guard"],
+            cwd=str(REPO), env=env, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=300,
+        )
+
+    def test_a_reinstall_that_breaks_the_local_suite_is_rolled_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home, installed = self._home(tmp, suite_passes=False)
+            proc = self._run(home)
+            self.assertNotEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertTrue(installed.read_text(encoding="utf-8").startswith(self.MARKER))
+            self.assertIn("rolled back", proc.stdout)
+            # Nothing was registered for a hook that was put back.
+            self.assertFalse((home / ".claude" / "settings.json").exists())
+
+    def test_a_replaced_hook_is_backed_up_first(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home, installed = self._home(tmp, suite_passes=True)
+            proc = self._run(home)
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertFalse(installed.read_text(encoding="utf-8").startswith(self.MARKER))
+            backups = list((home / ".claude" / "backups").glob("danger_zone_guard.py.bak-*"))
+            self.assertEqual(len(backups), 1, proc.stdout)
+            self.assertTrue(backups[0].read_text(encoding="utf-8").startswith(self.MARKER))
+
+
 if __name__ == "__main__":
     unittest.main()

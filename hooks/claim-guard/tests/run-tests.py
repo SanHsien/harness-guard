@@ -219,7 +219,33 @@ class PosixQualitySummaryGateTests(unittest.TestCase):
 
 TRACKER = REPO / "hooks" / "claim-guard" / "windows" / "claim_ledger_tracker.py"
 CLAIM = "I re-ran the suite and all tests pass."
-QUOTED_ONLY = "I added `tests pass` and \u300c\u9a57\u8b49\u901a\u904e\u300d to the trigger list."
+# A claim wrapped in quotes is still a claim (2026-11-09: the quote-stripping that let
+# these through was reverted; see NOT_A_CLAIM in windows/claim_evidence_guard.py).
+QUOTED_CLAIMS = (
+    "Done. All `tests pass`.",
+    "\u5b8c\u6210\uff0c\u300c\u9a57\u8b49\u901a\u904e\u300d\u3002",
+    "Fixed it -- `verified` on the live box.",
+    # Words glued to the trigger by punctuation or a prefix are still claims.
+    "I reverified it.",
+    "Built/verified.",
+    "tests/verified OK",
+    "Done.Verified",
+    "verified(live box)",
+    "Fixed, yet verified twice.",
+    "The net verified count went up.",
+    "Deployed.Verified.Go ahead.",
+    "Done--verified on CI.",
+    "Deployed and verified.go ahead and merge.",
+    "Built and confirmed.md is ready.",
+)
+# Code that merely contains a trigger word, and negated claims: not claims.
+NOT_CLAIMS = (
+    "Renamed `is_verified` to `verified_at` and added `confirmed()`.",
+    "The flag is `--confirmed`; the helper lives in `lib/verified.py`.",
+    "Edited the parser; not yet verified.",
+    "That path is still unconfirmed and was never verified.",
+    "The fix isn't verified yet.",
+)
 
 
 class LedgerFlowMixin:
@@ -280,9 +306,15 @@ class LedgerFlowMixin:
         self.track(self.edit("README.md"))
         self.assertAllowed(self.stop(CLAIM, stop_active=True))
 
-    def test_a_quoted_phrase_is_a_mention_not_a_claim(self) -> None:
-        self.assertAllowed(self.stop(QUOTED_ONLY))
-        self.assertBlocked(self.stop(CLAIM))  # the same phrase unquoted still needs evidence
+    def test_a_quoted_claim_still_needs_evidence(self) -> None:
+        for message in QUOTED_CLAIMS:
+            with self.subTest(message=message):
+                self.assertBlocked(self.stop(message))
+
+    def test_code_identifiers_and_negations_are_not_claims(self) -> None:
+        for message in NOT_CLAIMS:
+            with self.subTest(message=message):
+                self.assertAllowed(self.stop(message))
 
     def test_a_browser_test_run_counts_as_verification(self) -> None:
         self.track(self.shell("npx playwright test"))
@@ -372,6 +404,54 @@ class CodexShellLedgerFlow(ClaudePythonLedgerFlow):
         payload = super().stop_payload(message, stop_active)
         payload["turn_id"] = "flow"
         return payload
+
+
+class NotAClaimPatternParity(unittest.TestCase):
+    """The POSIX builds strip exactly what the Python build strips.
+
+    The jq copy cannot be run on a machine without jq, so this compares the
+    pattern text itself: the jq string literal, decoded as the JSON string it
+    is, must equal NOT_A_CLAIM.pattern.
+    """
+
+    def test_jq_pattern_matches_python(self) -> None:
+        spec = importlib.util.spec_from_file_location(
+            "claim_evidence_guard_parity",
+            REPO / "hooks" / "claim-guard" / "windows" / "claim_evidence_guard.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        for script in ("claude-code/claim-evidence-guard.sh", "codex/claim-evidence-guard.sh"):
+            with self.subTest(script=script):
+                text = (REPO / "hooks" / "claim-guard" / script).read_text(encoding="utf-8")
+                marker = "jq -Rrs 'gsub("
+                start = text.index(marker) + len(marker)
+                literal = text[start:text.index('"; " "; "i")', start) + 1]
+                self.assertEqual(json.loads(literal), module.NOT_A_CLAIM.pattern)
+
+
+def posix_bash():
+    """Git Bash on Windows (a bare `bash` there may be WSL), else bash on PATH."""
+    if os.name == "nt":
+        git_bash = Path(r"C:\Program Files\Git\bin\bash.exe")
+        return str(git_bash) if git_bash.exists() else None
+    return shutil.which("bash")
+
+
+@unittest.skipIf(not posix_bash(), "needs bash (Git Bash on Windows)")
+class PosixScriptsParse(unittest.TestCase):
+    """Every POSIX hook script parses, whether or not jq is installed.
+
+    The jq-backed tests above skip without jq, and a stray quote in a jq program
+    once broke both claim-evidence-guard.sh builds outright (2026-11-09) with no
+    test noticing. `bash -n` needs neither jq nor a payload.
+    """
+
+    def test_bash_n(self) -> None:
+        for script in sorted((REPO / "hooks").glob("*/*/*.sh")):
+            with self.subTest(script=str(script.relative_to(REPO))):
+                proc = subprocess.run([posix_bash(), "-n", script.as_posix()],
+                                      capture_output=True, text=True)
+                self.assertEqual(proc.returncode, 0, proc.stderr)
 
 
 if __name__ == "__main__":

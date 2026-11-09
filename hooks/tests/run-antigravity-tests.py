@@ -57,6 +57,19 @@ def check(label, ok, detail=""):
     print("%-4s %s%s" % ("PASS" if ok else "FAIL", label, "" if ok else "  -- " + detail))
 
 
+def trust_as_own_repo(directory):
+    """Give `directory` a GitHub origin under the trusted owner.
+
+    lint_gate only honours a project's .lint-gate.json when the repo's origin
+    belongs to a trusted owner (it is a command line read from the checkout).
+    A fixture that expects the project check to run must look like one of
+    those repos.
+    """
+    subprocess.run(["git", "init", "-q", str(directory)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(directory), "remote", "add", "origin",
+                    "https://github.com/SanHsien/fixture.git"], check=True, capture_output=True)
+
+
 class Sandbox:
     """A throwaway ledger dir, state dir, workspace and transcript per test."""
 
@@ -295,6 +308,7 @@ def main():
 
     # -- lint-gate: Stop -------------------------------------------------------------
     box = Sandbox()
+    trust_as_own_repo(box.workspace)
     (box.workspace / ".lint-gate.json").write_text(
         json.dumps({"cmd": FAILING_CHECK, "fail": "[1-9][0-9]* errors?"}), encoding="utf-8")
     first = box.run(LINT, box.stop())
@@ -305,6 +319,7 @@ def main():
     result = box.run(LINT, box.stop("USER_CANCELED"))
     check("lint-gate does not run on a user cancel", stays_silent(result), detail(result))
     other = Sandbox()
+    trust_as_own_repo(other.workspace)
     (other.workspace / ".lint-gate.json").write_text(
         json.dumps({"cmd": FAILING_CHECK, "fail": "[1-9][0-9]* errors?"}), encoding="utf-8")
     quiet = Sandbox()
@@ -312,11 +327,26 @@ def main():
     check("lint-gate uses workspacePaths, not a stale CLAUDE_PROJECT_DIR", stays_silent(result), detail(result))
 
     box = Sandbox()
+    trust_as_own_repo(box.workspace)
     (box.workspace / ".lint-gate.json").write_text(
         json.dumps({"cmd": "%s -c \"print('0 errors')\"" % sys.executable, "fail": "[1-9][0-9]* errors?"}),
         encoding="utf-8")
     result = box.run(LINT, box.stop())
     check("lint-gate answers {} when the check is clean", stays_silent(result), detail(result))
+    # A repo that is not ours must not get to run the command its own config names.
+    stranger = Sandbox()
+    (stranger.workspace / ".lint-gate.json").write_text(
+        json.dumps({"cmd": FAILING_CHECK, "fail": "[1-9][0-9]* errors?"}), encoding="utf-8")
+    result = stranger.run(LINT, stranger.stop())
+    check("lint-gate ignores .lint-gate.json in a repo with no trusted origin", stays_silent(result), detail(result))
+    foreign = Sandbox()
+    trust_as_own_repo(foreign.workspace)
+    subprocess.run(["git", "-C", str(foreign.workspace), "remote", "set-url", "origin",
+                    "https://github.com/someone-else/fixture.git"], check=True, capture_output=True)
+    (foreign.workspace / ".lint-gate.json").write_text(
+        json.dumps({"cmd": FAILING_CHECK, "fail": "[1-9][0-9]* errors?"}), encoding="utf-8")
+    result = foreign.run(LINT, foreign.stop())
+    check("lint-gate ignores .lint-gate.json in a repo owned by someone else", stays_silent(result), detail(result))
     box = Sandbox()
     result = box.run(LINT, box.stop())
     check("lint-gate answers {} in a project with no .lint-gate.json", stays_silent(result), detail(result))

@@ -41,6 +41,7 @@ import platform
 import re
 import shutil
 import stat
+import subprocess
 import sys
 import tempfile
 import time
@@ -589,6 +590,117 @@ def copy_hook_file(source, target):
     shutil.copyfile(source, target)
 
 
+class HookChanges:
+    """Hook files one install run replaced, so a failed run can put them back.
+
+    Every installed hook whose content differs from the one being copied is
+    backed up first (`<agent dir>/backups/<name>.bak-<time>-<random>`), and a
+    hook that did not exist is remembered as new. On 2026-11-08 a reinstall
+    replaced three hooks that had been hardened on the machine with older
+    copies from this repo, without a backup and without anyone noticing.
+    """
+
+    def __init__(self, backup_root):
+        self.backup_root = Path(backup_root)
+        self.changes = []  # (target, backup or None, created)
+
+    @staticmethod
+    def _same(left, right):
+        return left.replace(b"\r\n", b"\n") == right.replace(b"\r\n", b"\n")
+
+    def copy(self, source, target):
+        existed = target.exists()
+        backup = None
+        if existed and not self._same(target.read_bytes(), source.read_bytes()):
+            self.backup_root.mkdir(parents=True, exist_ok=True)
+            prefix = "%s.bak-%s-" % (target.name, time.strftime("%Y%m%d-%H%M%S"))
+            with tempfile.NamedTemporaryFile(
+                    prefix=prefix, dir=self.backup_root, delete=False) as out:
+                backup = Path(out.name)
+                out.write(target.read_bytes())
+            print("replacing %s (previous copy kept at %s)" % (target.name, backup))
+        copy_hook_file(source, target)
+        self.changes.append((target, backup, not existed))
+
+    def rollback(self):
+        for target, backup, created in reversed(self.changes):
+            if backup is not None:
+                shutil.copyfile(backup, target)
+            elif created and target.exists():
+                target.unlink()
+        self.changes = []
+
+
+def run_hook_suite(hooks_dir, timeout):
+    """Run the tests kept next to the installed hooks.
+
+    Returns (status, summary): status is "none" (no suite), "pass", "fail" or
+    "incomplete" (no result within the timeout -- not a pass, not a failure).
+    """
+    # Absolute: pytest runs with cwd set to the agent directory, so a relative
+    # --claude-dir would otherwise point it at a path that does not exist there.
+    suite = Path(hooks_dir).resolve() / "tests"
+    if not suite.is_dir() or not any(suite.glob("test_*.py")):
+        return "none", ""
+    has_pytest = subprocess.run(
+        [sys.executable, "-c", "import pytest"], capture_output=True
+    ).returncode == 0
+    if has_pytest:
+        cmd = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(suite)]
+    else:
+        cmd = [sys.executable, "-m", "unittest", "discover", "-s", str(suite), "-p", "test_*.py"]
+    try:
+        proc = subprocess.run(
+            cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=timeout, cwd=str(Path(hooks_dir).resolve().parent),
+        )
+    except subprocess.TimeoutExpired:
+        return "incomplete", "no result within %ds" % timeout
+    except OSError as exc:
+        return "incomplete", "could not run the suite: %s" % exc
+    lines = (proc.stdout + proc.stderr).strip().splitlines()
+    return ("pass" if proc.returncode == 0 else "fail"), "\n".join(lines[-15:])
+
+
+def gate_installed_hooks(args, hooks_dir, changes):
+    """After copying, hold the installed hooks to their own test suite.
+
+    A red or unfinished suite puts back every hook this agent's install replaced
+    and stops the run before this agent's config is touched. With `--agent all`
+    the agents are installed one after another and each has its own gate: an
+    agent installed earlier in the run, whose own suite passed, keeps its new
+    hooks; the agents after the failing one are not installed. The only way past
+    it is
+    `--allow-failing-hook-tests "<reason>"`, and the reason is printed.
+    """
+    if not changes.changes:
+        return 0
+    try:
+        status, summary = run_hook_suite(hooks_dir, args.hook_tests_timeout)
+    except BaseException:
+        changes.rollback()
+        raise
+    if status == "none":
+        print("hook tests: no tests/ next to %s, nothing to run" % hooks_dir)
+        return 0
+    if status == "pass":
+        print("hook tests: the suite next to the installed hooks passes")
+        return 0
+    print("hook tests: %s after copying into %s" % (
+        "FAILED" if status == "fail" else "INCOMPLETE", hooks_dir))
+    print(summary)
+    reason = (args.allow_failing_hook_tests or "").strip()
+    if reason:
+        print("hook tests: kept anyway -- --allow-failing-hook-tests: %s" % reason)
+        return 0
+    changes.rollback()
+    print("hook tests: rolled back; the hooks that were installed before this run "
+          "are in place again and no agent config was changed.")
+    print("  A copy from this repo is weaker than, or different from, what the "
+          "tests next to it expect. Bring the fix into this repo first.")
+    return 1
+
+
 def install_skills(args, target_skills_dir):
     sources = select_skills(args.skills)
     if not sources:
@@ -685,15 +797,22 @@ def install_for_claude(args):
         return install_skills(args, claude_dir / "skills")
 
     hooks_dir.mkdir(parents=True, exist_ok=True)
-    for _spec, source, target, _command, _state in planned:
-        copy_hook_file(source, target)
-        if not IS_WINDOWS:
-            # 0o700, not 0o755: these hooks run as the user who installed them
-            # and nobody else, so no other local account needs to read or run
-            # them. A guardrail kit should not be the thing that widens a
-            # permission.
-            os.chmod(target, stat.S_IRWXU)
+    changes = HookChanges(hooks_dir.parent / "backups")
+    try:
+        for _spec, source, target, _command, _state in planned:
+            changes.copy(source, target)
+            if not IS_WINDOWS:
+                # 0o700, not 0o755: these hooks run as the user who installed them
+                # and nobody else, so no other local account needs to read or run
+                # them. A guardrail kit should not be the thing that widens a
+                # permission.
+                os.chmod(target, stat.S_IRWXU)
+    except BaseException:
+        changes.rollback()
+        raise
     print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
+    if gate_installed_hooks(args, hooks_dir, changes):
+        return 1
 
     if settings_path.exists():
         backup_json(settings_path, claude_dir / "backups")
@@ -844,15 +963,22 @@ def install_for_cursor(args):
         return rc
 
     hooks_dir.mkdir(parents=True, exist_ok=True)
-    for _spec, source, target, _command, _state in planned:
-        copy_hook_file(source, target)
-        if not IS_WINDOWS:
-            # 0o700, not 0o755: these hooks run as the user who installed them
-            # and nobody else, so no other local account needs to read or run
-            # them. A guardrail kit should not be the thing that widens a
-            # permission.
-            os.chmod(target, stat.S_IRWXU)
+    changes = HookChanges(hooks_dir.parent / "backups")
+    try:
+        for _spec, source, target, _command, _state in planned:
+            changes.copy(source, target)
+            if not IS_WINDOWS:
+                # 0o700, not 0o755: these hooks run as the user who installed them
+                # and nobody else, so no other local account needs to read or run
+                # them. A guardrail kit should not be the thing that widens a
+                # permission.
+                os.chmod(target, stat.S_IRWXU)
+    except BaseException:
+        changes.rollback()
+        raise
     print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
+    if gate_installed_hooks(args, hooks_dir, changes):
+        return 1
 
     backup_json(settings_path, cursor_dir / "backups")
 
@@ -932,15 +1058,22 @@ def install_for_codex(args):
         return install_skills(args, skills_dir)
 
     hooks_dir.mkdir(parents=True, exist_ok=True)
-    for _spec, source, target, _command, _state in planned:
-        copy_hook_file(source, target)
-        if not IS_WINDOWS:
-            # 0o700, not 0o755: these hooks run as the user who installed them
-            # and nobody else, so no other local account needs to read or run
-            # them. A guardrail kit should not be the thing that widens a
-            # permission.
-            os.chmod(target, stat.S_IRWXU)
+    changes = HookChanges(hooks_dir.parent / "backups")
+    try:
+        for _spec, source, target, _command, _state in planned:
+            changes.copy(source, target)
+            if not IS_WINDOWS:
+                # 0o700, not 0o755: these hooks run as the user who installed them
+                # and nobody else, so no other local account needs to read or run
+                # them. A guardrail kit should not be the thing that widens a
+                # permission.
+                os.chmod(target, stat.S_IRWXU)
+    except BaseException:
+        changes.rollback()
+        raise
     print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
+    if gate_installed_hooks(args, hooks_dir, changes):
+        return 1
 
     backup_json(settings_path, codex_dir / "backups")
 
@@ -1193,11 +1326,18 @@ def install_for_antigravity(args):
 
     if planned:
         hooks_dir.mkdir(parents=True, exist_ok=True)
-        for _spec, source, target, _command, _state, _name in planned:
-            copy_hook_file(source, target)
-            if not IS_WINDOWS:
-                os.chmod(target, stat.S_IRWXU)
+        changes = HookChanges(gemini_dir / "backups")
+        try:
+            for _spec, source, target, _command, _state, _name in planned:
+                changes.copy(source, target)
+                if not IS_WINDOWS:
+                    os.chmod(target, stat.S_IRWXU)
+        except BaseException:
+            changes.rollback()
+            raise
         print("\ncopied %d file(s) into %s" % (len(planned), hooks_dir))
+        if gate_installed_hooks(args, hooks_dir, changes):
+            return 1
 
         backup_json(settings_path, gemini_dir / "backups")
 
@@ -1264,6 +1404,18 @@ def main():
     parser.add_argument(
         "--codex-dir",
         default=os.environ.get("CODEX_HOME") or str(Path.home() / ".codex"),
+    )
+    parser.add_argument(
+        "--hook-tests-timeout",
+        type=int,
+        default=int(os.environ.get("HARNESS_INSTALL_HOOK_TESTS_TIMEOUT", "900")),
+        help="seconds allowed for the tests next to the installed hooks (default 900)",
+    )
+    parser.add_argument(
+        "--allow-failing-hook-tests",
+        metavar="REASON",
+        default="",
+        help="keep the copied hooks even if the tests next to them fail; give the reason",
     )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()

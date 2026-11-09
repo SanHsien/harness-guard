@@ -78,13 +78,54 @@ TIMEOUT_SECONDS = int(os.environ.get("LINT_TIMEOUT", "120"))
 PROJECT_CONFIG = ".lint-gate.json"
 
 
+# .lint-gate.json is a command line read from the checkout, so a cloned repo
+# that ships one would run its own command on every Stop. Only honour it in
+# repos whose origin belongs to a trusted owner (2026-10-26).
+TRUSTED_OWNERS = [o.strip().lower() for o in
+                  os.environ.get("LINT_GATE_TRUSTED_OWNERS", "SanHsien").split(",") if o.strip()]
+# Anchored to the start: the host itself must be github.com, not a URL whose
+# path merely contains "github.com/<owner>/". Forks under a trusted owner still
+# carry upstream-authored files, so an upstream .lint-gate.json is honoured there.
+ORIGIN_OWNER = re.compile(
+    # Only the two forms GitHub itself hands out are accepted, so no parser
+    # disagreement can move the real host elsewhere:
+    #   scheme://[userinfo@]github.com/<owner>/  -- userinfo limited to RFC 3986
+    #     characters ("?", "#", "\" would end the authority)
+    #   git@github.com:<owner>/                  -- scp form, fixed user, since git
+    #     splits a scheme-less URL at its first ":" to find the host
+    r"^\s*(?:(?:https?|ssh|git)://(?:[A-Za-z0-9._~%!$&'()*+,;=:-]+@)?github\.com/"
+    r"|git@github\.com:)([^/\s]+)/",
+    re.IGNORECASE,
+)
+
+
+def trusted_project(project_dir):
+    """Is the project's origin on GitHub under a trusted owner?
+
+    Anything that cannot be established (no git, no origin, another host) is
+    untrusted: the config is skipped, which only means no check runs.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "-C", project_dir, "config", "--get", "remote.origin.url"],
+            capture_output=True, timeout=10,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    match = ORIGIN_OWNER.search(proc.stdout.decode("utf-8", "replace"))
+    return bool(match) and match.group(1).lower() in TRUSTED_OWNERS
+
+
 def project_config(project_dir):
     """Read .lint-gate.json from the project root, if there is one.
 
     A malformed or unreadable file is ignored rather than fatal: a typo in a
-    config file must not leave someone unable to end a turn.
+    config file must not leave someone unable to end a turn. So is a file in a
+    repo that is not ours -- see TRUSTED_OWNERS.
     """
     path = os.path.join(project_dir, PROJECT_CONFIG)
+    if not os.path.isfile(path) or not trusted_project(project_dir):
+        return {}
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)

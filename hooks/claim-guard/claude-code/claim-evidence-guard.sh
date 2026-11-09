@@ -46,9 +46,12 @@ cleanup() { rm -f "$VERIFY_LEDGER" "$SEARCH_LEDGER" "$EDIT_LEDGER"; }
 STOP_ACTIVE=$(echo "$INPUT" | jq -r '.stop_hook_active // false' 2>/dev/null)
 LAST_MSG=$(echo "$INPUT" | jq -r '.last_assistant_message // empty' 2>/dev/null)
 [[ -z "$LAST_MSG" ]] && exit 0
-# Quoted text is a mention, not a claim: drop 「…」 and `…` spans before matching.
+# Negations ("not yet verified") and code identifiers (`is_verified`, `confirmed()`)
+# contain a trigger word without claiming it; drop them before matching. Quoted
+# text is kept: wrapping a claim in `...` or 「...」 must not get it past the guard.
+# Same pattern as NOT_A_CLAIM in windows/claim_evidence_guard.py.
 # jq's regex is Unicode-aware whatever the locale; if it fails, the full message is kept.
-if STRIPPED=$(printf '%s' "$LAST_MSG" | jq -Rrs 'gsub("「[^」]*」"; "") | gsub("`[^`]*`"; "")' 2>/dev/null); then
+if STRIPPED=$(printf '%s' "$LAST_MSG" | jq -Rrs 'gsub("(?:\\bun|\\bnot (?:yet )?|n\\Wt (?:yet )?|\\bnever |\\b[A-Za-z0-9]*_|(?<![^\\s`(])--)(?:verified|confirmed)|(?:verified|confirmed)(?:_|\\(\\))|(?<=[/`])(?:verified|confirmed)(?-i:\\.(?:py|js|ts|tsx|md|json|sh|txt|ya?ml|toml|rs|go|java|rb))\\b"; " "; "i")' 2>/dev/null); then
     LAST_MSG=$STRIPPED
 fi
 

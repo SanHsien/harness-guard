@@ -8,6 +8,31 @@
 
 ---
 
+## 2026-11-09
+
+### 安全修正
+
+- `fork` 補回 2026-10-26 起在使用者機器上加的 hook 修補。2026-11-08 從本 repo 重裝時，舊版覆蓋了這些修補，`lint-gate`、`danger-zone-guard`、`claim-guard` 因此變弱。
+  - `lint-gate`：只有 origin 在受信任擁有者名下的 repo，才會執行它的 `.lint-gate.json`（`LINT_GATE_TRUSTED_OWNERS`，預設 `SanHsien`）。clone 下來的別人 repo 不能靠這個檔在每次 Stop 執行自己的指令。
+  - `danger-zone-guard`：會擋 `rm -rf ~/`、`$HOME/`、`${HOME}`、`-r -f`、`--recursive`、前面帶環境變數的 rm、`Remove-Item -Recurse -Force C:\`、`Format-Volume`；外洩規則加上 `--data-binary`、`-T`、PowerShell `-InFile`／`-Body`、`oauth_creds.json`，引號包起來的 `@.env` 也算；`release/*`、`release-*` 也禁止強推；`<<<` 不再當成 heredoc。
+  - `claim-guard`：「not yet verified」「unconfirmed」這類否定說法不再當成已驗證的宣稱。
+- `fork` `danger-zone-guard` 補上各版都有的漏洞，每一項都先寫了會失敗的測試：
+  - 指令包在 `bash -c "..."`、`bash -lc`、`bash -c --`、`sh -c`、`(...)`、`$(...)`、`sudo -E`、`sudo -u`、`env`、`command`、`xargs` 裡，或寫成 `\rm`、`/bin/rm`；
+  - `echo / | xargs rm -rf`、`rm -rf $HOME/*`；
+  - PowerShell 的 `rm -r -fo C:\`，以及路徑寫在旗標前面的 `Remove-Item C:\ -Recurse -Force`；
+  - `curl -F file=@.env`、`-d@.env`、`-d @./.env`，以及雙引號裡的 `"$(curl -d @.env ...)"`（雙引號裡的命令替換會執行）；
+  - `bash <(curl ...)`、`bash -c "$(curl ...)"`；
+  - `codex --yolo`。
+  
+  一般指令照常放行，例如 `bash -c "rm -rf ./build"`、`find ... | xargs rm -f`、`Remove-Item .\build -Recurse -Force`、`command -v rm`。包裝詞的寫法讓每個輸入只有一種解析方式。比對前把三個以上的連續空白縮成兩個；外洩與 pipe-to-shell 改成逐一檢查每個指令（以真正的分隔符切開），每段只從第一個工具字比一次。原本的寫法遇到超長空白、一長串 `curl` 或引號裡的 `curl -d` 片段會慢到超過 hook 的 10 秒時限，而逾時等於放行。強推檢查不再從 `git -C git -C …` 長串裡的每個 `git` 重讀一次（原本 49k 字元要 5 秒以上）。破沙盒旗標檢查原本允許指令前的 `A=值` 一路跨過 `;`，那段正規式會從每個分隔符往後掃到底（原本 49k 字元要 24 秒）。現在改成：從同一個指令裡後面有旗標的 agent 指令字往回檢查同一條規則，結果和原本一樣，但是線性時間。包裝詞與它的選項只認同一行，避免一行一個 `env` 的長串變慢。heredoc 改成單次掃描：本文裡的 `<<` 標記是資料，不再各自從頭找結尾（原本一長串標記要跑上百秒）。只有引號外的 `(`／`$(` 才算新指令的開頭，commit 訊息裡的括號不算。ReDoS 測試涵蓋這些輸入（最長約 100k 字元，每筆都要在時限內判定）。另加保底：去掉 heredoc 本文、縮短空白後仍超過 50,000 字元的指令直接擋下，請改寫成腳本檔再執行。逾時會放行，所以寧可擋，不讓還沒發現的慢寫法變成破口。
+- `fork` Codex 版 `danger-zone-guard` 原本一直停在舊規則。現在它的偵測程式改成從 Claude Code 版複製，`tests/run-tests.py` 會檢查兩份逐字相同，再改也不會悄悄落後。
+- `fork` `claim-guard` 回到嚴格處理引號：反引號和「」裡的觸發詞照樣檢查。``Done. All `tests pass`.`` 是宣稱，`` `verified` `` 也是。只有兩種不算宣稱：否定說法（`not yet verified`、`isn't verified`、`unconfirmed`、`never verified`），以及固定形狀的程式識別字（`is_verified`、`verified_at`、`confirmed()`、`--confirmed`、`lib/verified.py`）；`reverified`、`Built/verified`、`Done.Verified` 仍算宣稱。Python 版與兩個 POSIX 版用同一條規則，測試會比對兩邊的規則文字。偏離上游 e9a4734 的理由見 `docs/DECISIONS.md`。
+
+### 防止再次變弱
+
+- `fork` `install.py`：覆蓋已安裝的 hook 前，內容不同就先備份（`<agent 目錄>/backups/<檔名>.bak-<時間>-<亂數>`）。複製完會跑已安裝 hooks 旁邊的 `tests/`；測試紅了或在時限內沒跑完，就把這個 agent 這次換掉的 hook 全部還原、不改這個 agent 的設定，並以 exit 1 結束；複製途中出錯也一樣還原。`--agent all` 是一個 agent 接一個裝、各自把關：前面已通過的 agent 保留新版，失敗那個之後的 agent 不會安裝。要強行保留只能加 `--allow-failing-hook-tests "<理由>"`，理由會印出來。時限用 `--hook-tests-timeout` 調整（預設 900 秒）。
+- `fork` `verify-install.py` 會跑已安裝 hooks 旁邊的 `tests/`。11-08 重裝後它回報「91 checked, 0 failed」，那套測試其實已經紅了 10 項，因為它根本沒跑那套測試。逾時會標成「incomplete」，不算通過。lint-gate 的檢查改為每個專案各用一個目錄，並明確設定 `CLAUDE_PROJECT_DIR`。原本把整個暫存目錄標成可信 repo，結果會受檢查順序影響。另外新增一項實測：不受信任的 repo 裡的 `.lint-gate.json` 會被忽略。
+
 ## 2026-11-08
 
 ### 新增
