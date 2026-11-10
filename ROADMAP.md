@@ -1,10 +1,10 @@
 # 路線圖
 
 > 本 repo 後續工作的單一真相源。做完一項，就在同一個 commit 刪掉那一列；新工作只加在這裡。
-> 現況段於 2026-11-08 依 `main` `54de47c2a4b4` 與 GitHub 唯讀查詢更新；2026-11-02 審完上游 `b47f3e9`（12 檔）的結果另見 `FORK.md`。
+> 現況段於 2026-11-10 依 `main` `76d1a98` 與 GitHub 唯讀查詢更新；2026-11-02 審完上游 `b47f3e9`（12 檔）的結果另見 `FORK.md`。
 
 ## 現況
-`agentcrew-academy/harness-starter-kit` 的衍生版，提供跨 Claude Code／Codex／Cursor／Antigravity 的 guardrail hooks、安裝器與 live-fire 驗證器（`AGENTS.md:10-18`）。2026-11-08 實查：open PR 0、issue 已停用、Dependabot 與 code scanning open 0（`gh api` 回傳筆數 0）；`main` 為 `54de47c2a4b4`，該 SHA 的 CI（2026-11-02）與 CodeQL（2026-11-03）success，Upstream check 最近一次（`3ed7016b252b`）success。2026-11-02 審完上游 `b47f3e9`，baseline 已推進到該 commit，暫緩／不採用的理由見 `FORK.md` 與 `docs/DECISIONS.md`；PR／issue 水位維持 #2／#1。2026-11-08 已重裝全部四大 agent hooks 並通過 `python scripts/verify-install.py --agent all`（`91 checked, 0 failed`）。`skills/explain` 上游矛盾已本地修正，決定見 `docs/DECISIONS.md` 〈上游自身的瑕疵（本地修正，未回貢）〉。
+`agentcrew-academy/harness-starter-kit` 的衍生版，提供跨 Claude Code／Codex／Cursor／Antigravity 的 guardrail hooks、安裝器與 live-fire 驗證器（`AGENTS.md:10-18`）。2026-11-08 實查：open PR 0、issue 已停用、Dependabot 與 code scanning open 0（`gh api` 回傳筆數 0）；`main` 為 `54de47c2a4b4`，該 SHA 的 CI（2026-11-02）與 CodeQL（2026-11-03）success，Upstream check 最近一次（`3ed7016b252b`）success。2026-11-02 審完上游 `b47f3e9`，baseline 已推進到該 commit，暫緩／不採用的理由見 `FORK.md` 與 `docs/DECISIONS.md`；PR／issue 水位維持 #2／#1。2026-11-08 那次重裝把維護者本機加強過的 hook 蓋回較弱的版本，`verify-install` 卻回報 0 失敗。修補已在 `76d1a98` 寫回本 repo，安裝器改成「先備份、跑已安裝 hooks 旁的測試、紅了就還原」，verify-install 也會跑那套測試並比對每個 agent 的副本。2026-11-10 用新安裝器重裝四大 agent，`verify-install --agent all` 97 項 0 失敗，`76d1a98` 的 CI 與 CodeQL 皆 success。`skills/explain` 上游矛盾已本地修正，決定見 `docs/DECISIONS.md` 〈上游自身的瑕疵（本地修正，未回貢）〉。
 
 ## 近期：可以直接動手
 | 項目 | 為什麼 | 驗收方式 | 建議執行者 | 證據 |
