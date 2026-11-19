@@ -15,7 +15,7 @@
         ]
       },
       {
-        "matcher": "exec|shell|exec_command|Bash",
+        "matcher": "exec|shell|exec_command|shell_command|Bash",
         "hooks": [
           {
             "type": "command",

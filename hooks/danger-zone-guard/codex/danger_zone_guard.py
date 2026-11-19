@@ -618,6 +618,12 @@ def inspect_command(command, repo_root=None):
     return None
 
 
+# Every name install.py's Codex matcher (`exec|shell|exec_command|shell_command|Bash`)
+# lets through has to be here. `shell_command` was not, so a command arriving
+# under that name was answered `{}` without being read.
+SHELL_TOOLS = ("exec", "shell", "exec_command", "shell_command", "local_shell", "Bash", "Exec")
+
+
 def main():
     try:
         payload = read_payload()
@@ -625,19 +631,29 @@ def main():
         sys.stdout.write("{}\n")
         return 0
 
+    if not isinstance(payload, dict):
+        sys.stdout.write("{}\n")
+        return 0
     tool_name = payload.get("tool_name") or ""
-    if tool_name not in ("exec", "shell", "exec_command", "Bash", "Exec"):
+    if tool_name not in SHELL_TOOLS:
         sys.stdout.write("{}\n")
         return 0
 
     tool_input = payload.get("tool_input") or {}
-    command = (
-        tool_input.get("command")
-        or tool_input.get("cmd")
-        or tool_input.get("CommandLine")
-        or ""
-    )
-    if not command:
+    if isinstance(tool_input, dict):
+        command = (
+            tool_input.get("command")
+            or tool_input.get("cmd")
+            or tool_input.get("CommandLine")
+            or ""
+        )
+    else:
+        command = tool_input
+    # An argv list (`["bash", "-lc", "..."]`) is still a command. Passing the
+    # list on raised TypeError: exit 1, which Codex does not read as a block.
+    if isinstance(command, (list, tuple)):
+        command = " ".join(str(part) for part in command)
+    if not isinstance(command, str) or not command:
         sys.stdout.write("{}\n")
         return 0
 

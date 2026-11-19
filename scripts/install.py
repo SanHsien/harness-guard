@@ -10,6 +10,7 @@
     python scripts/install.py --agent all --hooks all --skills all
     python scripts/install.py --agent antigravity --hooks anti-doom-loop-guard
     python scripts/install.py --agent antigravity --hooks danger-zone-guard,test-gate-guard,no-emoji-guard
+    python scripts/install.py --agent hermes                      # Hermes plugin (danger-zone + test-gate)
 
 What it does:
 
@@ -32,7 +33,12 @@ What it does:
      Without an explicit --hooks, Antigravity gets skills only. The installer
      refuses to write while the file still holds a Claude Code layout top-level
      "hooks" block: Antigravity rejects such a file as a whole.
-  8. `--agent all` is Claude Code + Antigravity + Cursor + Codex.
+  8. `--agent all` is Claude Code + Antigravity + Cursor + Codex, plus Hermes
+     when a Hermes home with a `plugins` folder is found on this machine.
+  9. `--agent hermes` copies the plugin adapter and the two shared guard files
+     into <hermes home>/plugins/harness-guard/ (backup first), then fires the
+     installed plugin with hooks/hermes-plugin/probe.py; a red probe puts the
+     previous files back. Hermes' config.yaml is never written.
 """
 import argparse
 import json
@@ -1364,13 +1370,175 @@ def install_for_antigravity(args):
     return install_skills(args, skills_target)
 
 
+# The Hermes plugin is a folder, not a registration: Hermes loads
+# <home>/plugins/<name>/__init__.py when the name is in `plugins.enabled`.
+# The adapter imports the two guard files that sit beside it, so they are the
+# very files the other agents run -- not a third rewrite of the patterns.
+HERMES_PLUGIN_NAME = "harness-guard"
+HERMES_PLUGIN_FILES = (
+    ("__init__.py", "hooks/hermes-plugin/__init__.py"),
+    ("plugin.yaml", "hooks/hermes-plugin/plugin.yaml"),
+    ("danger_zone_guard.py", "hooks/danger-zone-guard/claude-code/danger_zone_guard.py"),
+    ("test_gate_guard.py", "hooks/test-gate-guard/claude-code/test_gate_guard.py"),
+)
+HERMES_PROBE = "hooks/hermes-plugin/probe.py"
+
+
+def default_hermes_dir():
+    explicit = os.environ.get("HERMES_HOME")
+    if explicit:
+        return explicit
+    # From the home directory, not %LOCALAPPDATA%: the tests (and anyone trying
+    # this out) redirect HOME / USERPROFILE to a scratch folder, and LOCALAPPDATA
+    # does not follow. Reading it sent a test run's `--agent all` into the
+    # maintainer's real Hermes plugin folder on 2026-11-19.
+    if IS_WINDOWS:
+        return str(Path.home() / "AppData" / "Local" / "hermes")
+    return str(Path.home() / ".hermes")
+
+
+def hermes_present(hermes_dir):
+    return (Path(hermes_dir) / "plugins").is_dir()
+
+
+def hermes_plugin_enabled(hermes_dir):
+    """True / False / None (cannot tell) -- read from config.yaml, never written.
+
+    Only the `plugins:` block is looked at, line by line: no YAML library is
+    assumed, and nothing else in that file (which holds credentials-adjacent
+    settings) is read into memory beyond this scan.
+    """
+    config = Path(hermes_dir) / "config.yaml"
+    try:
+        lines = config.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+    in_plugins = in_enabled = False
+    seen_enabled = False
+    for line in lines:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line.startswith((" ", "\t")):
+            in_plugins = line.rstrip() == "plugins:"
+            in_enabled = False
+            continue
+        if not in_plugins:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("enabled:"):
+            in_enabled = seen_enabled = True
+            inline = stripped[len("enabled:"):].strip()
+            if inline.startswith("["):
+                names = [n.strip().strip("'\"") for n in inline.strip("[]").split(",")]
+                return HERMES_PLUGIN_NAME in names
+            continue
+        if in_enabled:
+            if stripped.startswith("- "):
+                if stripped[2:].strip().strip("'\"") == HERMES_PLUGIN_NAME:
+                    return True
+                continue
+            in_enabled = False
+    return False if seen_enabled else None
+
+
+def run_hermes_probe(plugin_dir, timeout=120, extra=()):
+    """Fire the installed plugin in a child process. Returns (ok, output tail)."""
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(REPO / HERMES_PROBE), str(plugin_dir)] + list(extra),
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "no result within %ds" % timeout
+    except OSError as exc:
+        return False, "could not run the probe: %s" % exc
+    lines = (proc.stdout + proc.stderr).strip().splitlines()
+    shown = [line for line in lines if not line.startswith("PASS")] or lines[-3:]
+    return proc.returncode == 0, "\n".join(shown[-20:])
+
+
+def install_for_hermes(args, explicit=True):
+    hermes_dir = Path(args.hermes_dir)
+    plugin_dir = hermes_dir / "plugins" / HERMES_PLUGIN_NAME
+
+    print("\n=== Hermes Installation ===")
+    print("target   : %s" % plugin_dir)
+    if not hermes_present(hermes_dir):
+        if explicit:
+            print("no Hermes home with a `plugins` folder at %s -- pass --hermes-dir" % hermes_dir)
+            return 0 if args.dry_run else 1
+        print("skipped  : no Hermes home with a `plugins` folder at %s" % hermes_dir)
+        return 0
+    print("hooks    : danger-zone-guard, test-gate-guard (the plugin always carries both; "
+          "--hooks does not apply)")
+    print("note     : config.yaml is not written. The plugin runs when `%s` is listed under "
+          "plugins.enabled, and Hermes loads the new files on its next start." % HERMES_PLUGIN_NAME)
+
+    planned = []
+    for name, relative in HERMES_PLUGIN_FILES:
+        source = REPO / relative
+        if not source.exists():
+            print("missing %s -- cannot install the Hermes plugin" % source)
+            return 1
+        target = plugin_dir / name
+        if not target.exists():
+            state = "will create"
+        elif HookChanges._same(target.read_bytes(), source.read_bytes()):
+            state = "unchanged"
+        else:
+            state = "will replace (backup first)"
+        print("%-22s %s" % (name, state))
+        planned.append((source, target))
+    dropin = plugin_dir / "fork_pr_guard.py"
+    print("%-22s %s" % (dropin.name, "present, left as it is (maintainer's drop-in)"
+                        if dropin.exists() else "not present (optional drop-in, not part of this kit)"))
+
+    if args.dry_run:
+        print("\ndry run: nothing written under %s" % hermes_dir)
+        return 0
+
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    changes = HookChanges(hermes_dir / "backups" / "harness-guard-plugin")
+    try:
+        for source, target in planned:
+            changes.copy(source, target)
+    except BaseException:
+        changes.rollback()
+        raise
+    print("\ncopied %d file(s) into %s" % (len(planned), plugin_dir))
+
+    try:
+        ok, summary = run_hermes_probe(plugin_dir, timeout=min(args.hook_tests_timeout, 300))
+    except BaseException:
+        changes.rollback()
+        raise
+    if not ok:
+        print("plugin probe: FAILED after copying into %s" % plugin_dir)
+        print(summary)
+        changes.rollback()
+        print("plugin probe: rolled back; the plugin files that were there before this run "
+              "are in place again.")
+        return 1
+    print("plugin probe: the installed plugin blocks and allows what it should")
+    if summary.startswith("NOTE") or "\nNOTE" in summary:
+        print(summary)
+
+    enabled = hermes_plugin_enabled(hermes_dir)
+    if enabled is False:
+        print("WARNING  : `%s` is not listed under plugins.enabled in config.yaml, so Hermes "
+              "will not load it. Add it there yourself." % HERMES_PLUGIN_NAME)
+    elif enabled is None:
+        print("note     : could not tell from config.yaml whether the plugin is enabled")
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--agent",
         default="claude",
-        choices=["claude", "antigravity", "cursor", "codex", "all"],
-        help="Automated target: claude, antigravity, cursor, codex, or all (default: claude)",
+        choices=["claude", "antigravity", "cursor", "codex", "hermes", "all"],
+        help="Automated target: claude, antigravity, cursor, codex, hermes, or all (default: claude)",
     )
     parser.add_argument(
         "--hooks",
@@ -1404,6 +1572,11 @@ def main():
     parser.add_argument(
         "--codex-dir",
         default=os.environ.get("CODEX_HOME") or str(Path.home() / ".codex"),
+    )
+    parser.add_argument(
+        "--hermes-dir",
+        default=default_hermes_dir(),
+        help="Hermes home; the plugin goes under <dir>/plugins/harness-guard",
     )
     parser.add_argument(
         "--hook-tests-timeout",
@@ -1447,6 +1620,10 @@ def main():
             return rc
     if args.agent in ("codex", "all"):
         rc = install_for_codex(args)
+        if rc != 0:
+            return rc
+    if args.agent in ("hermes", "all"):
+        rc = install_for_hermes(args, explicit=args.agent == "hermes")
         if rc != 0:
             return rc
 

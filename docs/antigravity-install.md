@@ -97,7 +97,7 @@ python scripts/install.py --agent antigravity --hooks anti-doom-loop-guard
 4. 除 `run_command.CommandLine` 外，工具參數名稱（`TargetFile`、`CodeContent`、`ReplacementContent`、`ReplacementChunks`）官方 hooks 文件沒列；沿用本 repo 既有 `no-emoji-guard` 對 Antigravity 的處理，請以實測為準。
 5. `view_file` 的參數名稱官方文件沒列；`anti-doom-loop-guard` 把整組參數當簽章，不依賴特定名稱。
 6. **herdr 的 `herdr-agent-state.ps1` 不在這裡**：它是 herdr 自己的整合，用到 `UserPromptSubmit`、`Notification`、`SessionEnd` 等 Antigravity 沒有的事件，本安裝器不處理也不會動它。
-7. `fork_pr_guard` 不在本 repo（維護者自己的 hook），所以這裡不登記。
+7. `fork_pr_guard`、`route_guard` 不在本 repo（維護者自己的 hook），所以安裝器不會登記它們，`verify-install.py` 也不檢查。使用者自己在 `~/.gemini/config/hooks.json` 加的具名條目（例如 `fork-pr-guard`、`route-guard`）重裝時會保留：安裝器只動本 repo 那六個名稱（2026-11-19 在暫存目錄實測）。那些 hook 檔的內容與更新由它們自己的來源負責。
 
 ---
 

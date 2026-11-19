@@ -8,6 +8,30 @@
 
 ---
 
+## 2026-11-19
+
+### 安全修正
+
+- `fork` **Hermes 外掛改由本 repo 安裝，偵測程式和其他 agent 是同一份。** 原本的 Hermes 外掛是 2026-08-29 手寫的一份，`install.py` 不知道它存在，之後每一次加強都沒有進去。把其他 agent 會擋的指令餵給它，它放行五種：遠端腳本接 `sudo bash`、`irm ... | iex`、`bash <(curl ...)`、`--dangerously-skip-permissions`、`--dangerously-bypass-approvals-and-sandbox`。現在 `hooks/hermes-plugin/__init__.py` 只是轉接層：安裝時把 `danger_zone_guard.py` 與 `test_gate_guard.py`（Claude Code 版，原檔）複製到外掛資料夾，外掛匯入後直接呼叫 `inspect_command()` 與 `verdict()`。
+  - 舊外掛有、共用版沒有的拒絕（任何強推、`git reset --hard`、大範圍 `git clean`、破壞性 SQL）全部保留，接在共用檢查之後。重裝不會變弱。
+  - 不再只看工具名稱是不是 `terminal`：參數裡帶 `command`／`cmd`／`CommandLine` 的呼叫都會讀，字串或 argv 清單都可以。
+  - 共用檔缺少、載入失敗或檢查丟例外時，**擋下並說明原因**，不放行。
+  - 外掛資料夾裡若有 `fork_pr_guard.py`（提供 `inspect(command)`），也會一併呼叫。那支 guard 不在本 repo，安裝器不會建立也不會覆蓋它。
+- `fork` **Codex 版 `danger-zone-guard`、`test-gate-guard` 補上 `shell_command`、`local_shell`。** `install.py` 登記的 matcher 是 `exec|shell|exec_command|shell_command|Bash`，但這兩支自己的工具名單沒有 `shell_command`：hook 有被呼叫，卻回 `{}` 放行，連指令都沒讀。`danger-zone-guard` 另外修掉一個當機：指令是 argv 清單（`["bash", "-lc", "..."]`）時會丟 `TypeError`、以 exit 1 結束，Codex 不把它當成攔截。兩項都先在已安裝的檔案上重現，再寫成會失敗的測試。`codex-hooks-example.json` 的 matcher 同步補上 `shell_command`。
+
+### 新增
+
+- `fork` `install.py --agent hermes`：覆蓋前備份到 `<Hermes 家目錄>/backups/harness-guard-plugin/`，複製後用 `hooks/hermes-plugin/probe.py` 以 Hermes 的呼叫方式（`callback(tool_name=..., args=..., **ids)`）實際觸發已安裝的外掛，紅了就還原。**不寫 `config.yaml`**；外掛沒有列在 `plugins.enabled` 時只印警告。`--agent all` 在本機找得到 Hermes 家目錄時會一併安裝，找不到就跳過。
+- `fork` `verify-install.py --agent hermes`（`all` 也會跑）：比對四個檔與本 checkout 逐位元組相同、讀 `plugins.enabled`、跑同一支 probe。這證明已安裝的檔案判定正確，**不證明執行中的 Hermes 已載入**——Hermes 啟動時才讀外掛。
+- 安裝說明：[`docs/hermes-install.md`](docs/hermes-install.md)。
+
+### 修正
+
+- `fork` Hermes 家目錄的預設值改由家目錄推導（Windows 是 `~/AppData/Local/hermes`），不讀 `%LOCALAPPDATA%`；`tests/test_install.py` 在載入時移除繼承來的 `HERMES_HOME`。原因：測試把 `HOME`／`USERPROFILE` 指到暫存資料夾，但 `HERMES_HOME` 與 `LOCALAPPDATA` 不會跟著變。2026-11-19 開發這個功能時，測試裡的 `--agent all` 因此把外掛裝進維護者正在用的 Hermes（內容就是這一版，安裝器有先備份）。加了回歸測試。
+- 文件：`docs/antigravity-install.md` 原本寫 `fork_pr_guard` 不登記。實際情況是：本 repo 不提供那支 hook，但維護者自己在 `~/.gemini/config/hooks.json` 加的具名條目（`fork-pr-guard`、`route-guard`）重裝時會保留，已在暫存目錄實測。
+
+---
+
 ## 2026-11-09
 
 ### 安全修正

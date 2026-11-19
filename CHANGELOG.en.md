@@ -8,6 +8,30 @@ Entries marked `fork` are this fork's changes relative to
 
 ---
 
+## 2026-11-19
+
+### Security fixes
+
+- `fork` **The Hermes plugin is now installed from this repo and runs the same detection code as every other agent.** The previous Hermes plugin was written by hand on 2026-08-29. `install.py` did not know it existed, so none of the hardening since then reached it. Fed the commands the other agents block, it allowed five shapes: a remote script piped to `sudo bash`, `irm ... | iex`, `bash <(curl ...)`, `--dangerously-skip-permissions` and `--dangerously-bypass-approvals-and-sandbox`. `hooks/hermes-plugin/__init__.py` is now only an adapter: the installer copies `danger_zone_guard.py` and `test_gate_guard.py` (the Claude Code builds, unchanged) into the plugin folder, and the plugin imports them and calls `inspect_command()` and `verdict()`.
+  - Refusals the old plugin had and the shared guards do not (any force push, `git reset --hard`, broad `git clean`, destructive SQL) are all kept and run after the shared checks. A reinstall does not make it weaker.
+  - The tool being named `terminal` is no longer a condition: any call whose arguments carry `command`, `cmd` or `CommandLine` is read, as a string or an argv list.
+  - A missing shared file, a load failure or a check that raises **blocks the command and says why** instead of letting it through.
+  - A `fork_pr_guard.py` in the plugin folder (exposing `inspect(command)`) is called as well. That guard is not part of this repo; the installer neither creates nor overwrites it.
+- `fork` **The Codex builds of `danger-zone-guard` and `test-gate-guard` now accept `shell_command` and `local_shell`.** `install.py` registers the matcher `exec|shell|exec_command|shell_command|Bash`, but both builds' own tool lists left `shell_command` out: the hook ran, answered `{}` and never read the command. `danger-zone-guard` also crashed on a command given as an argv list (`["bash", "-lc", "..."]`): `TypeError`, exit 1, which Codex does not treat as a block. Both were reproduced against the installed files first and then written as failing tests. The matcher in `codex-hooks-example.json` gains `shell_command` to match.
+
+### Added
+
+- `fork` `install.py --agent hermes`: backs up to `<Hermes home>/backups/harness-guard-plugin/` before overwriting, then fires the installed plugin with `hooks/hermes-plugin/probe.py` the way Hermes calls it (`callback(tool_name=..., args=..., **ids)`) and puts the previous files back if the probe is red. **It does not write `config.yaml`**; when the plugin is not listed under `plugins.enabled` it only prints a warning. `--agent all` includes Hermes when a Hermes home is found on the machine and skips it otherwise.
+- `fork` `verify-install.py --agent hermes` (also part of `all`): compares the four files byte for byte with this checkout, reads `plugins.enabled`, and runs the same probe. This shows the installed files decide correctly. **It does not show that a running Hermes has loaded them** -- Hermes reads plugins when it starts.
+- Install notes: [`docs/hermes-install.en.md`](docs/hermes-install.en.md).
+
+### Fixed
+
+- `fork` The default Hermes home is now derived from the home directory (`~/AppData/Local/hermes` on Windows) instead of `%LOCALAPPDATA%`, and `tests/test_install.py` drops an inherited `HERMES_HOME` when it loads. The tests point `HOME` / `USERPROFILE` at a scratch folder, but `HERMES_HOME` and `LOCALAPPDATA` do not follow. While this feature was being developed on 2026-11-19, a test's `--agent all` installed the plugin into the maintainer's live Hermes for that reason (the content was this version, and the installer had backed up the previous files). A regression test covers it.
+- Docs: `docs/antigravity-install.en.md` said `fork_pr_guard` is not registered. What is true: this repo does not ship that hook, but named entries the maintainer added to `~/.gemini/config/hooks.json` (`fork-pr-guard`, `route-guard`) survive a reinstall; checked in a scratch directory.
+
+---
+
 ## 2026-11-09
 
 ### Security fixes

@@ -61,7 +61,9 @@ CONTINUATION = re.compile(r"(?:&&|(?<!\|)\|(?!\|)|\\)[ \t]*\n")
 CONTINUATION_PS = re.compile(r"(?:&&|(?<!\|)\|(?!\|)|`)[ \t]*\n")
 # Unknown shell: a line-ending continuation character is unambiguous either way.
 CONTINUATION_ANY = re.compile(r"(?:&&|(?<!\|)\|(?!\|)|\\|`)[ \t]*\n")
-SHELL_TOOLS = ("Bash", "shell", "exec", "exec_command")
+# Every name install.py's Codex matcher (`exec|shell|exec_command|shell_command|Bash`)
+# lets through has to be here; `shell_command` was missing until 2026-11-19.
+SHELL_TOOLS = ("Bash", "shell", "exec", "exec_command", "shell_command", "local_shell")
 
 MESSAGE = (
     "TEST GATE: the test command `{test}` and `{git}` are joined with `;` or a "

@@ -21,6 +21,15 @@ exits 2 and names the holder; every decision is appended to
 Register it like the others, with matcher `Edit|Write|MultiEdit|NotebookEdit`:
 `python "C:\Users\<you>\...\harness-guard\hooks\checkout-guard\claude-code\checkout_guard.py"`.
 
+`hermes-plugin/` (added by this fork) is not a sixth guard. It is the adapter that lets Hermes run two of the
+existing ones: Hermes calls a plugin in-process (`pre_tool_call(tool_name=..., args=...)`, veto with
+`{"action": "block", "message": ...}`), so `install.py --agent hermes` copies `__init__.py`, `plugin.yaml` and the
+Claude Code builds of `danger_zone_guard.py` and `test_gate_guard.py` into `<hermes home>/plugins/harness-guard/`,
+and the adapter imports those two files instead of rewriting their patterns. This is the one place a hook file is
+imported by another file; it works because the files sit in the same plugin folder and are loaded by path.
+`probe.py` fires an installed plugin the way Hermes does and is what the installer, the verifier and
+`tests/test_hermes_plugin.py` all use. See [`docs/hermes-install.en.md`](../docs/hermes-install.en.md).
+
 `anti-doom-loop-guard/` (also added by this fork, optional, not one of the five) blocks the same
 Bash or Read call issued three times in a row with no other tool call in between. It is **one self-contained
 file for all four agents**, `claude-code/anti_doom_loop_guard.py`: hooks are installed flat and may not import

@@ -62,8 +62,9 @@ They are optional workflows, not required dependencies of the five guardrail hoo
 | **OpenAI Codex** | all five hooks; Windows uses Python builds and absolute interpreter paths; optional `anti-doom-loop-guard` (`PreToolUse`, shell commands only) | `~/.agents/skills/` | `install.py --agent codex` |
 | **Google Antigravity / Gemini** | the five hooks plus the optional `anti-doom-loop-guard`, each registered as a named hook in `hooks.json`: `PreToolUse` can deny, `Stop` can refuse the stop with `continue`; claim-guard's check works by reading the transcript, whose format the official docs do not describe (see [`docs/antigravity-install.en.md`](docs/antigravity-install.en.md)) | skills + `GEMINI.md` templates | `install.py --agent antigravity` installs skills; `--hooks <name>` installs hooks |
 | **Cursor** | all five hooks, written to `~/.cursor/hooks.json` in Cursor's flat format; optional `anti-doom-loop-guard` (`preToolUse`) | `~/.cursor/skills/`; also merged into `~/.agents/skills/` when that directory already exists | `install.py --agent cursor` |
+| **Hermes** | as a plugin (`pre_tool_call`): `danger-zone-guard` + `test-gate-guard`, the same detection code the other agents run; the other hooks do not apply (see [`docs/hermes-install.en.md`](docs/hermes-install.en.md)) | not installed | `install.py --agent hermes` |
 
-Accordingly, `--agent all` currently means **Claude Code + Antigravity + Cursor + Codex**. Cursor's `stop` event cannot veto a finished turn, so claim-guard and lint-gate follow up there instead of blocking.
+Accordingly, `--agent all` currently means **Claude Code + Antigravity + Cursor + Codex**, plus Hermes when a Hermes home is found on the machine. Cursor's `stop` event cannot veto a finished turn, so claim-guard and lint-gate follow up there instead of blocking.
 
 ## Quick start
 

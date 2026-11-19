@@ -1,0 +1,6 @@
+name: harness-guard
+version: 1.1.0
+description: Hermes adapter for the harness-guard command guards (danger-zone-guard, test-gate-guard)
+author: SanHsien
+provides_hooks:
+  - pre_tool_call

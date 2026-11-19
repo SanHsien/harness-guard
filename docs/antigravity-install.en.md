@@ -97,7 +97,7 @@ In `~/.gemini/config/hooks.json` the **top-level key is the hook's name** with i
 4. Apart from `run_command.CommandLine`, the tool argument names (`TargetFile`, `CodeContent`, `ReplacementContent`, `ReplacementChunks`) are not listed in the official hooks reference; they follow what this repo's `no-emoji-guard` already did for Antigravity, so trust a real run.
 5. The official reference does not list `view_file`'s argument names; `anti-doom-loop-guard` uses the whole argument object as its signature and depends on no particular name.
 6. **herdr's `herdr-agent-state.ps1` is not covered**: it is herdr's own integration and uses events Antigravity does not have (`UserPromptSubmit`, `Notification`, `SessionEnd`, ...). This installer neither handles nor touches it.
-7. `fork_pr_guard` is not in this repo (it is the maintainer's own hook), so nothing registers it here.
+7. `fork_pr_guard` and `route_guard` are not in this repo (they are the maintainer's own hooks), so the installer does not register them and `verify-install.py` does not check them. Named entries a user added to `~/.gemini/config/hooks.json` (for example `fork-pr-guard`, `route-guard`) survive a reinstall: the installer only touches this repo's six names (checked in a scratch directory on 2026-11-19). The content and updates of those hook files belong to wherever they come from.
 
 ---
 

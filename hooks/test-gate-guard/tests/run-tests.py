@@ -140,10 +140,43 @@ def main():
             "shell",
             lambda p: '"block"' in p.stdout,
         )
+    if CODEX_HOOK.exists():
+        total += check_codex_tool_names()
     total += check_cursor_payload()
     total += check_redos()
     print("total failures:", total)
     return 1 if total else 0
+
+
+def check_codex_tool_names():
+    """Every tool name the installer's Codex matcher lets through must be read.
+
+    `shell_command` is in the matcher install.py registers, and was missing from
+    the Codex build's own list -- so the hook ran and answered "allow" unread.
+    """
+    print("-- Codex build: tool names from the matcher (%s)" % CODEX_HOOK.name)
+    failures = 0
+    red = "pytest; git commit -m x"
+    green = "pytest && git commit -m x"
+    for tool in ("exec", "shell", "exec_command", "shell_command", "local_shell", "Bash"):
+        for key in ("command", "cmd"):
+            for command, should_block in ((red, True), (green, False)):
+                payload = json.dumps({"tool_name": tool, "tool_input": {key: command}})
+                proc = subprocess.run(
+                    [sys.executable, str(CODEX_HOOK)], input=payload, capture_output=True, text=True,
+                )
+                blocked = '"block"' in proc.stdout
+                ok = blocked == should_block and proc.returncode == 0
+                failures += not ok
+                print("%s expected=%-5s got=%-5s %s/%s" % (
+                    "PASS" if ok else "FAIL", should_block, blocked, tool, key))
+    payload = json.dumps({"tool_name": "shell", "tool_input": {"command": ["bash", "-lc", red]}})
+    proc = subprocess.run([sys.executable, str(CODEX_HOOK)], input=payload, capture_output=True, text=True)
+    ok = '"block"' in proc.stdout
+    failures += not ok
+    print("%s argv list is read" % ("PASS" if ok else "FAIL"))
+    print("failures: %d\n" % failures)
+    return failures
 
 
 def check_powershell_paths():

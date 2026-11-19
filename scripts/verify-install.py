@@ -1433,12 +1433,54 @@ def check_installed_copies(agents):
                     " -- reinstall with scripts/install.py") if differing else "")
 
 
+def check_hermes():
+    """The Hermes plugin: this checkout's files, enabled, and blocking when fired.
+
+    Hermes calls a plugin in-process, so there is no stdin payload to send. The
+    probe loads the installed plugin, registers it through a stand-in context
+    and calls the `pre_tool_call` callback with the keyword arguments Hermes
+    uses. That shows the installed files decide correctly; it does not show
+    that a running Hermes has loaded them -- it reads plugins at start.
+    """
+    installer = load_installer()
+    repo = Path(__file__).resolve().parent.parent
+    hermes_dir = Path(installer.default_hermes_dir())
+    plugin_dir = hermes_dir / "plugins" / installer.HERMES_PLUGIN_NAME
+    if not plugin_dir.is_dir():
+        return
+    section("Hermes plugin (%s)" % plugin_dir)
+    differing = []
+    for name, relative in installer.HERMES_PLUGIN_FILES:
+        installed = plugin_dir / name
+        ours = (repo / relative).read_bytes().replace(b"\r\n", b"\n")
+        if not installed.exists() or installed.read_bytes().replace(b"\r\n", b"\n") != ours:
+            differing.append(name)
+    record(not differing,
+           "Hermes plugin files are this checkout's copies (%d compared)" % len(installer.HERMES_PLUGIN_FILES),
+           ("differ or missing: " + ", ".join(differing) +
+            " -- reinstall with scripts/install.py --agent hermes") if differing else "")
+    enabled = installer.hermes_plugin_enabled(hermes_dir)
+    if enabled is None:
+        note("Hermes plugins.enabled could not be read from config.yaml")
+    else:
+        record(enabled, "Hermes config lists %s under plugins.enabled" % installer.HERMES_PLUGIN_NAME,
+               "" if enabled else "the files are installed but Hermes will not load them")
+    ok, summary = installer.run_hermes_probe(plugin_dir)
+    record(ok, "Hermes plugin blocks and allows what it should (in-process probe)",
+           "" if ok else summary.replace("\n", " | "))
+    if (plugin_dir / "fork_pr_guard.py").exists():
+        note("Hermes fork_pr_guard.py drop-in present (not part of this kit; fired by the probe)")
+    else:
+        note("Hermes fork_pr_guard.py drop-in not present")
+    note("Hermes reads plugins at start: a running gateway keeps the old files until it restarts")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--agent",
         default="all",
-        choices=["claude", "antigravity", "cursor", "codex", "all"],
+        choices=["claude", "antigravity", "cursor", "codex", "hermes", "all"],
     )
     parser.add_argument(
         "--hook-tests-timeout",
@@ -1478,10 +1520,13 @@ def main():
         check_cursor_live_fire()
     if _args.agent in ("codex", "all"):
         check_codex_live_fire()
+    if _args.agent in ("hermes", "all"):
+        check_hermes()
 
-    section("Installed copies (each agent's hooks match this checkout)")
-    check_installed_copies(
-        ["claude", "antigravity", "cursor", "codex"] if _args.agent == "all" else [_args.agent])
+    if _args.agent != "hermes":
+        section("Installed copies (each agent's hooks match this checkout)")
+        check_installed_copies(
+            ["claude", "antigravity", "cursor", "codex"] if _args.agent == "all" else [_args.agent])
 
     failed = [r for r in results if not r[0]]
     section("Result")

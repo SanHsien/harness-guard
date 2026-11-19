@@ -62,8 +62,9 @@ python scripts/install.py --agent codex --hooks anti-doom-loop-guard
 | **OpenAI Codex** | 5 個 hook；Windows 用 Python 版並寫入絕對路徑；另可選裝 `anti-doom-loop-guard`（`PreToolUse`，只計 shell 指令） | `~/.agents/skills/` | `install.py --agent codex` |
 | **Google Antigravity / Gemini** | 5 個 hook 加選裝的 `anti-doom-loop-guard`，各自登記為 `hooks.json` 裡的具名 hook：`PreToolUse` 可否決、`Stop` 可用 `continue` 擋下結束；`claim-guard` 查驗端靠讀 transcript，格式官方未文件化（見 [`docs/antigravity-install.md`](docs/antigravity-install.md)） | skills + `GEMINI.md` 範本 | `install.py --agent antigravity` 安裝 skills；`--hooks <名稱>` 安裝 hook |
 | **Cursor** | 5 個 hook，寫入 `~/.cursor/hooks.json`（Cursor 扁平格式）；另可選裝 `anti-doom-loop-guard`（`preToolUse`） | `~/.cursor/skills/`；若本機已有 `~/.agents/skills/` 也會一併合併 | `install.py --agent cursor` |
+| **Hermes** | 外掛形式（`pre_tool_call`）：`danger-zone-guard` + `test-gate-guard`，與其他 agent 同一份偵測程式；其餘 hook 不適用（見 [`docs/hermes-install.md`](docs/hermes-install.md)） | 不安裝 | `install.py --agent hermes` |
 
-因此 `--agent all` 目前代表 **Claude Code + Antigravity + Cursor + Codex**。Cursor 的 `stop` 不能否決已結束的回合，所以 claim-guard / lint-gate 在 Cursor 上改為 follow-up，不是 veto。
+因此 `--agent all` 目前代表 **Claude Code + Antigravity + Cursor + Codex**，本機找得到 Hermes 家目錄時再加上 Hermes。Cursor 的 `stop` 不能否決已結束的回合，所以 claim-guard / lint-gate 在 Cursor 上改為 follow-up，不是 veto。
 
 ## 快速開始
 

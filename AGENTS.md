@@ -29,8 +29,9 @@ Harness Guard 是 cross-agent AI coding guardrails kit。核心產品是：
 | Google Antigravity / Gemini | `install.py --agent antigravity` 可安裝 skills；`--hooks <名稱>[,<名稱>...]`（6 個 hook 都有登記）各自以具名 hook 合併進 `~/.gemini/config/hooks.json`；另有 `GEMINI.md` 範本 |
 | OpenAI Codex | `install.py --agent codex` 合併進 `~/.codex/hooks.json`，skills 寫入 `~/.agents/skills/`（Windows 用 Python 版與絕對路徑） |
 | Cursor | `install.py --agent cursor` 寫入 `~/.cursor/hooks.json`（扁平格式）與 `~/.cursor/hooks/` |
+| Hermes | `install.py --agent hermes` 把外掛轉接層與 `danger_zone_guard.py`、`test_gate_guard.py` 複製到 `<Hermes 家目錄>/plugins/harness-guard/`，裝完用 probe 實際觸發、紅了還原；不寫 `config.yaml`。只涵蓋這兩支，其餘 hook 不適用 |
 
-`--agent all` 目前走 Claude Code + Antigravity + Cursor + Codex。Cursor 的 `stop` 不能否決已結束的回合；claim-guard 與 lint-gate 在那裡改為 follow-up。
+`--agent all` 目前走 Claude Code + Antigravity + Cursor + Codex，本機找得到 Hermes 家目錄時再加 Hermes。Cursor 的 `stop` 不能否決已結束的回合；claim-guard 與 lint-gate 在那裡改為 follow-up。
 
 ## 協助一般使用者安裝時
 
@@ -216,6 +217,7 @@ python -m unittest discover -s tests -p "test_*.py"
 - 改 Windows 行為要由 Windows CI 或實機驗證；不要用單一平台結果代替跨平台結論。
 - 改安裝器時優先測 dry-run、merge、不覆蓋與重跑冪等性。
 - 改 hook 行為要補能重現該案例的 regression test。
+- **測試不得碰到真實的 agent 家目錄。** 把 `HOME`／`USERPROFILE` 指到暫存資料夾不夠：`CODEX_HOME`、`HERMES_HOME`、`LOCALAPPDATA` 不會跟著變。新增一個 agent target 時，先確認它的預設路徑會跟著 `HOME` 走，並在測試裡移除會直接指向真實位置的環境變數（2026-11-19 測試曾因此裝進真實的 Hermes）。
 - **測試用的 payload 要貼近真實**。合成 payload 少一個欄位，就可能讓整組測試對真實情境失效——
   Cursor 支援誤判 Claude Code 那次，就是因為測試 payload 沒有 `hook_event_name`。
 - **不要用單一欄位是否存在來判斷呼叫端是哪個 agent**；用該 agent 專有的欄位或事件名。
@@ -226,6 +228,7 @@ python -m unittest discover -s tests -p "test_*.py"
 - `docs/windows-install*.md`：Windows 安裝與失敗模式。
 - `docs/cursor-install*.md`：Cursor `hooks.json` 格式、事件對照，以及 `stop` 只能 follow-up 的限制。
 - `docs/antigravity-install*.md`：Antigravity / Gemini 安裝。
+- `docs/hermes-install*.md`：Hermes 外掛的安裝、失敗時的行為與限制。
 - `FORK.md`：fork 差異與上游同步。
 - `NOTICE`：attribution。
 - `CHANGELOG.md` / `CHANGELOG.en.md`：實際行為、相容性、安裝契約或 release-relevant 變更。

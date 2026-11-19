@@ -11,6 +11,13 @@ from unittest.mock import patch
 
 from scripts import install as installer_module
 
+# Every subprocess below starts from a copy of os.environ with HOME / USERPROFILE
+# pointed at a scratch folder. HERMES_HOME names the real Hermes home outright and
+# does not follow that redirect: with it set, `--agent all` installed the plugin
+# into the maintainer's live Hermes during a test run (2026-11-19). Dropped once,
+# here, so no test can inherit it.
+os.environ.pop("HERMES_HOME", None)
+
 
 REPO = Path(__file__).resolve().parent.parent
 INSTALLER = REPO / "scripts" / "install.py"
@@ -27,6 +34,41 @@ class HookCopyTests(unittest.TestCase):
             installer_module.copy_hook_file(source, target)
 
             self.assertNotIn(b"\r\n", target.read_bytes())
+
+
+class HermesIsolationTests(unittest.TestCase):
+    """`--agent all` must not reach a Hermes home the test did not point it at."""
+
+    def test_all_agents_install_leaves_an_unrelated_hermes_home_alone(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            home.mkdir()
+            decoy = Path(tmp) / "real-hermes"
+            (decoy / "plugins").mkdir(parents=True)
+            env = dict(os.environ)
+            env["HOME"] = str(home)
+            env["USERPROFILE"] = str(home)
+            env["CLAUDE_CONFIG_DIR"] = str(home / ".claude")
+            env.pop("CODEX_HOME", None)
+            # What a real machine has, and what the redirect above does not move.
+            env["LOCALAPPDATA"] = str(decoy.parent / "localappdata")
+            (Path(env["LOCALAPPDATA"]) / "hermes" / "plugins").mkdir(parents=True)
+            proc = subprocess.run(
+                [sys.executable, str(INSTALLER), "--agent", "all",
+                 "--hooks", "danger-zone-guard", "--skills", "none"],
+                cwd=str(REPO), env=env, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=300,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertEqual(list((Path(env["LOCALAPPDATA"]) / "hermes" / "plugins").iterdir()), [])
+            self.assertIn("skipped  : no Hermes home", proc.stdout)
+
+    def test_hermes_home_variable_is_honoured_when_given(self):
+        with patch.dict(os.environ, {"HERMES_HOME": "X:/somewhere/hermes"}):
+            self.assertEqual(installer_module.default_hermes_dir(), "X:/somewhere/hermes")
+
+    def test_this_module_does_not_inherit_hermes_home(self):
+        self.assertNotIn("HERMES_HOME", os.environ)
 
 
 class InstallDryRunTests(unittest.TestCase):
