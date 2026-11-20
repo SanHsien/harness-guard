@@ -84,3 +84,17 @@ same origin.
 
     Source: https://github.com/awesome-skills/first-principles-skill
     License: MIT License
+
+
+7. skills/verification-protocol/references/observable-checks.md
+    (and section 6 of skills/verification-protocol/SKILL.md)
+-----------------------------------------------------------------
+The five rules about results a person can see (declare checks and the evidence
+each needs, a green test run is not a look at the output, a run that could not
+fail proves nothing, a screenshot counts only once opened, measure a changed
+value to prove the running code is current) are adapted from the acceptance
+skill in lobehub/acceptance (reviewed at commit 5e9115d). Only the ideas were
+taken; the wording and every example are rewritten.
+
+    Source: https://github.com/lobehub/acceptance
+    License: Apache License 2.0

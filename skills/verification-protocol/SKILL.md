@@ -74,6 +74,21 @@ Then read the verdict:
   `governance_fallback: "builtin"`; a degraded run must be reported as degraded.
 - A check marked "not run" is not a pass, whatever else the report says.
 
+## 6. 使用者看得到的結果：綠燈之外還要親眼看過
+
+改到畫面、指令輸出、報告裡的數字或事實這類會被人直接看到的結果時，第 1 至 5 節照做，
+另外加上這五條。反例、正例與檢查項範本在
+[`references/observable-checks.md`](references/observable-checks.md)。
+
+1. 動工前先列檢查項，每項寫明要哪一類證據（截圖、錄影、指令原始輸出、實際資料）；缺一類就不算過。
+2. 測試、lint、建置綠燈是必要條件，不能代替打開實際產出看過。
+3. 不可能失敗的執行不算證明：先在同樣前提下看到它失敗，再看到它通過。
+4. 截圖要實際打開看內容，檔案存在或有圖說都不算；截圖前後跑
+   `python C:\GitHub\agent-safety-checks\tools\screen_privacy.py`。
+5. 量一個改過的值，證明正在跑的是工作目錄裡的程式，不是舊行程、快取或舊的安裝副本。
+
+推算、湊數或只看過一個樣本得到的結論，照實寫「推算」「只驗一個樣本」或「未驗證」，不寫成事實。
+
 ## The loop
 
 1. Finish the change.

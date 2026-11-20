@@ -10,6 +10,10 @@ Entries marked `fork` are this fork's changes relative to
 
 ## 2026-11-20
 
+### Added
+
+- `fork` **`verification-protocol` gains section 6, "results a person can see".** When a change touches something people look at directly (a screen, command output, numbers or facts in a report), five more things are required: list the checks first and name the kind of evidence each one needs; a green test run does not replace opening the output and looking; a run that could not have failed proves nothing; a screenshot counts only after someone actually opens it (with `screen_privacy.py` from `agent-safety-checks` run before and after capture); and measure one changed value to prove the running code is the working tree's. SKILL.md grows by 15 lines; counter-examples, examples and a check-list template live in the new `references/observable-checks.md` (written in Traditional Chinese). No existing step was removed or relaxed. The rules are adapted from [lobehub/acceptance](https://github.com/lobehub/acceptance) (Apache-2.0); the source is credited in that file and in `NOTICE`.
+
 ### Changed
 
 - `fork` **`--agent all` no longer creates `~/.cursor` on a machine without Cursor.** `all` used to install Cursor unconditionally, so after Cursor was removed from a machine every reinstall wrote the hooks back into the leftover folder. It now installs only when `~/.cursor` (or `--cursor-dir`) already exists and prints `skipped` otherwise; pass `--agent cursor` to install on a machine that has no such folder. Cursor support itself is unchanged.

@@ -10,6 +10,10 @@
 
 ## 2026-11-20
 
+### 新增
+
+- `fork` **`verification-protocol` 加第 6 節「使用者看得到的結果」。** 改到畫面、指令輸出、報告數字這類會被人直接看到的結果時，另外要求五件事：先列檢查項並宣告各自的證據類型、測試綠燈不能代替打開看過、不可能失敗的執行不算證明、截圖要實際打開看（截圖前後跑 `agent-safety-checks` 的 `screen_privacy.py`）、量一個改過的值證明跑的是工作目錄裡的程式。SKILL.md 只加 15 行，反例、正例與檢查項範本放在新檔 `references/observable-checks.md`。既有步驟都沒刪、沒放寬。規則的想法改寫自 [lobehub/acceptance](https://github.com/lobehub/acceptance)（Apache-2.0），出處記在該檔與 `NOTICE`。
+
 ### 變更
 
 - `fork` **`--agent all` 在沒有 Cursor 的機器上不再建立 `~/.cursor`。** 原本 `all` 一律安裝 Cursor，機器上已移除 Cursor 之後，每次重裝還是會把 hook 寫回那個殘留目錄。現在只有 `~/.cursor`（或 `--cursor-dir`）已存在時才安裝，否則印出 skipped；要在沒有該目錄的機器上安裝，明確指定 `--agent cursor`。Cursor 的支援本身沒有移除。
