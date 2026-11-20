@@ -33,8 +33,9 @@ What it does:
      Without an explicit --hooks, Antigravity gets skills only. The installer
      refuses to write while the file still holds a Claude Code layout top-level
      "hooks" block: Antigravity rejects such a file as a whole.
-  8. `--agent all` is Claude Code + Antigravity + Cursor + Codex, plus Hermes
-     when a Hermes home with a `plugins` folder is found on this machine.
+  8. `--agent all` is Claude Code + Antigravity + Codex, plus Cursor when its
+     folder (~/.cursor, or --cursor-dir) already exists, plus Hermes when a
+     Hermes home with a `plugins` folder is found on this machine.
   9. `--agent hermes` copies the plugin adapter and the two shared guard files
      into <hermes home>/plugins/harness-guard/ (backup first), then fires the
      installed plugin with hooks/hermes-plugin/probe.py; a red probe puts the
@@ -1614,10 +1615,14 @@ def main():
         rc = install_for_antigravity(args)
         if rc != 0:
             return rc
-    if args.agent in ("cursor", "all"):
+    if args.agent == "cursor" or (args.agent == "all" and Path(args.cursor_dir).is_dir()):
         rc = install_for_cursor(args)
         if rc != 0:
             return rc
+    elif args.agent == "all":
+        # A machine without Cursor has no ~/.cursor; `all` must not create one.
+        print("\n=== Cursor Installation ===")
+        print("skipped  : no Cursor folder at %s (use --agent cursor to install anyway)" % args.cursor_dir)
     if args.agent in ("codex", "all"):
         rc = install_for_codex(args)
         if rc != 0:

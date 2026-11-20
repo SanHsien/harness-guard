@@ -64,7 +64,7 @@ They are optional workflows, not required dependencies of the five guardrail hoo
 | **Cursor** | all five hooks, written to `~/.cursor/hooks.json` in Cursor's flat format; optional `anti-doom-loop-guard` (`preToolUse`) | `~/.cursor/skills/`; also merged into `~/.agents/skills/` when that directory already exists | `install.py --agent cursor` |
 | **Hermes** | as a plugin (`pre_tool_call`): `danger-zone-guard` + `test-gate-guard`, the same detection code the other agents run; the other hooks do not apply (see [`docs/hermes-install.en.md`](docs/hermes-install.en.md)) | not installed | `install.py --agent hermes` |
 
-Accordingly, `--agent all` currently means **Claude Code + Antigravity + Cursor + Codex**, plus Hermes when a Hermes home is found on the machine. Cursor's `stop` event cannot veto a finished turn, so claim-guard and lint-gate follow up there instead of blocking.
+Accordingly, `--agent all` currently means **Claude Code + Antigravity + Codex**, plus Cursor when `~/.cursor` already exists (otherwise it is skipped and not created), plus Hermes when a Hermes home is found on the machine. Cursor's `stop` event cannot veto a finished turn, so claim-guard and lint-gate follow up there instead of blocking.
 
 ## Quick start
 

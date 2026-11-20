@@ -1165,6 +1165,8 @@ class AntiDoomLoopGuardVerifierTests(unittest.TestCase):
         return env
 
     def _install(self, home, env):
+        # `all` only reaches Cursor on a machine that already has its folder.
+        (home / ".cursor").mkdir(exist_ok=True)
         proc = subprocess.run(
             [sys.executable, str(INSTALLER), "--agent", "all", "--hooks", HOOK_NAME, "--skills", "none"],
             cwd=str(REPO), env=env, capture_output=True, text=True,
@@ -1178,6 +1180,26 @@ class AntiDoomLoopGuardVerifierTests(unittest.TestCase):
             cwd=str(REPO), env=env, capture_output=True, text=True,
             encoding="utf-8", errors="replace", timeout=120,
         )
+
+    def test_all_does_not_create_a_cursor_folder_on_a_machine_without_cursor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            env = self._env(home)
+            proc = subprocess.run(
+                [sys.executable, str(INSTALLER), "--agent", "all", "--hooks", HOOK_NAME, "--skills", "none"],
+                cwd=str(REPO), env=env, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=60,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertFalse((home / ".cursor").exists())
+            self.assertIn("skipped  : no Cursor folder", proc.stdout)
+            explicit = subprocess.run(
+                [sys.executable, str(INSTALLER), "--agent", "cursor", "--hooks", HOOK_NAME, "--skills", "none"],
+                cwd=str(REPO), env=env, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=60,
+            )
+            self.assertEqual(explicit.returncode, 0, explicit.stdout + explicit.stderr)
+            self.assertTrue((home / ".cursor" / "hooks.json").exists())
 
     def test_every_agent_is_live_fired(self):
         with tempfile.TemporaryDirectory() as tmp:

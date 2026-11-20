@@ -31,7 +31,7 @@ Harness Guard 是 cross-agent AI coding guardrails kit。核心產品是：
 | Cursor | `install.py --agent cursor` 寫入 `~/.cursor/hooks.json`（扁平格式）與 `~/.cursor/hooks/` |
 | Hermes | `install.py --agent hermes` 把外掛轉接層與 `danger_zone_guard.py`、`test_gate_guard.py` 複製到 `<Hermes 家目錄>/plugins/harness-guard/`，裝完用 probe 實際觸發、紅了還原；不寫 `config.yaml`。只涵蓋這兩支，其餘 hook 不適用 |
 
-`--agent all` 目前走 Claude Code + Antigravity + Cursor + Codex，本機找得到 Hermes 家目錄時再加 Hermes。Cursor 的 `stop` 不能否決已結束的回合；claim-guard 與 lint-gate 在那裡改為 follow-up。
+`--agent all` 目前走 Claude Code + Antigravity + Codex；本機已有 `~/.cursor` 時再加 Cursor（沒有就跳過、不建立），找得到 Hermes 家目錄時再加 Hermes。Cursor 的 `stop` 不能否決已結束的回合；claim-guard 與 lint-gate 在那裡改為 follow-up。
 
 ## 協助一般使用者安裝時
 

@@ -8,6 +8,12 @@ Entries marked `fork` are this fork's changes relative to
 
 ---
 
+## 2026-11-20
+
+### Changed
+
+- `fork` **`--agent all` no longer creates `~/.cursor` on a machine without Cursor.** `all` used to install Cursor unconditionally, so after Cursor was removed from a machine every reinstall wrote the hooks back into the leftover folder. It now installs only when `~/.cursor` (or `--cursor-dir`) already exists and prints `skipped` otherwise; pass `--agent cursor` to install on a machine that has no such folder. Cursor support itself is unchanged.
+
 ## 2026-11-19
 
 ### Security fixes

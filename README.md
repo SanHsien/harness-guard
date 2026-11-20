@@ -64,7 +64,7 @@ python scripts/install.py --agent codex --hooks anti-doom-loop-guard
 | **Cursor** | 5 個 hook，寫入 `~/.cursor/hooks.json`（Cursor 扁平格式）；另可選裝 `anti-doom-loop-guard`（`preToolUse`） | `~/.cursor/skills/`；若本機已有 `~/.agents/skills/` 也會一併合併 | `install.py --agent cursor` |
 | **Hermes** | 外掛形式（`pre_tool_call`）：`danger-zone-guard` + `test-gate-guard`，與其他 agent 同一份偵測程式；其餘 hook 不適用（見 [`docs/hermes-install.md`](docs/hermes-install.md)） | 不安裝 | `install.py --agent hermes` |
 
-因此 `--agent all` 目前代表 **Claude Code + Antigravity + Cursor + Codex**，本機找得到 Hermes 家目錄時再加上 Hermes。Cursor 的 `stop` 不能否決已結束的回合，所以 claim-guard / lint-gate 在 Cursor 上改為 follow-up，不是 veto。
+因此 `--agent all` 目前代表 **Claude Code + Antigravity + Codex**；本機已有 `~/.cursor` 時再加上 Cursor（沒有就跳過、不建立），找得到 Hermes 家目錄時再加上 Hermes。Cursor 的 `stop` 不能否決已結束的回合，所以 claim-guard / lint-gate 在 Cursor 上改為 follow-up，不是 veto。
 
 ## 快速開始
 

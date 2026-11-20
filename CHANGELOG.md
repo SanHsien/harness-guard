@@ -8,6 +8,12 @@
 
 ---
 
+## 2026-11-20
+
+### 變更
+
+- `fork` **`--agent all` 在沒有 Cursor 的機器上不再建立 `~/.cursor`。** 原本 `all` 一律安裝 Cursor，機器上已移除 Cursor 之後，每次重裝還是會把 hook 寫回那個殘留目錄。現在只有 `~/.cursor`（或 `--cursor-dir`）已存在時才安裝，否則印出 skipped；要在沒有該目錄的機器上安裝，明確指定 `--agent cursor`。Cursor 的支援本身沒有移除。
+
 ## 2026-11-19
 
 ### 安全修正
