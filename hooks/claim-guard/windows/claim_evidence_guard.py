@@ -28,6 +28,15 @@ version: no `jq` on Windows, and a bare `bash` resolves to WSL).
 
 Both hooks in this pair must be installed together.
 
+Subagents (SubagentStop event; Claude Code, and Codex where it fires). A
+subagent's tool calls are in a ledger of its own, `<session>.<agent_id>.*`, as
+well as in the parent's (see claim_ledger_tracker.py). When the subagent stops,
+its report -- the SubagentHandback message if it used that tool, plus its last
+message -- is reconciled with that ledger alone, by the same trigger words. A
+mismatch is a notice the user sees, never a block: see SUBAGENT_NOTICE for the
+measurement. Only the subagent's own ledger is removed here; the parent's is
+never read or touched, so the parent's Stop check is exactly what it was.
+
 Antigravity (Stop event). Its Stop payload names the conversation and a
 `transcriptPath`, but carries no assistant message, so the last model message
 is read from the transcript file. The official hooks reference does not
@@ -49,6 +58,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import tomllib
 from pathlib import Path
 
@@ -178,6 +188,75 @@ def test_tier_notice(last, verify_ledger, test_ledger, edit_ledger):
     if edited_since_verify(test_ledger, edit_ledger):
         return STALE_TEST_NOTICE % (last_line(test_ledger), last_line(edit_ledger))
     return None
+
+
+# -- subagents -----------------------------------------------------------------
+#
+# A subagent's report is checked against the subagent's own ledger when it stops.
+# Every finding is a notice, never a block. Replayed against 1058 local subagent
+# runs on 2026-11-21 before this was written: 26 were flagged (2.5%), and of the
+# 17 the parent rules would have blocked none was a real miss -- "confirmed" as a
+# review category ("confirmed 3, needs_validation 2"), the review report written
+# after the last check, an error message quoted with 找不到 in it, a web lookup
+# worded as "verified against the docs". A block would have cost a subagent turn
+# each time for nothing; the notice names the missing evidence and leaves the
+# judgement to whoever reads the report.
+SUBAGENT_NOTICE = "CLAIM-EVIDENCE GUARD (subagent notice): subagent %s "
+
+SUB_NO_VERIFY = (
+    "reported 'verified / tests pass / confirmed', but its own ledger has no verification "
+    "command (test, build, status, diff, live run).\n"
+    "Missing evidence: any verification command run by that subagent. Treat the report as "
+    "not yet verified until someone checks it."
+)
+SUB_STALE = (
+    "reported 'verified / tests pass / confirmed', but it edited files after its last verification "
+    "command, so that run did not cover what it handed back.\n"
+    "  Last verification: %s\n  Later edit: %s\n"
+    "Missing evidence: a verification run after that edit."
+)
+SUB_NO_TEST = (
+    "said tests or a build pass, but its own ledger has no test or build command -- only status "
+    "queries such as git status, ls or Test-Path.\n"
+    "  Last verification: %s\n"
+    "Missing evidence: a test or build run by that subagent."
+)
+SUB_STALE_TEST = (
+    "said tests or a build pass, but it edited files after its last test or build run.\n"
+    "  Last test run: %s\n  Later edit: %s\n"
+    "Missing evidence: a test or build run after that edit."
+)
+SUB_NO_SEARCH = (
+    "asserted something 'does not exist / cannot be found', but its own ledger has no search "
+    "(Grep/Glob/find/ls/Select-String/WebSearch).\n"
+    "Missing evidence: a search by that subagent."
+)
+
+SUBAGENT_LEDGER_KINDS = ("verify", "search", "edit", "test")
+# A subagent ledger nobody collected (no SubagentStop registered, or the subagent
+# was killed) is removed by its own session once it has been idle this long.
+ORPHAN_SECONDS = 24 * 3600
+AGENT_LEDGER_TAIL = re.compile(r"[A-Za-z0-9_-]+\.(?:verify|search|edit|test|report)")
+
+
+def subagent_findings(text, who, verify_ledger, search_ledger, edit_ledger, test_ledger):
+    """What `text` claims that the subagent's own ledger does not back, as notices."""
+    last = NOT_A_CLAIM.sub(" ", text)
+    prefix = SUBAGENT_NOTICE % who
+    found = []
+    if VERIFY_TRIGGERS.search(last):
+        if not has_records(verify_ledger):
+            found.append(prefix + SUB_NO_VERIFY)
+        elif edited_since_verify(verify_ledger, edit_ledger):
+            found.append(prefix + SUB_STALE % (last_line(verify_ledger), last_line(edit_ledger)))
+        elif is_test_claim(last):
+            if not has_records(test_ledger):
+                found.append(prefix + SUB_NO_TEST % (last_line(verify_ledger) or "(none)"))
+            elif edited_since_verify(test_ledger, edit_ledger):
+                found.append(prefix + SUB_STALE_TEST % (last_line(test_ledger), last_line(edit_ledger)))
+    if NEG_TRIGGERS.search(last) and not has_records(search_ledger):
+        found.append(prefix + SUB_NO_SEARCH)
+    return found
 
 
 SEARCH_BLOCK = (
@@ -407,6 +486,119 @@ def last_message(payload):
     return found
 
 
+def agent_id(payload):
+    """The subagent this event is about, or "". Same shape as the tracker's."""
+    value = payload.get("agent_id")
+    if not isinstance(value, str) or not value.strip():
+        return ""
+    return re.sub(r"[^A-Za-z0-9_-]", "_", value.strip())[:64]
+
+
+def is_codex(payload):
+    """`turn_id` is a Codex extension; Claude Code does not send it."""
+    return isinstance(payload.get("turn_id"), str)
+
+
+def handback_report(transcript_path):
+    """The last SubagentHandback message in a subagent's transcript, or "".
+
+    The shape is the one Claude Code writes: one JSON object per line, an
+    assistant line's `message.content` holding `tool_use` blocks. Anything
+    else is skipped, so a different format makes this silent, never wrong.
+    """
+    if not isinstance(transcript_path, str) or not transcript_path:
+        return ""
+    try:
+        with open(os.path.expanduser(transcript_path), "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - TRANSCRIPT_TAIL_BYTES))
+            data = fh.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+    found = ""
+    for line in data.splitlines():
+        if "SubagentHandback" not in line:
+            continue
+        try:
+            obj = json.loads(line)
+        except ValueError:
+            continue
+        message = obj.get("message") if isinstance(obj, dict) else None
+        content = message.get("content") if isinstance(message, dict) else None
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if (isinstance(part, dict) and part.get("type") == "tool_use"
+                    and part.get("name") == "SubagentHandback" and isinstance(part.get("input"), dict)):
+                text = part["input"].get("message")
+                if isinstance(text, str) and text.strip():
+                    found = text
+    return found
+
+
+def prune_orphan_agent_ledgers(sid):
+    """Remove this session's subagent ledgers that no SubagentStop collected."""
+    try:
+        now = time.time()
+        for path in LEDGER_DIR.iterdir():
+            name = path.name
+            if (name.startswith(sid + ".") and AGENT_LEDGER_TAIL.fullmatch(name[len(sid) + 1:])
+                    and now - path.stat().st_mtime > ORPHAN_SECONDS):
+                path.unlink()
+    except OSError:
+        pass
+
+
+def subagent_stop(payload):
+    """SubagentStop: check the subagent's report against its own ledger. Never blocks.
+
+    The parent session's ledger is not read and not removed here.
+    """
+    codex = is_codex(payload)
+
+    def done(notices=()):
+        if notices:
+            show_notices(payload, list(notices))
+        elif codex:
+            sys.stdout.write("{}\n")  # Codex wants JSON from SubagentStop
+        return 0
+
+    aid = agent_id(payload)
+    if not aid:
+        return done()
+    sid = session_id(payload)
+    stem = sid + "." + aid
+    ledgers = {kind: LEDGER_DIR / (stem + "." + kind) for kind in SUBAGENT_LEDGER_KINDS}
+    report = LEDGER_DIR / (stem + ".report")
+    try:
+        # Claude Code also fires SubagentStop for its own internal agents (prompt
+        # suggestions, /btw); in a session without --agent those have no type.
+        if payload.get("agent_type") == "" or payload.get("stop_hook_active") is True:
+            return done()
+        tracked = any(path.exists() for path in ledgers.values())
+        if codex and not tracked:
+            # Codex's documented PostToolUse fields do not promise agent_id. With
+            # no ledger at all, "ran nothing" and "was never told" look the same.
+            return done()
+        try:
+            handed_back = report.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            handed_back = ""
+        if not handed_back.strip():
+            handed_back = handback_report(payload.get("agent_transcript_path"))
+        last = payload.get("last_assistant_message")
+        text = "\n".join(part for part in (handed_back, last) if isinstance(part, str) and part.strip())
+        if not text:
+            return done()
+        who = "%s (%s)" % (payload.get("agent_type") or "unnamed", aid)
+        return done(subagent_findings(
+            text, who, ledgers["verify"], ledgers["search"], ledgers["edit"], ledgers["test"]))
+    finally:
+        cleanup(report, *ledgers.values())
+        prune_orphan_agent_ledgers(sid)
+
+
 def block(payload, reason, *ledgers):
     cleanup(*ledgers)
     if is_cursor(payload):
@@ -623,7 +815,13 @@ def main():
     if is_antigravity(payload):
         return antigravity_stop(payload)
 
+    # A subagent finishing is not the session finishing: it gets its own check
+    # and must never reach the code below, which empties the session's ledger.
+    if payload.get("hook_event_name") == "SubagentStop":
+        return subagent_stop(payload)
+
     sid = session_id(payload)
+    prune_orphan_agent_ledgers(sid)
     verify_ledger = LEDGER_DIR / (sid + ".verify")
     search_ledger = LEDGER_DIR / (sid + ".search")
 

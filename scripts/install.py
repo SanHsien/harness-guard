@@ -68,8 +68,10 @@ HOOKS = {
             "event": "PostToolUse",
             # Edits are recorded so a verification that ran before the last
             # edit no longer counts; web lookups count as searches.
+            # SubagentHandback carries the report a subagent hands back.
             "matcher": "Bash|PowerShell|Grep|Glob|WebSearch|WebFetch"
-                       "|Write|Edit|MultiEdit|NotebookEdit|mcp__claude-in-chrome__.*",
+                       "|Write|Edit|MultiEdit|NotebookEdit|mcp__claude-in-chrome__.*"
+                       "|SubagentHandback",
             "timeout": 10,
         },
         {
@@ -78,6 +80,17 @@ HOOKS = {
                 "posix": "hooks/claim-guard/claude-code/claim-evidence-guard.sh",
             },
             "event": "Stop",
+            "matcher": None,
+            "timeout": 15,
+        },
+        {
+            # The same script checks a subagent's report against the
+            # subagent's own ledger when it stops (a notice, never a block).
+            "source": {
+                "windows": "hooks/claim-guard/windows/claim_evidence_guard.py",
+                "posix": "hooks/claim-guard/claude-code/claim-evidence-guard.sh",
+            },
+            "event": "SubagentStop",
             "matcher": None,
             "timeout": 15,
         },

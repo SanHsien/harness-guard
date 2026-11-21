@@ -37,6 +37,7 @@ SETTINGS = CLAUDE_DIR / "settings.json"
 HOOKS_DIR = CLAUDE_DIR / "hooks"
 
 CLAIM_TRACKER = re.compile(r"claim[-_]ledger[-_]tracker\.(py|sh)")
+CLAIM_GUARD = re.compile(r"claim[-_]evidence[-_]guard\.(py|sh)")
 JQ_DEPENDENT = re.compile(r"claim-(evidence-guard|ledger-tracker)|lint-gate\.sh")
 SCRATCH = Path(tempfile.mkdtemp(prefix="harness-verify-"))
 
@@ -201,6 +202,17 @@ def check_settings(jq_present):
         ok = any({"Edit", "Write"} <= set(m.split("|")) for m in tracker_matchers)
         record(ok, "claim-ledger-tracker matcher covers Edit and Write",
                "" if ok else "matchers: %s -- re-run install.py to update it" % tracker_matchers)
+        # A subagent's own report is only checked if the guard hears it stop, and
+        # only read in full if the tracker sees the SubagentHandback call.
+        sub_ok = any(
+            CLAIM_GUARD.search(str(hook.get("command") or ""))
+            for entry in (data.get("hooks") or {}).get("SubagentStop") or [] if isinstance(entry, dict)
+            for hook in entry.get("hooks", []) or [] if isinstance(hook, dict))
+        record(sub_ok, "claim-evidence-guard is registered on SubagentStop",
+               "" if sub_ok else "re-run install.py --hooks claim-guard to add it")
+        handback_ok = any("SubagentHandback" in m.split("|") for m in tracker_matchers)
+        record(handback_ok, "claim-ledger-tracker matcher covers SubagentHandback",
+               "" if handback_ok else "matchers: %s -- re-run install.py to update it" % tracker_matchers)
     return commands
 
 
@@ -1303,6 +1315,36 @@ def check_claim_guard():
         '"block"' not in out and "systemMessage" in out and "no test or build command" in out,
         "claim-guard shows a notice, not a block, for a test claim backed only by git status",
         "" if "systemMessage" in out else process_detail(status, noticed),
+    )
+
+    # Subagents: the parent has a test run on record, the subagent only listed
+    # files, and the subagent says "verified". Its own ledger decides, the answer
+    # is a notice, and the parent's ledger is still there afterwards.
+    agent = {"agent_id": "verifysub0001", "agent_type": "general-purpose"}
+    run_hook(tracker, {"session_id": "verify-sub", "hook_event_name": "PostToolUse",
+                       "tool_name": "Bash", "tool_input": {"command": "pytest -q"}})
+    sub_logged = run_hook(tracker, dict(agent, session_id="verify-sub", hook_event_name="PostToolUse",
+                                        tool_name="Bash", tool_input={"command": "ls tests/"}))
+    sub_stop = run_hook(guard, dict(agent, session_id="verify-sub", hook_event_name="SubagentStop",
+                                    stop_hook_active=False, agent_transcript_path=None,
+                                    last_assistant_message="Fixed it. Verified on the live box."))
+    parent_after = run_hook(guard, {"session_id": "verify-sub", "hook_event_name": "Stop",
+                                    "last_assistant_message": "I ran the tests, all passing."})
+    if sub_logged is None or sub_stop is None or parent_after is None:
+        record(False, "claim-guard subagent check runs")
+        return
+    sub_out = sub_stop.stdout or ""
+    record(
+        '"block"' not in sub_out and "systemMessage" in sub_out and "subagent notice" in sub_out
+        and "no verification command" in sub_out,
+        "claim-guard shows a notice when a subagent says 'verified' with nothing in its own ledger",
+        "" if "systemMessage" in sub_out else process_detail(sub_logged, sub_stop),
+    )
+    parent_out = parent_after.stdout or ""
+    record(
+        '"block"' not in parent_out,
+        "claim-guard leaves the parent's ledger alone when a subagent stops",
+        "" if '"block"' not in parent_out else process_detail(parent_after),
     )
 
 

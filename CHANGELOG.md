@@ -12,6 +12,15 @@
 
 ### 新增
 
+- `fork` **claim-guard 也對子 agent 的宣稱對帳：子 agent 有自己的帳，結束時（`SubagentStop`）拿它自己的回報來對。** 原本只登記 `Stop`。子 agent 的工具呼叫帶的是父 session 的 `session_id`，紀錄全寫進父 session 的帳；子 agent 自己說「已驗證」沒有人對帳，父 session 的帳上只要有任何一筆驗證就能照單轉述。現在 tracker 看到 `agent_id`（子 agent 內的工具事件才有）就寫兩份：父 session 的帳照舊，另寫一份 `<session>.<agent_id>.*`。子 agent 結束時，查驗端只拿這一份對它的回報，查完只刪這一份。
+  - **父 session 的 `Stop` 檢查沒有變。** 子 agent 的紀錄仍然進父帳，所以「委派子 agent 跑測試、主 session 說測試通過」照樣放行；`SubagentStop` 不讀也不刪父帳。上游 `e9a4734` 的做法是只記子帳，會把這種情況擋下，所以沒有照搬。
+  - **回報取自 `SubagentHandback`。** Claude Code 2.1.271 起，子 agent 用這個工具交報告，`SubagentStop` 的 `last_assistant_message` 只剩結尾那句。tracker 的 matcher 加上 `SubagentHandback`，把報告暫存在 `<session>.<agent_id>.report`；沒存到就從 `agent_transcript_path` 讀最後一次 handback。報告和最後一則訊息一起檢查，查完刪除。
+  - **是提醒，不是阻擋。** 上線前拿本機近 14 天 1,058 個子 agent 回合重播，26 個會被標記（2.5%）。照父 session 規則會被擋的有 17 個，逐一看過宣稱片段與指令：16 個不是沒驗證（審查型子 agent 把「confirmed」當分類名稱、查完才寫報告檔；轉述指令輸出裡的「找不到」「不存在」；查的是網頁文件，不算驗證指令），1 個從片段無法判斷。其餘 9 個屬於測試宣稱那一級，其中 4 個是跑完測試後又改過檔。照擋等於幾乎每次都白花子 agent 一輪，所以只提醒：Claude Code 與 Codex 以 `systemMessage` 顯示並寫 stderr，訊息寫出是哪個子 agent、缺哪一種證據、最後一筆驗證與之後的改檔。
+  - **抓不到的**：這是拿用詞對帳本。子 agent 只跑一個樣本就說全部修好、或把推算寫成事實，只要帳上有任何一筆驗證指令就不會被標記。提醒目前只給使用者看，不會進父 session 的 context。
+  - 不檢查的情況：Claude Code 自己的內部 agent（`agent_type` 是空字串）、已被其他 hook 要求繼續的那一輪（`stop_hook_active`）、沒有 `agent_id` 的 `SubagentStop`。沒人收的子帳（子 agent 被中止，或工作階段還沒重啟、`SubagentStop` 尚未生效）閒置 24 小時後，由同一個 session 的下一次檢查刪掉。
+  - 各 agent 的範圍：Claude Code 由 `install.py` 登記 `SubagentStop`，裝完要重啟才生效。Codex 的官方文件與 hook schema 有 `SubagentStop`，但 `PostToolUse` 的 `agent_id` 是選填；Python 版與 `.sh` 版都已支援（Codex 這一側整本子帳不存在時不出聲），**安裝器還沒有替 Codex 登記 `SubagentStop`**，要先在真實 Codex 工作階段確認。Antigravity 沒有子 agent 事件，payload 也沒有子 agent 識別欄位。Cursor 未查。這三個只做了一半：子 agent 的宣稱不會被單獨對帳。
+  - `verify-install.py` 加四項：`SubagentStop` 已登記、tracker matcher 含 `SubagentHandback`、子 agent 自己的帳上沒有驗證卻說「verified」會出現提醒、子 agent 結束後父帳還在。
+
 - `fork` **claim-guard 把驗證紀錄分兩級：「測試或建置」與「狀態查詢」。** 原本 `git status`、`ls`、`Test-Path`、`--version` 和 `pytest` 都記成同一種「驗證類指令」，所以「改檔 → `git status` → 說測試通過」會放行：`git status` 也會刷新驗證時間，連「改檔晚於最後一次驗證」的檢查都躲過。現在 tracker 另記一本 `.test` 帳，只收跑測試或建置的指令（`pytest`、`python -m unittest`、`npm test`／`run build`、`cargo test`／`check`、`go test`、`dotnet test`、`Invoke-Pester`、`node --test`、`tsc`、`compileall`、`run-tests.py`、`tests/` 底下的腳本、`dev_check.ps1`、`verify-install.py`、`gh run watch` 等，清單在 `TEST_BUILD_PATTERNS`）。訊息講的是「測試通過／建置成功／all green」這類時，要有一筆在最後一次改檔之後的 `.test` 紀錄；「已驗證／確認無誤」這類狀態宣稱，照舊有狀態查詢就夠。
   - **這一級是提醒，不是阻擋。** 上線前拿本機 40 個近期 session（1,877 個回合、73 個驗證宣稱）重播：會被新規則改判的 6 個回合裡，明確該攔的只有 1 個（改檔後只跑 `git status` 就說建置成功），3 個是誤判（手動實測寫成「測試通過」、「測試通過後我會 rebase」這種條件句、在另一個 repo 改了檔），另外 2 個是轉述前一輪或其他 agent 的測試結果。以「目前會放行的測試宣稱」為分母，誤擋率約 12.5%，超過 10%，所以不擋。Claude Code 與 Codex 以 Stop 的 `systemMessage` 顯示給使用者；Antigravity 的放行必須是 `{}`、Cursor 的 stop 只能送會開新回合的 follow-up，這兩邊只寫到 stderr。
   - **原本會擋的全部照擋**：`.verify` 帳的寫入規則一字未改，新清單不會讓任何原本不算驗證的指令變成驗證。

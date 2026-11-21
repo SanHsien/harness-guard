@@ -695,6 +695,29 @@ class AntiDoomLoopGuardInstallTests(unittest.TestCase):
             self.assertEqual(sorted(p.name for p in (claude / "hooks").iterdir()), [HOOK_FILE])
             self.assertTrue(list((claude / "backups").glob("settings.json.bak-*")))
 
+    def test_claude_claim_guard_is_registered_for_subagents_too(self):
+        # A subagent finishing fires SubagentStop, not Stop; without that
+        # registration its report is never checked against its own ledger.
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            claude = home / ".claude"
+            claude.mkdir()
+            for _ in range(2):
+                proc = self._run(home, ["--agent", "claude", "--hooks", "claim-guard"])
+                self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertIn("nothing new to register", proc.stdout)
+
+            hooks = json.loads((claude / "settings.json").read_text(encoding="utf-8"))["hooks"]
+            for event in ("Stop", "SubagentStop"):
+                commands = [h["command"] for group in hooks[event] for h in group["hooks"]]
+                self.assertEqual(len(commands), 1, (event, commands))
+                self.assertRegex(commands[0], r"claim[-_]evidence[-_]guard")
+                self.assertNotIn("matcher", hooks[event][0])
+            tracker = hooks["PostToolUse"]
+            self.assertEqual(len(tracker), 1)
+            self.assertIn("SubagentHandback", tracker[0]["matcher"].split("|"))
+            self.assertIn("Edit", tracker[0]["matcher"].split("|"))
+
     # -- Codex ---------------------------------------------------------------
 
     def test_codex_installs_only_this_hook_and_names_the_caller(self):

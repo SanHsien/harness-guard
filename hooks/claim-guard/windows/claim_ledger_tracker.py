@@ -26,6 +26,15 @@ working.
 Ledger location: %USERPROFILE%\\.cache\\claude-guard-hooks, the same path the
 shell version uses, so the two are interchangeable and can even coexist.
 Override with the CLAIM_GUARD_LEDGER_DIR environment variable.
+
+Subagents. Claude Code (and Codex, where it sends the field) puts `agent_id` on
+a tool call made inside a subagent, while `session_id` stays the parent's. Such
+a call is written twice: to the parent's ledger, exactly as before, and to the
+subagent's own `<session>.<agent_id>.*`. The parent's Stop check therefore sees
+what it always saw; the subagent's ledger is read and removed only when that
+subagent stops (SubagentStop, in claim_evidence_guard.py). A SubagentHandback
+call's `message` -- the report the parent receives -- is kept beside it as
+`<session>.<agent_id>.report` until then.
 """
 import json
 import os
@@ -247,6 +256,31 @@ def is_antigravity(payload):
     return isinstance(payload.get("toolCall"), dict) or "conversationId" in payload
 
 
+# The tool a Claude Code subagent delivers its report with (2.1.271 and later).
+HANDBACK_TOOL = "SubagentHandback"
+REPORT_LIMIT = 200000
+
+
+def agent_id(payload):
+    """The subagent a tool call ran in, or "" for the main conversation.
+
+    No dot is kept, so `<session>.<agent_id>.<kind>` always splits the same way.
+    """
+    value = payload.get("agent_id")
+    if not isinstance(value, str) or not value.strip():
+        return ""
+    return re.sub(r"[^A-Za-z0-9_-]", "_", value.strip())[:64]
+
+
+def write_report(path, text):
+    """Keep the report a subagent handed back, for its SubagentStop check."""
+    LEDGER_DIR.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text[:REPORT_LIMIT])
+        fh.flush()
+        os.fsync(fh.fileno())
+
+
 def extract_tool_name(payload):
     event = payload.get("hook_event_name") or ""
     if event in ("beforeShellExecution", "afterShellExecution"):
@@ -315,19 +349,33 @@ def main():
         sys.stdout.write("{}\n")
         return 0
 
-    verify_ledger = LEDGER_DIR / (sid + ".verify")
-    search_ledger = LEDGER_DIR / (sid + ".search")
-    edit_ledger = LEDGER_DIR / (sid + ".edit")
-    test_ledger = LEDGER_DIR / (sid + ".test")
+    # The session's ledger, as always; inside a subagent, that subagent's too.
+    aid = agent_id(payload)
+    stems = [sid, sid + "." + aid] if aid else [sid]
+
+    def log(kind, line):
+        for stem in stems:
+            append(LEDGER_DIR / (stem + "." + kind), line)
+
+    if tool == HANDBACK_TOOL:
+        message = tool_args(payload).get("message")
+        if aid and isinstance(message, str) and message.strip():
+            try:
+                write_report(LEDGER_DIR / (sid + "." + aid + ".report"), message)
+            except OSError:
+                pass  # the stop check falls back to the subagent's transcript
+        if codex:
+            sys.stdout.write("{}\n")
+        return 0
 
     if tool in EDIT_TOOLS:
-        append(edit_ledger, ("%s %s" % (tool, edited_path(payload)[:160])).rstrip())
+        log("edit", ("%s %s" % (tool, edited_path(payload)[:160])).rstrip())
         if codex:
             sys.stdout.write("{}\n")
         return 0
 
     if tool.startswith(BROWSER_VERIFY_PREFIX):
-        append(verify_ledger, tool)
+        log("verify", tool)
         if codex:
             sys.stdout.write("{}\n")
         return 0
@@ -336,13 +384,13 @@ def main():
         args = tool_args(payload)
         target = args.get("query") or args.get("url") or ""
         label = "WebSearch" if tool == "WebSearch" else "WebFetch"
-        append(search_ledger, ("%s %s" % (label, str(target)[:120])).rstrip())
+        log("search", ("%s %s" % (label, str(target)[:120])).rstrip())
         if codex:
             sys.stdout.write("{}\n")
         return 0
 
     if tool in SEARCH_TOOLS:
-        append(search_ledger, tool)
+        log("search", tool)
         if codex:
             sys.stdout.write("{}\n")
         return 0
@@ -353,11 +401,11 @@ def main():
                 sys.stdout.write("{}\n")
             return 0
         if VERIFY_CMD.search(command):
-            append(verify_ledger, command[:120])
+            log("verify", command[:120])
         if is_test_command(command):
-            append(test_ledger, command[:120])
+            log("test", command[:120])
         if SEARCH_CMD.search(command):
-            append(search_ledger, command[:120])
+            log("search", command[:120])
 
     if codex:
         sys.stdout.write("{}\n")

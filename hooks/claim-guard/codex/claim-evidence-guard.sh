@@ -52,18 +52,123 @@ allow() {
   exit 0
 }
 
+# Trigger words (English + Chinese), shared by the Stop and the SubagentStop check.
+verify_triggers='verified|confirmed|all passing|tests? pass|build passes|all green|works now|working now|deployed and verified|驗證通過|測試通過|驗證無誤|實測通過|實測有效|全數通過|建置通過|跑通|已驗證|確認無誤'
+negative_triggers="doesn't exist|does not exist|not found|no such|couldn't find|cannot find|can't find|nothing matching|no evidence|there is no|不存在|找不到|沒有找到|查無|沒有任何(相關|紀錄|檔案)|從未出現"
+
+# Negations ("not yet verified") and code identifiers (`is_verified`, `confirmed()`)
+# contain a trigger word without claiming it; drop them before matching. Quoted
+# text is kept: wrapping a claim in `...` or 「...」 must not get it past the guard.
+# Same pattern as NOT_A_CLAIM in windows/claim_evidence_guard.py.
+# jq's regex is Unicode-aware whatever the locale; if it fails, the full message is kept.
+strip_not_a_claim() {
+  jq -Rrs 'gsub("(?:\\bun|\\bnot (?:yet )?|n\\Wt (?:yet )?|\\bnever |\\b[A-Za-z0-9]*_|(?<![^\\s`(])--)(?:verified|confirmed)|(?:verified|confirmed)(?:_|\\(\\))|(?<=[/`])(?:verified|confirmed)(?-i:\\.(?:py|js|ts|tsx|md|json|sh|txt|ya?ml|toml|rs|go|java|rb))\\b"; " "; "i")' 2>/dev/null
+}
+
+# -- SubagentStop ----------------------------------------------------------------
+# A subagent's report is checked against the subagent's own ledger,
+# <session>.<agent_id>.* (see claim-ledger-tracker.sh). Every finding is a notice
+# (systemMessage), never a block: windows/claim_evidence_guard.py has the
+# measurement. Only that subagent's ledger is removed; the turn's own ledger is
+# not read and not touched, so the Stop check below is exactly what it was.
+# A subagent ledger nobody collected is removed once it has been idle for a day.
+session_id="$(printf '%s' "$input" | jq -r '(.session_id // .turn_id // "default") | tostring | gsub("[^A-Za-z0-9._-]"; "_") | .[0:80]' 2>/dev/null)"
+session_id="${session_id:-default}"
+find "$ledger_dir" -maxdepth 1 -type f -name "${session_id}.*.*" -mmin +1440 \
+  \( -name '*.verify' -o -name '*.search' -o -name '*.edit' -o -name '*.test' -o -name '*.report' \) \
+  -delete 2>/dev/null
+
+subagent_stop() {
+  sub_found=""
+  sub_id="$(printf '%s' "$input" | jq -r '(.agent_id // "") | if type == "string" then gsub("^\\s+|\\s+$"; "") | gsub("[^A-Za-z0-9_-]"; "_") | .[0:64] else "" end' 2>/dev/null)"
+  if [ -z "$sub_id" ]; then
+    printf '{}\n'
+    exit 0
+  fi
+  sub_stem="$ledger_dir/${session_id}.${sub_id}"
+  sub_v="$sub_stem.verify"; sub_s="$sub_stem.search"; sub_e="$sub_stem.edit"; sub_t="$sub_stem.test"
+  sub_report="$sub_stem.report"
+  sub_type="$(printf '%s' "$input" | jq -r 'if .agent_type == "" then "-" else (.agent_type // "unnamed" | tostring) end' 2>/dev/null)"
+  sub_active="$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null)"
+  # Codex's documented PostToolUse fields do not promise agent_id. With no
+  # ledger at all for this agent, "ran nothing" and "the tracker was never
+  # told" look the same, so the check stays silent.
+  sub_tracked=""
+  for sub_file in "$sub_v" "$sub_s" "$sub_e" "$sub_t"; do
+    [ -e "$sub_file" ] && sub_tracked=1
+  done
+  if [ "$sub_type" != "-" ] && [ "$sub_active" != "true" ] && [ -n "$sub_tracked" ]; then
+    sub_text="$(cat "$sub_report" 2>/dev/null)"
+    if [ -z "${sub_text//[[:space:]]/}" ]; then
+      sub_atp="$(printf '%s' "$input" | jq -r '.agent_transcript_path // empty' 2>/dev/null)"
+      sub_atp="${sub_atp/#\~/$HOME}"
+      if [ -n "$sub_atp" ] && [ -r "$sub_atp" ]; then
+        sub_text="$(tail -c 512000 "$sub_atp" | jq -Rrs '[split("\n")[] | (try fromjson catch empty) | select(type == "object") | .message | select(type == "object") | .content | select(type == "array") | .[] | select(type == "object" and .type == "tool_use" and .name == "SubagentHandback") | .input | select(type == "object") | .message | select(type == "string")] | last // empty' 2>/dev/null)"
+      fi
+    fi
+    sub_last="$(printf '%s' "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null)"
+    sub_text="$sub_text
+$sub_last"
+    if sub_stripped="$(printf '%s' "$sub_text" | strip_not_a_claim)"; then
+      sub_text="$sub_stripped"
+    fi
+    sub_who="$sub_type ($sub_id)"
+    sub_note() {
+      sub_found="${sub_found:+$sub_found
+
+}CLAIM-EVIDENCE GUARD (subagent notice): subagent $sub_who $1"
+    }
+    if printf '%s' "$sub_text" | grep -iqE "$verify_triggers"; then
+      if [ ! -s "$sub_v" ]; then
+        sub_note "reported 'verified / tests pass / confirmed', but its own ledger has no verification command (test, build, status, diff, live run).
+Missing evidence: any verification command run by that subagent. Treat the report as not yet verified until someone checks it."
+      elif [ -s "$sub_e" ] && [ "$sub_e" -nt "$sub_v" ]; then
+        sub_note "reported 'verified / tests pass / confirmed', but it edited files after its last verification command, so that run did not cover what it handed back.
+  Last verification: $(tail -1 "$sub_v")
+  Later edit: $(tail -1 "$sub_e")
+Missing evidence: a verification run after that edit."
+      elif printf '%s' "$sub_text" | sed -E "$TEST_CLAIM_NOT_SED" | grep -iqE -- "$TEST_CLAIM_ERE"; then
+        if [ ! -s "$sub_t" ]; then
+          sub_note "said tests or a build pass, but its own ledger has no test or build command -- only status queries such as git status, ls or Test-Path.
+  Last verification: $(tail -1 "$sub_v")
+Missing evidence: a test or build run by that subagent."
+        elif [ -s "$sub_e" ] && [ "$sub_e" -nt "$sub_t" ]; then
+          sub_note "said tests or a build pass, but it edited files after its last test or build run.
+  Last test run: $(tail -1 "$sub_t")
+  Later edit: $(tail -1 "$sub_e")
+Missing evidence: a test or build run after that edit."
+        fi
+      fi
+    fi
+    if printf '%s' "$sub_text" | grep -iqE "$negative_triggers" && [ ! -s "$sub_s" ]; then
+      sub_note "asserted something 'does not exist / cannot be found', but its own ledger has no search (Grep/Glob/find/ls/Select-String/WebSearch).
+Missing evidence: a search by that subagent."
+    fi
+  fi
+  rm -f "$sub_v" "$sub_s" "$sub_e" "$sub_t" "$sub_report"
+  if [ -n "$sub_found" ]; then
+    printf '%s\n' "$sub_found" >&2
+    jq -n --arg m "$sub_found" '{systemMessage:$m}'
+  else
+    printf '{}\n'
+  fi
+  exit 0
+}
+
+# A subagent finishing is not the turn finishing: it must never reach the code
+# below, which empties the turn's ledger.
+hook_event="$(printf '%s' "$input" | jq -r '.hook_event_name // empty' 2>/dev/null)"
+if [ "$hook_event" = "SubagentStop" ]; then
+  subagent_stop
+fi
+
 stop_active="$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null)"
 last_message="$(printf '%s' "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null)"
 if [ -z "$last_message" ]; then
   printf '{}\n'
   exit 0
 fi
-# Negations ("not yet verified") and code identifiers (`is_verified`, `confirmed()`)
-# contain a trigger word without claiming it; drop them before matching. Quoted
-# text is kept: wrapping a claim in `...` or 「...」 must not get it past the guard.
-# Same pattern as NOT_A_CLAIM in windows/claim_evidence_guard.py.
-# jq's regex is Unicode-aware whatever the locale; if it fails, the full message is kept.
-if stripped="$(printf '%s' "$last_message" | jq -Rrs 'gsub("(?:\\bun|\\bnot (?:yet )?|n\\Wt (?:yet )?|\\bnever |\\b[A-Za-z0-9]*_|(?<![^\\s`(])--)(?:verified|confirmed)|(?:verified|confirmed)(?:_|\\(\\))|(?<=[/`])(?:verified|confirmed)(?-i:\\.(?:py|js|ts|tsx|md|json|sh|txt|ya?ml|toml|rs|go|java|rb))\\b"; " "; "i")' 2>/dev/null)"; then
+if stripped="$(printf '%s' "$last_message" | strip_not_a_claim)"; then
   last_message="$stripped"
 fi
 
@@ -152,7 +257,6 @@ elif head.stdout.strip().lower() != commit.lower():
 PY
 }
 
-verify_triggers='verified|confirmed|all passing|tests? pass|build passes|all green|works now|working now|deployed and verified|驗證通過|測試通過|驗證無誤|實測通過|實測有效|全數通過|建置通過|跑通|已驗證|確認無誤'
 if printf '%s' "$last_message" | grep -iqE "$verify_triggers"; then
   if [ ! -s "$verify_ledger" ] && [ "$stop_active" != "true" ]; then
     cleanup
@@ -179,7 +283,6 @@ if [ "$stop_active" = "true" ]; then
   allow
 fi
 
-negative_triggers="doesn't exist|does not exist|not found|no such|couldn't find|cannot find|can't find|nothing matching|no evidence|there is no|不存在|找不到|沒有找到|查無|沒有任何(相關|紀錄|檔案)|從未出現"
 if printf '%s' "$last_message" | grep -iqE "$negative_triggers" && [ ! -s "$search_ledger" ]; then
   cleanup
   jq -n '{decision:"block",reason:"CLAIM-EVIDENCE GUARD: The reply asserts something does not exist or cannot be found, but no search action was recorded this turn. Search exhaustively first before making a negative assertion."}'

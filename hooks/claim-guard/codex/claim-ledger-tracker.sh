@@ -14,10 +14,22 @@ fi
 tool="$(printf '%s' "$input" | jq -r '.tool_name // empty' 2>/dev/null)"
 turn_id="$(printf '%s' "$input" | jq -r '(.turn_id // .session_id // "default") | tostring | gsub("[^A-Za-z0-9._-]"; "_") | .[0:80]' 2>/dev/null)"
 turn_id="${turn_id:-default}"
-verify_ledger="$ledger_dir/${turn_id}.verify"
-search_ledger="$ledger_dir/${turn_id}.search"
-edit_ledger="$ledger_dir/${turn_id}.edit"
-test_ledger="$ledger_dir/${turn_id}.test"
+# Inside a subagent Codex sends agent_id (where it sends it at all) and the
+# parent's session_id. The call is then logged twice: in this turn's ledger, as
+# before, and in the subagent's own <session>.<agent_id>.* ledger, which only
+# the SubagentStop check reads and removes.
+session_id="$(printf '%s' "$input" | jq -r '(.session_id // .turn_id // "default") | tostring | gsub("[^A-Za-z0-9._-]"; "_") | .[0:80]' 2>/dev/null)"
+session_id="${session_id:-default}"
+agent_id="$(printf '%s' "$input" | jq -r '(.agent_id // "") | if type == "string" then gsub("^\\s+|\\s+$"; "") | gsub("[^A-Za-z0-9_-]"; "_") | .[0:64] else "" end' 2>/dev/null)"
+
+# log <kind> <line>
+log() {
+  mkdir -p "$ledger_dir"
+  printf '%s %s\n' "$(date +%H:%M:%S)" "$2" >> "$ledger_dir/${turn_id}.$1"
+  if [ -n "$agent_id" ]; then
+    printf '%s %s\n' "$(date +%H:%M:%S)" "$2" >> "$ledger_dir/${session_id}.${agent_id}.$1"
+  fi
+}
 
 # >>> test-cmd-ere
 # Tier one: commands that run tests or a build. The same list as
@@ -54,39 +66,42 @@ TEST_CMD_ERE="$TEST_CMD_ERE|(^|[^[:alnum:]_])gh[[:space:]]+(run[[:space:]]+(view
 case "$tool" in
   apply_patch|Write|Edit|MultiEdit|NotebookEdit)
     fp="$(printf '%s' "$input" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' 2>/dev/null)"
-    mkdir -p "$ledger_dir"
-    printf '%s %s %.160s\n' "$(date +%H:%M:%S)" "$tool" "$fp" >> "$edit_ledger"
+    log edit "$tool ${fp:0:160}"
     ;;
   Grep|Glob)
-    mkdir -p "$ledger_dir"
-    printf '%s %s\n' "$(date +%H:%M:%S)" "$tool" >> "$search_ledger"
+    log search "$tool"
     ;;
   WebSearch)
     query_text="$(printf '%s' "$input" | jq -r '.tool_input.query // empty' 2>/dev/null)"
-    mkdir -p "$ledger_dir"
-    printf '%s WebSearch %.120s\n' "$(date +%H:%M:%S)" "$query_text" >> "$search_ledger"
+    log search "WebSearch ${query_text:0:120}"
     ;;
   web_fetch|WebFetch)
     url_text="$(printf '%s' "$input" | jq -r '.tool_input.url // empty' 2>/dev/null)"
-    mkdir -p "$ledger_dir"
-    printf '%s WebFetch %.120s\n' "$(date +%H:%M:%S)" "$url_text" >> "$search_ledger"
+    log search "WebFetch ${url_text:0:120}"
+    ;;
+  SubagentHandback)
+    # A report handed back by a subagent, kept for its SubagentStop check.
+    if [ -n "$agent_id" ]; then
+      report_text="$(printf '%s' "$input" | jq -r '.tool_input.message // empty' 2>/dev/null)"
+      if [ -n "$report_text" ]; then
+        mkdir -p "$ledger_dir"
+        printf '%s' "${report_text:0:200000}" > "$ledger_dir/${session_id}.${agent_id}.report"
+      fi
+    fi
     ;;
   Bash|Exec|exec|exec_command|shell|shell_command|run_command|Shell)
     command_text="$(printf '%s' "$input" | jq -r '.tool_input.command // .tool_input.CommandLine // .tool_input.cmd // .command // empty' 2>/dev/null)"
     if [ -n "$command_text" ]; then
       if printf '%s' "$command_text" | grep -qE '(--version|npm (run build|test)|pytest|jest|cargo test|go test|make test|uv run|vault-lint|visual-drift-lint|py_compile|bash -n|jq (-e |\.)|curl.*-[sI]|git[[:space:]]+(-C[[:space:]]+[^[:space:]]+[[:space:]]+)?(status|diff|log)|systemctl (status|is-active)|test -[fedrwx]|grep -[qcl]|wc -[lcw]|python3 (-c|-m)|node -e|pdfinfo|cmp -s|diff -r|playwright test|agent-browser)'; then
-        mkdir -p "$ledger_dir"
-        printf '%s %.120s\n' "$(date +%H:%M:%S)" "$command_text" >> "$verify_ledger"
+        log verify "${command_text:0:120}"
       fi
       # Tier one: a test or build run (CLAIM_GUARD_TEST_CMD adds one more pattern)
       if printf '%s' "$command_text" | grep -qiE -- "$TEST_CMD_ERE" \
           || { [ -n "${CLAIM_GUARD_TEST_CMD:-}" ] && printf '%s' "$command_text" | grep -qiE -- "$CLAIM_GUARD_TEST_CMD" 2>/dev/null; }; then
-        mkdir -p "$ledger_dir"
-        printf '%s %.120s\n' "$(date +%H:%M:%S)" "$command_text" >> "$test_ledger"
+        log test "${command_text:0:120}"
       fi
       if printf '%s' "$command_text" | grep -qE '(^|[|;&][[:space:]]*)(grep|rg|find|ls|fd|gh api|mdfind)[[:space:]]'; then
-        mkdir -p "$ledger_dir"
-        printf '%s %.120s\n' "$(date +%H:%M:%S)" "$command_text" >> "$search_ledger"
+        log search "${command_text:0:120}"
       fi
     fi
     ;;

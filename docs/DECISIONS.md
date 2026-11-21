@@ -13,7 +13,7 @@
 | `humanizer` skill | e9a4734 | 寫作風格 skill，不在 guardrail kit 的定位內；另帶三份第三方 MIT attribution。 | 維護者要求加入寫作類 skill 時。 |
 | plugin marketplace（`.claude-plugin/marketplace.json`） | e9a4734、7474dfd | 只服務 Claude Code；本 fork 的安裝契約是 `install.py` 合併、備份、讀回驗證、四個 agent 與 Windows 絕對路徑，marketplace 給不了這些保證。 | Claude Code plugin 的 hook 能在原生 Windows 用 Python 版與絕對路徑運作，且維護者想提供第二種安裝方式時。 |
 | 退役 review-loop、info-diet、phantom-pushback、asd-ste100、iso-24495、claude-md-template | e9a4734、365f5c3 | 上游為了精簡而退役，不是因為它們壞了；本 fork 的 README、安裝器、CI compile 都還在用。 | 維護者決定精簡 skill 清單時；上游保存在 tag `retired-archive-2026-10-22`。 |
-| claim-guard 的 subagent 帳本（`agent_id` 分帳 + `SubagentStop`） | e9a4734 | 改了語意：tracker 以 `agent_id` 分帳後，主 session 委派 subagent 跑測試再宣稱「通過」會被擋；`SubagentStop` 在 Codex、Cursor、Antigravity 沒有對應事件，只能做一半。同一 commit 的「過期驗證」與「引號內提及」已移植。 | 實際觀察到 subagent 無證據宣稱完成而主 session 照單全收時。 |
+| claim-guard 的 subagent 帳本（`agent_id` 分帳 + `SubagentStop`） | e9a4734 | 改了語意：tracker 以 `agent_id` 分帳後，主 session 委派 subagent 跑測試再宣稱「通過」會被擋；`SubagentStop` 在 Codex、Cursor、Antigravity 沒有對應事件，只能做一半。同一 commit 的「過期驗證」與「引號內提及」已移植。 | 實際觀察到 subagent 無證據宣稱完成而主 session 照單全收時。**2026-11-21 條件成立，已做，但做法不同**：子 agent 的紀錄同時寫父帳與子帳，父 session 的檢查不變；`SubagentStop` 只拿子帳對子 agent 自己的回報，對不上是提醒不是阻擋（量測見 CHANGELOG 2026-11-21）。當時寫「Codex 沒有對應事件」已過時：Codex 文件與 hook schema 現在有 `SubagentStop`，安裝器尚未登記。 |
 | README、CLAUDE.md、AGENTS.md、hooks/README.md 的改寫 | e9a4734、7474dfd、365f5c3、adc8928 | 對應上游的新版面（plugin、退役 skill）；本 fork 的文件結構不同（中文主檔、`AGENTS.md` 唯一指令檔）。 | 上游改寫涉及 hook 行為或風險邊界的說法時，才逐段併入。 |
 
 ## 偏離上游：claim-guard 不豁免引號內的觸發詞（2026-11-09）

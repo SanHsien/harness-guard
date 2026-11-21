@@ -403,6 +403,130 @@ class LedgerFlowMixin:
         # The notice is added on top; the first-tier rule it sits on is not relaxed.
         self.assertBlocked(self.stop(CLAIM))
 
+    # -- subagents: a ledger of their own, checked when the subagent stops --------
+    # Claude Code and Codex send `agent_id` with a tool call made inside a subagent
+    # and fire SubagentStop when it finishes. The subagent's calls are still written
+    # to the parent's ledger (so the parent's Stop check is what it was) and also to
+    # `<session>.<agent_id>.*`, which only that subagent's stop reads and removes.
+    # Replayed on 1058 local subagent runs (2026-11-21): 26 would be flagged and
+    # none of the 17 that the parent rules would stop was a real miss, so a
+    # subagent finding is a notice and never stops the subagent.
+
+    AGENT = "a1b2c3d4e5f60718"
+    silent_when_untracked = False
+
+    def in_agent(self, payload: dict, agent_id: str = AGENT) -> dict:
+        payload = dict(payload)
+        payload.update({"agent_id": agent_id, "agent_type": "general-purpose"})
+        return payload
+
+    def subagent_stop(self, message: str, agent_id: str = AGENT, stop_active: bool = False,
+                      agent_type: str = "general-purpose", transcript: str = "") -> str:
+        return self.call(self.guard_command, self.subagent_stop_payload(
+            message, agent_id, stop_active, agent_type, transcript))
+
+    def sub_files(self, agent_id: str = AGENT) -> list:
+        return sorted(p.name for p in (self.home / "ledger").glob("flow.%s.*" % agent_id))
+
+    def assertSubNoticed(self, output: str, text: str) -> None:
+        self.assertAllowed(output)
+        self.assertIn("subagent", self.notice(output))
+        self.assertIn(text, self.notice(output))
+
+    def test_a_subagent_claim_is_checked_against_its_own_ledger(self) -> None:
+        # What was seen for real: the parent's ledger has evidence, the subagent ran
+        # nothing that checks anything, and it reports "verified" all the same.
+        self.track(self.shell("pytest -q"))
+        self.track(self.in_agent(self.shell("ls tests/")))
+        self.assertSubNoticed(self.subagent_stop("Fixed it. Verified on the live box."),
+                              "no verification command")
+
+    def test_a_subagent_stop_leaves_the_parent_ledger_alone(self) -> None:
+        self.track(self.shell("pytest -q"))
+        self.track(self.in_agent(self.shell("ls tests/")))
+        self.subagent_stop(CLAIM)
+        self.assertQuiet(self.stop(CLAIM))
+
+    def test_a_parent_can_claim_what_its_subagent_ran(self) -> None:
+        self.track(self.in_agent(self.shell("pytest -q")))
+        self.assertQuiet(self.subagent_stop(CLAIM))
+        self.assertQuiet(self.stop(CLAIM))
+
+    def test_a_subagent_status_query_does_not_back_its_test_claim(self) -> None:
+        self.track(self.in_agent(self.shell("git status")))
+        self.assertSubNoticed(self.subagent_stop(CLAIM), "no test or build command")
+
+    def test_a_subagent_edit_after_its_verification_is_noticed(self) -> None:
+        self.track(self.in_agent(self.shell("pytest -q")))
+        self.track(self.in_agent(self.edit("src/app.py")))
+        self.assertSubNoticed(self.subagent_stop(CLAIM), "edited files after its last verification")
+        self.assertBlocked(self.stop(CLAIM), "stale verification")  # the parent's rule is what it was
+
+    def test_a_subagent_negative_claim_without_a_search_is_noticed(self) -> None:
+        self.track(self.in_agent(self.shell("git status")))
+        self.assertSubNoticed(self.subagent_stop("That option does not exist in the current release."),
+                              "no search")
+
+    def test_two_subagents_keep_separate_ledgers(self) -> None:
+        self.track(self.in_agent(self.shell("pytest -q"), "aaaa1111"))
+        self.track(self.in_agent(self.shell("ls tests/"), "bbbb2222"))
+        self.assertSubNoticed(self.subagent_stop(CLAIM, agent_id="bbbb2222"), "no verification command")
+        self.assertQuiet(self.subagent_stop(CLAIM, agent_id="aaaa1111"))
+
+    def test_a_subagent_ledger_is_removed_at_its_own_stop_only(self) -> None:
+        self.track(self.in_agent(self.shell("pytest -q")))
+        self.stop("Still working on it.")  # the parent's turn ends while the subagent runs on
+        self.assertNotEqual(self.sub_files(), [])
+        self.assertQuiet(self.subagent_stop(CLAIM))
+        self.assertEqual(self.sub_files(), [])
+
+    def test_a_handback_report_is_checked(self) -> None:
+        # Claude Code 2.1.271+: the report is the SubagentHandback call's `message`;
+        # SubagentStop's last_assistant_message is only the closing text.
+        self.track(self.in_agent(self.shell("ls tests/")))
+        self.track(self.in_agent(self.tool("SubagentHandback", {"message": "Fixed. " + CLAIM})))
+        self.assertSubNoticed(self.subagent_stop(""), "no verification command")
+        self.assertEqual(self.sub_files(), [])
+
+    def test_a_handback_report_is_read_from_the_subagent_transcript(self) -> None:
+        transcript = self.home / ("agent-%s.jsonl" % self.AGENT)
+        lines = [
+            {"parentUuid": None, "isSidechain": True, "agentId": self.AGENT, "type": "user",
+             "message": {"role": "user", "content": "Fix the parser."}, "sessionId": "flow"},
+            {"parentUuid": "u1", "isSidechain": True, "agentId": self.AGENT, "type": "assistant",
+             "message": {"role": "assistant", "content": [
+                 {"type": "text", "text": "Reporting back."},
+                 {"type": "tool_use", "id": "toolu_01", "name": "SubagentHandback",
+                  "input": {"message": "Fixed the parser.\n" + CLAIM}}]}, "sessionId": "flow"},
+        ]
+        transcript.write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
+        self.track(self.in_agent(self.shell("ls tests/")))
+        self.assertSubNoticed(self.subagent_stop("Done.", transcript=str(transcript)),
+                              "no verification command")
+
+    def test_a_subagent_that_ran_nothing_at_all(self) -> None:
+        # Codex's documented PostToolUse fields do not promise agent_id; with no
+        # ledger at all for the agent its builds cannot tell "ran nothing" from
+        # "the tracker was never told", so they stay silent.
+        output = self.subagent_stop("Fixed it. Verified on the live box.")
+        if self.silent_when_untracked:
+            self.assertQuiet(output)
+        else:
+            self.assertSubNoticed(output, "no verification command")
+
+    def test_an_internal_agent_with_no_type_is_ignored(self) -> None:
+        self.track(self.in_agent(self.shell("ls tests/")))
+        self.assertQuiet(self.subagent_stop(CLAIM, agent_type=""))
+
+    def test_a_subagent_stop_without_an_agent_id_touches_nothing(self) -> None:
+        self.track(self.shell("pytest -q"))
+        self.assertQuiet(self.subagent_stop(CLAIM, agent_id=""))
+        self.assertQuiet(self.stop(CLAIM))
+
+    def test_a_continued_subagent_is_not_checked_again(self) -> None:
+        self.track(self.in_agent(self.shell("ls tests/")))
+        self.assertQuiet(self.subagent_stop(CLAIM, stop_active=True))
+
 
 class ClaudePythonLedgerFlow(LedgerFlowMixin, unittest.TestCase):
     tracker_command = [sys.executable, str(TRACKER)]
@@ -425,9 +549,27 @@ class ClaudePythonLedgerFlow(LedgerFlowMixin, unittest.TestCase):
         return {"session_id": "flow", "hook_event_name": "Stop", "cwd": str(self.home),
                 "stop_hook_active": stop_active, "last_assistant_message": message}
 
+    # Fields a Codex payload adds to Claude Code's (none for Claude Code itself).
+    codex_fields: dict = {}
+
+    def subagent_stop_payload(self, message: str, agent_id: str, stop_active: bool,
+                              agent_type: str, transcript: str) -> dict:
+        payload = {"session_id": "flow", "transcript_path": str(self.home / "flow.jsonl"),
+                   "cwd": str(self.home), "permission_mode": "default",
+                   "hook_event_name": "SubagentStop", "stop_hook_active": stop_active,
+                   "agent_id": agent_id, "agent_type": agent_type,
+                   "agent_transcript_path": transcript or None, "last_assistant_message": message}
+        if self.codex_fields:
+            payload.update(self.codex_fields)
+        else:
+            payload.update({"background_tasks": [], "session_crons": []})
+        return payload
+
 
 class CodexPythonLedgerFlow(ClaudePythonLedgerFlow):
     tracker_command = [sys.executable, str(TRACKER), "--codex"]
+    codex_fields = {"turn_id": "flow", "model": "gpt-5"}
+    silent_when_untracked = True
 
     def tool(self, name: str, tool_input: dict) -> dict:
         payload = super().tool(name, tool_input)
@@ -626,6 +768,8 @@ class ClaudeShellLedgerFlow(ClaudePythonLedgerFlow):
 class CodexShellLedgerFlow(ClaudePythonLedgerFlow):
     tracker_command = ["bash", str(REPO / "hooks/claim-guard/codex/claim-ledger-tracker.sh")]
     guard_command = ["bash", str(REPO / "hooks/claim-guard/codex/claim-evidence-guard.sh")]
+    codex_fields = {"turn_id": "flow", "model": "gpt-5"}
+    silent_when_untracked = True
 
     def tool(self, name: str, tool_input: dict) -> dict:
         payload = super().tool(name, tool_input)
