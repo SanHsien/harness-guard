@@ -48,6 +48,8 @@ OLD_PLUGIN_REFUSED = [
     "DROP TABLE users",
     "truncate table t",
     "pytest; git commit -m x",
+    "python -m unittest 2>&1 | tail -1 && git commit -m x",
+    "pytest || true && git push",
     "npm test\ngit push",
     "ruff check; git -C r commit -m x",
 ]
@@ -55,6 +57,8 @@ ALLOWED = [
     "git status",
     "python -m unittest",
     "pytest && git commit -m x",
+    "set -o pipefail; pytest | tail -1 && git commit -m x",
+    "pytest > test.log 2>&1 && tail -1 test.log && git commit -m x",
     "git clean -n -fd",
     "git push origin feature/x",
     "gh pr create --repo SanHsien/x --base main --head y",

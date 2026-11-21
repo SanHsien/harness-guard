@@ -10,6 +10,27 @@
 
 ## 2026-11-21
 
+### 安全修正
+
+- `fork` **`test-gate-guard` 擋「關不上的 `&&` 閘門」：測試接管線、接 `||`。** 當天實際發生：`python -m unittest … | tail -1 && git commit …`。POSIX shell 的管線結束碼是最後一段的（[Bash 手冊 Pipelines](https://www.gnu.org/software/bash/manual/html_node/Pipelines.html)），`&&` 檢查的是 `tail`，測試紅了照樣 commit；hook 只看 `;` 與換行，放行。現在同一條 `&&` 鏈裡，測試指令後面接了管線就擋，除非：
+  - 前面有 `set -o pipefail`（`set -euo pipefail`、`bash -o pipefail`、`shopt -so pipefail`、zsh 的 `setopt pipefail` 都認；之後又 `set +o pipefail` 就不算）；
+  - 或最後一段是只可能對綠燈成立的 `grep`（`… | tail -1 | grep -q '^OK' && git push`、`grep -q ' 0 fail'`）。紅燈也會符合的 `grep -E "^(Ran|OK|FAILED)"`、`grep -v …` 是過濾不是檢查，照擋。
+  - 重新導向不是管線：`> test.log 2>&1`、`> /dev/null`、`>|` 都不受影響。管線在鏈的另一節（`pytest && git log | head -3 && git push`）也不受影響。
+- `fork` **`tests || true && git commit` 也擋。** `a || b && c` 的結合順序是 `(a || b) && c`，所以鏈上任何一個 `||` 都會赦免它前面的測試。`|| exit`、`|| return`、`|| false`、`|| throw` 不算；`||` 在測試之後才開的括號裡（`tests && (git diff --quiet || git commit …)`）也不算。`pytest || git push`（只有紅燈才 push）原本只有寫成兩行才擋，現在同一行也擋。
+- `fork` **PowerShell 的規則不同，依實測而不是比照 bash。** PowerShell 7 的 `&&` 看 `$?`（[about_Pipeline_Chain_Operators](https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_pipeline_chain_operators)：「These operators use the `$?` and `$LASTEXITCODE` variables to determine if a pipeline failed」），而原生指令結束碼非 0 時 `$?` 是 False（[about_Automatic_Variables](https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_automatic_variables)）。文件沒寫管線中段的情況，所以在 PowerShell 7.7.0 逐案實測：失敗的原生指令後面接 `Select-Object -Last`／`-Skip`、`Out-String`、`Out-Null`、`Out-Host`、`Out-File`、`Select-String`、`Tee-Object`、`ForEach-Object`、`Where-Object`、`Measure-Object`，或原生的 `tail`／`head`／`findstr`，`&&` 右邊都**不會**執行——閘門有效，不擋。實測會漏的只有兩種，這兩種才擋：
+  - `… | Select-Object -First N`（與 `-Index`）：湊滿筆數就把上游指令停掉（[Select-Object](https://learn.microsoft.com/powershell/module/microsoft.powershell.utility/select-object) 文件有寫），結束碼來不及回報。前面有先把輸出收完的 cmdlet（`Out-String`、`Sort-Object`、`Measure-Object`、`Select-Object -Last`）時實測閘門仍有效，不擋。
+  - `(tests) | …`：括號把呼叫變成運算式，`$?` 是 True。
+  - 較舊的 PowerShell 7 版本沒有實測；Windows PowerShell 5.1 沒有 `&&`，整條指令是語法錯誤、不會執行。
+- `fork` **不知道 shell 的呼叫端（Codex、Cursor、Antigravity、Hermes）兩種讀法都判，任一命中就擋**（與既有做法一致）；例外是測試後面每一段都是 PowerShell 才有的 cmdlet（`Select-Object`、`Out-String`…），那不可能是 POSIX 管線，只照 PowerShell 規則判。所以 Codex 在 PowerShell 裡寫 `pytest | tail -5 && git push` 會被擋，雖然那在 PowerShell 7 其實有效——改接 `Select-Object -Last 5` 就過。
+- `fork` **測試指令清單補上 `python -m unittest`、`run-tests.*`／`run_tests.*`、`node --test`。** 出事的那條跑的是 `python -m unittest`，原清單沒有，所以連 `python -m unittest ; git commit` 都放行。原清單一項未刪。
+- **上線前的量測**：拿本機最近 40 個 session 重播（34,279 條 shell 指令，其中 1,582 條含 `git commit`／`git push`；舊版擋 18 條）。
+  - 管線：若一律擋是 152 條，其中 34 條（22%）最後一段是對成功標記的 `grep`，是有效的閘門——所以加了上面那條例外。加了之後剩 118 條：接 `tail` 68 條、接紅燈也會符合的 `grep` 50 條；指令沒被截斷、能逐條讀的 97 條裡沒有誤擋。
+  - `||`：1 條，是誤擋（`||` 在括號群組裡），已修並寫成測試；修完 0 條。
+  - 清單擴充讓 `;`／換行規則多擋 45 條：約 12 條是 `unittest … | tail -1; … && git commit`（測試根本沒把關），約 30 條是 `tests && … && git commit -F - <<EOF … EOF` 換行再 `git push`——紅燈時 commit 不會發生，push 只會送出原本就有的 commit，傷害小，但和原清單裡的 `pytest` 是同一個形狀、原本就擋，改成 `&& git push` 即可。
+  - 誤擋率低，所以是阻擋不是提醒。訊息裡直接給三種改法：`set -o pipefail;` 開頭、`<tests> > test.log 2>&1 && tail -5 test.log && git commit …`、或拆成兩次呼叫。
+- 原本會擋的全部照擋：既有案例一條未改，測試從 174 項增為 368 項，新增的 193 項涵蓋（管線、`||`、PowerShell、不知道 shell 的三種呼叫端、訊息內容），另有一項比對兩個 build 的判斷程式逐字相同。`verify-install.py` 對 Claude Code、Codex、Antigravity 各加兩項實測（擋 `pytest | tail -1 && git push`、放行加了 `set -o pipefail;` 的同一條）；Hermes 的 probe 加四項。Hermes 外掛轉接層改用共用 guard 的說明文字，`config.yaml` 沒動。
+- 已知限制不變：只看單一指令的形狀。引號裡的內容（`bash -c "pytest | tail && git commit"`）整段被當成資料，看不到；PowerShell cmdlet 型的測試（`Invoke-Pester`）失敗時不一定讓 `$?` 變 False，那要靠 `-EnableExit` 或拆兩步。
+
 ### 新增
 
 - `fork` **claim-guard 也對子 agent 的宣稱對帳：子 agent 有自己的帳，結束時（`SubagentStop`）拿它自己的回報來對。** 原本只登記 `Stop`。子 agent 的工具呼叫帶的是父 session 的 `session_id`，紀錄全寫進父 session 的帳；子 agent 自己說「已驗證」沒有人對帳，父 session 的帳上只要有任何一筆驗證就能照單轉述。現在 tracker 看到 `agent_id`（子 agent 內的工具事件才有）就寫兩份：父 session 的帳照舊，另寫一份 `<session>.<agent_id>.*`。子 agent 結束時，查驗端只拿這一份對它的回報，查完只刪這一份。

@@ -194,6 +194,15 @@ def main():
     check("test-gate-guard allows `pytest && git push` (decision ask)", defers(result), detail(result))
     result = box.run(TEST_GATE, box.pre("run_command", {"CommandLine": "git commit -m \"pytest ; git push\""}))
     check("test-gate-guard allows a message that only mentions it", defers(result), detail(result))
+    result = box.run(TEST_GATE, box.pre("run_command", {
+        "CommandLine": "python -m unittest 2>&1 | tail -1 && git commit -m x"}))
+    check("test-gate-guard denies a gate piped into tail", denies(result), detail(result))
+    result = box.run(TEST_GATE, box.pre("run_command", {
+        "CommandLine": "pytest 2>&1 | Select-Object -Last 5 && git push"}))
+    check("test-gate-guard allows a PowerShell pipe that keeps the exit code", defers(result), detail(result))
+    result = box.run(TEST_GATE, box.pre("run_command", {
+        "CommandLine": "pytest 2>&1 | Select-Object -First 5 && git push"}))
+    check("test-gate-guard denies Select-Object -First before &&", denies(result), detail(result))
 
     # -- no-emoji-guard: PreToolUse, write_to_file / replace_file_content / multi_ ---
     target = str(box.workspace / "README.md")

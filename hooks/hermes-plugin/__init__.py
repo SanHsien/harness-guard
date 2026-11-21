@@ -318,6 +318,11 @@ def check_command(command):
 
     hit = _CORE["test_gate_guard"].verdict(command) or _legacy_test_gate_verdict(command)
     if hit:
+        # A pipe or a `||` between the tests and the commit needs its own
+        # wording; the shared guard writes it. `;` keeps the message it had.
+        explain = getattr(_CORE["test_gate_guard"], "explain", None)
+        if explain and len(hit) > 2 and hit[2] != "chain":
+            return explain(hit).strip()
         return _JOINED.format(test=hit[0], git=hit[1])
 
     reason = _CORE["danger_zone_guard"].inspect_command(command)

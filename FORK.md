@@ -22,7 +22,7 @@
 |---|---|
 | `scripts/install.py` | 一行裝完：判平台與目標 agent、**合併**而非覆蓋設定檔、先備份、原子寫入、寫完讀回驗證、可重跑；支援 Claude Code、Antigravity（skills 與 hooks）、Cursor、Codex |
 | `scripts/verify-install.py` | 實際執行每支已安裝的 hook 並檢查回應，不是讀設定檔宣布沒問題 |
-| `hooks/test-gate-guard/` | 擋掉單條指令用 `;`（而非 `&&`）串接測試與 `git commit`／`git push` |
+| `hooks/test-gate-guard/` | 擋掉單條指令用 `;`（而非 `&&`）串接測試與 `git commit`／`git push`；也擋關不上的 `&&` 閘門：測試接管線（`... \| tail -1 && git commit`，結束碼是 `tail` 的）或接 `\|\| true` |
 | `hooks/danger-zone-guard/` | 擋掉根目錄／家目錄遞迴刪除、刪 `.git`、保護分支強推、憑證外洩。強推那條有一個放行標記 `# force-push-ok: <理由>`（比照 `fork_pr_guard` 的 `# upstream-ok:`）——壓縮歷史這類操作，強推本身就是被交代的事；一道沒有出口的閘門只會逼人改用 `git push origin +main` 或 REST refs API 繞過去，而那兩種寫法這條正則都看不見。標記必須寫理由，且**只對強推那條生效**：`rm -rf /` 與憑證外洩加了也照擋。 |
 | `hooks/*/windows/*.py` | claim-guard 與 lint-gate 的 Python 版（另兩支本來就是純 Python 單檔，三平台共用） |
 | `hooks/tests/run-encoding-tests.py` | 非 UTF-8 locale 下的回歸測試——中文 payload 曾讓每支 hook 靜靜失效 |

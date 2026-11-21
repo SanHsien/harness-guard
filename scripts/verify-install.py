@@ -414,6 +414,14 @@ def live_fire_antigravity(name, scripts):
         allowed = run_hook(script, agy_pre("run_command", {"CommandLine": good}), env=agy_env())
         record(agy_denies(blocked), "Antigravity %s denies `%s`" % (name, bad), process_detail(blocked))
         record(agy_defers(allowed), "Antigravity %s allows `%s` (decision ask)" % (name, good), process_detail(allowed))
+        if name == "test-gate-guard":
+            piped = run_hook(script, agy_pre("run_command", {"CommandLine": PIPED_GATE}), env=agy_env())
+            pipefail = run_hook(script, agy_pre("run_command", {"CommandLine": PIPEFAIL_GATE}), env=agy_env())
+            record(agy_denies(piped), "Antigravity test-gate-guard denies `%s`" % PIPED_GATE,
+                   process_detail(piped))
+            record(agy_defers(pipefail),
+                   "Antigravity test-gate-guard allows `%s` (decision ask)" % PIPEFAIL_GATE,
+                   process_detail(pipefail))
     elif name == "no-emoji-guard":
         script = scripts["no-emoji-guard.py"]
         probe = str(SCRATCH / "a.md")
@@ -968,6 +976,20 @@ def check_codex_live_fire():
                     gated.returncode == 0 and not codex_blocks(gated),
                     "Codex test-gate-guard allows `pytest && git push`",
                 )
+                piped, pipefail = (
+                    run_hook(test_gate, {
+                        "session_id": "verify-codex-test",
+                        "hook_event_name": "PreToolUse",
+                        "tool_name": "shell_command",
+                        "tool_input": {"command": command},
+                    })
+                    for command in (PIPED_GATE, PIPEFAIL_GATE)
+                )
+                record(piped is not None and codex_blocks(piped),
+                       "Codex test-gate-guard blocks `%s`" % PIPED_GATE)
+                record(pipefail is not None and pipefail.returncode == 0
+                       and not codex_blocks(pipefail),
+                       "Codex test-gate-guard allows `%s`" % PIPEFAIL_GATE)
 
     danger_names = ("danger_zone_guard.py", "danger-zone-guard.py")
     if registered(*danger_names):
@@ -1412,6 +1434,10 @@ def check_lint_gate():
     )
 
 
+PIPED_GATE = "pytest | tail -1 && git push"
+PIPEFAIL_GATE = "set -o pipefail; pytest | tail -1 && git push"
+
+
 def check_test_gate():
     hook = find_hook("test_gate_guard.py", "test-gate-guard.py")
     if not hook:
@@ -1428,6 +1454,13 @@ def check_test_gate():
         return
     record(chained.returncode == 2, "test-gate-guard blocks `pytest ; git push`")
     record(gated.returncode == 0, "test-gate-guard allows `pytest && git push`")
+    # A pipe hands `&&` the exit status of `tail`, so that gate cannot close.
+    piped = run_hook(hook, {"tool_name": "Bash", "tool_input": {"command": PIPED_GATE}})
+    pipefail = run_hook(hook, {"tool_name": "Bash", "tool_input": {"command": PIPEFAIL_GATE}})
+    record(piped is not None and piped.returncode == 2,
+           "test-gate-guard blocks `%s`" % PIPED_GATE)
+    record(pipefail is not None and pipefail.returncode == 0,
+           "test-gate-guard allows `%s`" % PIPEFAIL_GATE)
 
 
 def check_danger_zone_guard():
