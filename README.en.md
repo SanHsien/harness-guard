@@ -30,7 +30,7 @@ These guardrails are defense-in-depth, not a sandbox or formal policy engine. Th
 | Hook | What it does |
 |---|---|
 | `claim-guard` | records tool evidence (searches, tests, edits) and reconciles completion claims before the turn ends; a verification followed by more edits no longer counts; saying the tests pass after only status queries such as `git status` gets a notice (not a block) |
-| `test-gate-guard` | blocks unsafe test + `git commit` / `git push` command chaining |
+| `test-gate-guard` | blocks unsafe test + `git commit` / `git push` command chaining: `;` or a newline, and an `&&` gate that cannot close (tests piped into `tail`, or followed by `\|\| true`) |
 | `danger-zone-guard` | blocks selected catastrophic deletions, force-pushes to protected branches, and sensitive-file exfiltration |
 | `lint-gate` | runs project checks before wrap-up; Windows can opt in per project with `.lint-gate.json` |
 | `no-emoji-guard` | blocks emoji in selected write flows; optional and preference-oriented |
