@@ -13,6 +13,11 @@ written by claim_ledger_tracker.py against what was actually said:
 If the claim and the record do not match, the turn is blocked and the message
 says what is missing.
 
+  3. Claimed "tests pass" / "the build passes" specifically, and the record
+     has only status queries (`git status`, `ls`, `Test-Path`), or an edit
+     after the last test or build run
+     -> a notice, not a block (see TEST_CLAIM_TRIGGERS for why)
+
 Behaviour matches the shell version exactly, including the fail-open rules:
 unreadable input, missing ledger directory, or a second pass through the same
 turn all let the turn through. It only intervenes when the claim was made
@@ -120,6 +125,60 @@ NOT_A_CLAIM = re.compile(
     r"|(?<=[/`])(?:verified|confirmed)(?-i:\.(?:py|js|ts|tsx|md|json|sh|txt|ya?ml|toml|rs|go|java|rb))\b",
     re.IGNORECASE,
 )
+
+# Tier two of a verification claim. "Tests pass" / "the build passes" is a
+# claim about a test or build run, so beyond the ledger check above it wants a
+# record in the `.test` ledger (claim_ledger_tracker.py's TEST_BUILD_PATTERNS)
+# made after the last edit. `git status`, `ls`, `Test-Path` are status queries:
+# they satisfy "verified / confirmed", not "tests pass".
+#
+# This tier is a notice the user sees, never a block. Replayed against 40 local
+# sessions on 2026-11-21 before it was written, a block would have been wrong
+# about half the time: manual checks worded as 測試通過, a result from an
+# earlier turn or another agent, an edit in a different repository. The notice
+# makes the gap visible without costing a turn; everything the guard blocked
+# before, it still blocks.
+TEST_CLAIM_TRIGGERS = re.compile(
+    r"tests? pass|all passing|build passes|all green"
+    r"|測試通過|建置通過|全數通過|所有測試已通過|全部測試通過|編譯成功|建置成功",
+    re.IGNORECASE,
+)
+# A condition, not a result: "once the tests pass", 「測試通過後再推」.
+TEST_CLAIM_NOT = re.compile(
+    r"\b(?:once|if|until|when|after|before|unless)\s+(?:(?:all|the)\s+)*tests?\s+pass"
+    r"|測試通過(?:後|之後|再|才)|(?:等到|等|待|直到)(?:全部)?測試通過",
+    re.IGNORECASE,
+)
+
+NO_TEST_NOTICE = (
+    "CLAIM-EVIDENCE GUARD (notice): you said tests or a build pass, but no test or build "
+    "command ran this turn -- only status queries such as git status, ls or Test-Path.\n"
+    "  Last verification: %s\n"
+    "If the tests ran in an earlier turn or in another agent, say where; otherwise run them "
+    "before saying they pass."
+)
+
+STALE_TEST_NOTICE = (
+    "CLAIM-EVIDENCE GUARD (notice): you said tests or a build pass, but files were edited "
+    "after the last test or build run, so it did not cover the current code.\n"
+    "  Last test run: %s\n  Later edit: %s"
+)
+
+
+def is_test_claim(text):
+    return TEST_CLAIM_TRIGGERS.search(TEST_CLAIM_NOT.sub(" ", text)) is not None
+
+
+def test_tier_notice(last, verify_ledger, test_ledger, edit_ledger):
+    """The notice for a test claim without a current test run, or None."""
+    if not is_test_claim(last):
+        return None
+    if not has_records(test_ledger):
+        return NO_TEST_NOTICE % (last_line(verify_ledger) or "(none)")
+    if edited_since_verify(test_ledger, edit_ledger):
+        return STALE_TEST_NOTICE % (last_line(test_ledger), last_line(edit_ledger))
+    return None
+
 
 SEARCH_BLOCK = (
     "CLAIM-EVIDENCE GUARD: You asserted something 'does not exist / cannot be "
@@ -358,18 +417,23 @@ def block(payload, reason, *ledgers):
     return 0
 
 
-def evaluate(payload, last, second_pass, verify_ledger, search_ledger, edit_ledger=None):
+def evaluate(payload, last, second_pass, verify_ledger, search_ledger, edit_ledger=None,
+             notices=None, test_ledger=None):
     """Reconcile the last message with the ledger. Returns a block reason, or None.
 
     Ledgers are cleaned up here, in both outcomes, exactly where the checks
     decide. `second_pass` means "this message was already blocked once":
     Claude Code says so with `stop_hook_active`, Antigravity has to be told by
-    the caller.
+    the caller. When the turn is let through, a test-tier notice (if any) is
+    appended to `notices` for the caller to show; a block reason replaces it.
     """
     if edit_ledger is None:
         edit_ledger = verify_ledger.with_suffix(".edit")
-    ledgers = (verify_ledger, search_ledger, edit_ledger)
+    if test_ledger is None:
+        test_ledger = verify_ledger.with_suffix(".test")
+    ledgers = (verify_ledger, search_ledger, edit_ledger, test_ledger)
     last = NOT_A_CLAIM.sub(" ", last)
+    notice = None
     if VERIFY_TRIGGERS.search(last):
         if not has_records(verify_ledger) and not second_pass:
             cleanup(*ledgers)
@@ -383,19 +447,41 @@ def evaluate(payload, last, second_pass, verify_ledger, search_ledger, edit_ledg
         if quality_err:
             cleanup(*ledgers)
             return quality_err
+        notice = test_tier_notice(last, verify_ledger, test_ledger, edit_ledger)
+
+    def allow():
+        cleanup(*ledgers)
+        if notice and notices is not None:
+            notices.append(notice)
+        return None
 
     # A second pass may relax only the session-ledger requirement. Machine
     # evidence remains fail-closed until the claim is revised or Full is rerun.
     if second_pass:
-        cleanup(*ledgers)
-        return None
+        return allow()
 
     if NEG_TRIGGERS.search(last) and not has_records(search_ledger):
         cleanup(*ledgers)
         return SEARCH_BLOCK
 
-    cleanup(*ledgers)
-    return None
+    return allow()
+
+
+def show_notices(payload, notices):
+    """Show allow-path notices the way this agent can without blocking.
+
+    Claude Code and Codex print a Stop `systemMessage` to the user. Cursor's
+    only Stop output is a follow-up, which would start another turn, and
+    Antigravity's allow must be `{}` exactly, so for those two the notice goes
+    to stderr only.
+    """
+    if not notices:
+        return
+    text = "\n\n".join(notices)
+    sys.stderr.write(text + "\n")
+    if is_cursor(payload) or is_antigravity(payload):
+        return
+    sys.stdout.write(json.dumps({"systemMessage": text}, ensure_ascii=False))
 
 
 # -- Antigravity ---------------------------------------------------------------
@@ -505,14 +591,17 @@ def antigravity_stop(payload):
     fingerprint = hashlib.sha256(last.encode("utf-8", "replace")).hexdigest()[:16]
     state = state_path(sid)
     second_pass = read_blocked_fingerprint(state) == fingerprint
+    notices = []
     reason = evaluate(
-        payload, last, second_pass, LEDGER_DIR / (sid + ".verify"), LEDGER_DIR / (sid + ".search")
+        payload, last, second_pass, LEDGER_DIR / (sid + ".verify"), LEDGER_DIR / (sid + ".search"),
+        notices=notices,
     )
     if not reason:
         try:
             state.unlink()
         except OSError:
             pass
+        show_notices(payload, notices)  # stderr only: the allow below must stay {}
         return allow()
     try:
         state.parent.mkdir(parents=True, exist_ok=True)
@@ -542,12 +631,15 @@ def main():
     if not last:
         return 0
 
+    notices = []
     reason = evaluate(
-        payload, last, payload.get("stop_hook_active") is True, verify_ledger, search_ledger
+        payload, last, payload.get("stop_hook_active") is True, verify_ledger, search_ledger,
+        notices=notices,
     )
     if reason:
         # evaluate() already cleaned the ledgers, as block() used to.
         return block(payload, reason)
+    show_notices(payload, notices)
     return 0
 
 

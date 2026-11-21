@@ -2,8 +2,9 @@
 """claim_ledger_tracker.py -- Windows-native port of claim-ledger-tracker.sh.
 
 Same job as the shell version: after every tool call, quietly append a line to
-a ledger recording which verification commands were actually run, which
-searches were actually performed, and which files were edited. Its partner,
+a ledger recording which verification commands were actually run, which of
+those ran tests or a build (a separate `.test` ledger), which searches were
+actually performed, and which files were edited. Its partner,
 claim_evidence_guard.py, reads that ledger at the end of the turn; a file edited
 after the last verification means that verification no longer covers the code.
 
@@ -101,6 +102,83 @@ VERIFY_CMD = re.compile(
     r")",
     re.IGNORECASE,
 )
+
+# Tier one: commands that run tests or a build. VERIFY_CMD above is everything
+# that checks something, status queries included (`git status`, `ls`,
+# `Test-Path`, `--version`); claim_evidence_guard.py wants one of these, written
+# to a separate `.test` ledger, before a claim that tests or a build pass.
+# This list never changes what counts as verification: `.verify` is written
+# from VERIFY_CMD alone, as before.
+#
+# Add your own runner without editing this file: set CLAIM_GUARD_TEST_CMD to one
+# more regular expression (Python syntax here; the POSIX builds pass it to
+# `grep -E`). An expression that does not compile is ignored.
+#
+# Where a program name can start: line start, after a separator, or after a
+# runner such as `npx` or `uv run` (with its options).
+_START = (
+    r"(?:^|[;&|(]\s*|\b(?:npx|bunx|pnpm\s+exec|uv\s+run|poetry\s+run|pipenv\s+run"
+    r"|hatch\s+run|time|exec|call)\s+(?:-\S+\s+)*)"
+)
+
+
+def _prog(names):
+    """`names` as a program: a path, an .exe suffix and quotes around it allowed.
+
+    Matches `cargo`, `./gradlew` and `& "$env:USERPROFILE\\.cargo\\bin\\cargo.exe"`.
+    """
+    return _START + r"[\"'&\s]*(?:[^\s;&|]*[/\\])?(?:" + names + r")(?:\.exe|\.cmd|\.bat)?[\"']?(?=\s|$)"
+
+
+# A test or quality-gate script by its file name.
+_SCRIPT_NAME = (
+    r"(?:(?:run[-_]?)?tests?(?:[-_.][\w.-]*)?|[\w.-]*\w[-_.](?:tests?|spec)"
+    r"|(?:dev|ci)[-_]?check|check[-_]?all|verify[-_]?install)"
+)
+_TEST_DIR_SCRIPT = r"tests?[/\\][^\s;&|\"']+"
+_INTERPRETER = r"python[\d.]*|py|node|bash|sh|zsh|pwsh|powershell|bun|deno|ruby|perl|php"
+
+TEST_BUILD_PATTERNS = (
+    _prog(r"npm|pnpm|yarn|bun") + r"\s+(?:run\s+)?(?:test|build|check|typecheck|e2e)\b",
+    _prog(r"deno") + r"\s+(?:test|task)\b",
+    _prog(r"cargo") + r"\s+(?:\+\S+\s+)?(?:test|build|check|nextest|clippy)\b",
+    _prog(r"go") + r"\s+(?:test|build|vet)\b",
+    _prog(r"dotnet") + r"\s+(?:test|build)\b",
+    _prog(r"mvnw?|gradlew?") + r"[^|;&\n]*\b(?:test|build|verify|check|package)\b",
+    _prog(r"make") + r"(?:\s+-\S+)*\s+(?:test|check|build|all)\b",
+    _prog(r"playwright") + r"\s+test\b",
+    _prog(r"node") + r"(?:\s+-\S+)*\s+--test\b",
+    _prog(r"cmake") + r"\s+--build\b",
+    _prog(r"pytest|py\.test|jest|vitest|mocha|tsc|tox|nox|ctest|msbuild|phpunit|rspec"),
+    _prog(r"bash|sh|zsh") + r"\s+-n\b",
+    # a test script handed to an interpreter: python tests/x.py, pwsh -File dev_check.ps1
+    _prog(_INTERPRETER) + r"[^|;&\n]*?(?<![\w.-])(?:" + _SCRIPT_NAME
+    + r"\.(?:py|ps1|sh|js|mjs|cjs|ts|bat|cmd)|" + _TEST_DIR_SCRIPT + r"\.(?:py|ps1|sh|js|mjs|cjs|ts))\b",
+    # ... or run directly: ./run-tests.sh, & "C:\repo\tests\Run-All.ps1"
+    _START + r"[\"'&\s]*(?:[^\s;&|\"']*[/\\])?(?:" + _SCRIPT_NAME
+    + r"\.(?:ps1|sh|bat|cmd|py)|" + _TEST_DIR_SCRIPT + r"\.(?:ps1|sh|bat|cmd))\b",
+    r"-m\s+(?:pytest|unittest|compileall|py_compile|doctest)\b",
+    r"\bpy_compile\b",
+    r"(?<![\w-])Invoke-Pester\b",
+    # reading a CI run's result: the tests ran there
+    r"\bgh\s+(?:run\s+(?:view|watch|list)|pr\s+checks)\b",
+)
+TEST_CMD = re.compile("|".join("(?:%s)" % p for p in TEST_BUILD_PATTERNS), re.IGNORECASE | re.MULTILINE)
+
+
+def is_test_command(command, extra=None):
+    """True when `command` runs tests or a build (tier one)."""
+    if TEST_CMD.search(command):
+        return True
+    if extra is None:
+        extra = os.environ.get("CLAIM_GUARD_TEST_CMD") or ""
+    if extra:
+        try:
+            return re.search(extra, command, re.IGNORECASE | re.MULTILINE) is not None
+        except re.error:
+            return False
+    return False
+
 
 # Search-type commands: looking for files or looking for text inside them.
 SEARCH_CMD = re.compile(
@@ -240,6 +318,7 @@ def main():
     verify_ledger = LEDGER_DIR / (sid + ".verify")
     search_ledger = LEDGER_DIR / (sid + ".search")
     edit_ledger = LEDGER_DIR / (sid + ".edit")
+    test_ledger = LEDGER_DIR / (sid + ".test")
 
     if tool in EDIT_TOOLS:
         append(edit_ledger, ("%s %s" % (tool, edited_path(payload)[:160])).rstrip())
@@ -275,6 +354,8 @@ def main():
             return 0
         if VERIFY_CMD.search(command):
             append(verify_ledger, command[:120])
+        if is_test_command(command):
+            append(test_ledger, command[:120])
         if SEARCH_CMD.search(command):
             append(search_ledger, command[:120])
 

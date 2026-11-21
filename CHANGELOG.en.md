@@ -8,6 +8,17 @@ Entries marked `fork` are this fork's changes relative to
 
 ---
 
+## 2026-11-21
+
+### Added
+
+- `fork` **claim-guard records verification in two tiers: "test or build" and "status query".** `git status`, `ls`, `Test-Path`, `--version` and `pytest` used to land in the same "verification" ledger, so "edit, `git status`, say the tests pass" went through: `git status` also refreshed the verification time, which got it past the "edited after the last verification" check too. The tracker now keeps a separate `.test` ledger for commands that run tests or a build (`pytest`, `python -m unittest`, `npm test` / `run build`, `cargo test` / `check`, `go test`, `dotnet test`, `Invoke-Pester`, `node --test`, `tsc`, `compileall`, `run-tests.py`, scripts under `tests/`, `dev_check.ps1`, `verify-install.py`, `gh run watch` and so on; the list is `TEST_BUILD_PATTERNS`). A message that says tests or a build pass ("tests pass", "all green", 測試通過, 建置成功) wants a `.test` record made after the last edit; a status claim ("verified", 確認無誤) is satisfied by a status query, as before.
+  - **This tier is a notice, not a block.** Before it was written, 40 recent local sessions (1,877 turns, 73 verification claims) were replayed through it. Of the 6 turns it would have changed, 1 was a clear catch (an edit, then only `git status`, then "build succeeded"), 3 were wrong (a manual check worded as 測試通過, a conditional "I will rebase once the tests pass", an edit in a different repository) and 2 repeated a test result from an earlier turn or another agent. Against the test claims the guard lets through today that is about 12.5% wrong, above 10%, so it does not block. Claude Code and Codex show it as the Stop `systemMessage`; Antigravity's allow must be `{}` exactly and Cursor's stop can only send a follow-up that starts another turn, so there it goes to stderr only.
+  - **Everything blocked before is still blocked.** What is written to the `.verify` ledger is unchanged; the new list cannot turn a command that did not count as verification into one that does.
+  - Add your own runner with the `CLAIM_GUARD_TEST_CMD` environment variable (one regular expression; the POSIX builds pass it to `grep -E`). An expression that does not compile is ignored and the built-in list still applies.
+  - The POSIX builds (Claude Code and Codex `.sh`) do the same. The two regex dialects differ, so they are compared by running the same command samples through both (`ShellTestTierParity`, which needs only bash and grep and runs on Windows too).
+  - `verify-install.py` gains one live-fire check each for Claude Code, Codex and Antigravity: record only `git status`, claim the tests pass, expect the turn to be allowed with the notice.
+
 ## 2026-11-20
 
 ### Added

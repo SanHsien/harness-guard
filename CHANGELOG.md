@@ -8,6 +8,17 @@
 
 ---
 
+## 2026-11-21
+
+### 新增
+
+- `fork` **claim-guard 把驗證紀錄分兩級：「測試或建置」與「狀態查詢」。** 原本 `git status`、`ls`、`Test-Path`、`--version` 和 `pytest` 都記成同一種「驗證類指令」，所以「改檔 → `git status` → 說測試通過」會放行：`git status` 也會刷新驗證時間，連「改檔晚於最後一次驗證」的檢查都躲過。現在 tracker 另記一本 `.test` 帳，只收跑測試或建置的指令（`pytest`、`python -m unittest`、`npm test`／`run build`、`cargo test`／`check`、`go test`、`dotnet test`、`Invoke-Pester`、`node --test`、`tsc`、`compileall`、`run-tests.py`、`tests/` 底下的腳本、`dev_check.ps1`、`verify-install.py`、`gh run watch` 等，清單在 `TEST_BUILD_PATTERNS`）。訊息講的是「測試通過／建置成功／all green」這類時，要有一筆在最後一次改檔之後的 `.test` 紀錄；「已驗證／確認無誤」這類狀態宣稱，照舊有狀態查詢就夠。
+  - **這一級是提醒，不是阻擋。** 上線前拿本機 40 個近期 session（1,877 個回合、73 個驗證宣稱）重播：會被新規則改判的 6 個回合裡，明確該攔的只有 1 個（改檔後只跑 `git status` 就說建置成功），3 個是誤判（手動實測寫成「測試通過」、「測試通過後我會 rebase」這種條件句、在另一個 repo 改了檔），另外 2 個是轉述前一輪或其他 agent 的測試結果。以「目前會放行的測試宣稱」為分母，誤擋率約 12.5%，超過 10%，所以不擋。Claude Code 與 Codex 以 Stop 的 `systemMessage` 顯示給使用者；Antigravity 的放行必須是 `{}`、Cursor 的 stop 只能送會開新回合的 follow-up，這兩邊只寫到 stderr。
+  - **原本會擋的全部照擋**：`.verify` 帳的寫入規則一字未改，新清單不會讓任何原本不算驗證的指令變成驗證。
+  - 要加自己的測試指令：設環境變數 `CLAIM_GUARD_TEST_CMD`（一個正規表示式；POSIX 版交給 `grep -E`）。寫錯的式子會被忽略，內建清單照常生效。
+  - POSIX 版（Claude Code、Codex 的 `.sh`）同步實作；兩種正規表示式語法不同，改用同一組指令樣本互相比對（`ShellTestTierParity`，只需要 bash 與 grep，Windows 上也會跑）。
+  - `verify-install.py` 對 Claude Code、Codex、Antigravity 各加一項實測：只記 `git status` 再說「測試通過」，要放行並出現提醒。
+
 ## 2026-11-20
 
 ### 新增

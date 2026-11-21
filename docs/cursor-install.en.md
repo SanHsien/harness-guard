@@ -40,7 +40,7 @@ On Windows the `command` is `python "C:\Users\<you>\.cursor\hooks\....py"`. No s
 | no-emoji-guard | `preToolUse` (matcher `Write`) | yes, via `permission: deny` |
 | anti-doom-loop-guard | `preToolUse` (matcher `Shell\|Read\|Write\|Delete`) | yes, `permission: deny` as JSON with exit 0. Three identical Shell or Read calls in a row; Write / Delete reset the count |
 | claim-ledger-tracker | `postToolUse` | record only |
-| claim-evidence-guard | `stop` | **no veto**. Sends `followup_message` when a completion claim has no evidence |
+| claim-evidence-guard | `stop` | **no veto**. Sends `followup_message` when a completion claim has no evidence. The notice for a test claim backed only by status queries goes to stderr only (a follow-up starts a new turn, which would amount to a block) |
 | lint-gate | `stop` | same; project directory comes from payload `cwd` / `workspace_roots`, not `~/.cursor` |
 
 `anti-doom-loop-guard` uses `preToolUse` rather than `beforeShellExecution` + `beforeReadFile`: `beforeReadFile` carries a path but no offset or limit, so paging through one big file would look like a retry; `preToolUse` carries the whole tool input and the whole argument object is the signature. The script also understands `beforeShellExecution` (counted) and `afterFileEdit` (reset); do not register both sets, or one shell command is counted twice. `beforeReadFile` is never counted.

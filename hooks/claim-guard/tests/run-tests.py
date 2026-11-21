@@ -263,11 +263,15 @@ class LedgerFlowMixin:
     def tearDown(self) -> None:
         self.temp.cleanup()
 
+    extra_env: dict = {}
+
     def env(self) -> dict:
         env = os.environ.copy()
+        env.pop("CLAIM_GUARD_TEST_CMD", None)
         env["HOME"] = str(self.home)
         env["USERPROFILE"] = str(self.home)
         env["CLAIM_GUARD_LEDGER_DIR"] = str(self.home / "ledger")
+        env.update(self.extra_env)
         return env
 
     def call(self, command: list, payload: dict) -> str:
@@ -323,6 +327,81 @@ class LedgerFlowMixin:
     def test_a_web_search_counts_as_a_search(self) -> None:
         self.track(self.web_search("harness guard changelog"))
         self.assertAllowed(self.stop("That option does not exist in the current release."))
+
+    # -- two tiers: a test claim wants a test or build run, not a status query --
+    # Measured on 40 local sessions (2026-11-21) before choosing the strength: a
+    # block would have been wrong about half the time, so this tier is a notice
+    # the user sees, and never a block. The tier-one ledger rules are unchanged.
+
+    def notice(self, output: str) -> str:
+        """The systemMessage a Claude Code / Codex Stop hook shows the user, or ""."""
+        output = output.strip()
+        if not output:
+            return ""
+        return json.loads(output).get("systemMessage") or ""
+
+    def assertNoticed(self, output: str, text: str) -> None:
+        self.assertAllowed(output)
+        self.assertIn(text, self.notice(output))
+
+    def assertQuiet(self, output: str) -> None:
+        self.assertAllowed(output)
+        self.assertEqual(self.notice(output), "")
+
+    def test_a_status_query_alone_does_not_back_a_test_claim(self) -> None:
+        self.track(self.shell("git status"))
+        self.assertNoticed(self.stop(CLAIM), "no test or build command")
+
+    def test_a_status_query_alone_does_not_back_a_chinese_test_claim(self) -> None:
+        self.track(self.shell("git status --short"))
+        self.assertNoticed(self.stop("全部 413 項測試通過。"),
+                           "no test or build command")
+
+    def test_git_status_after_an_edit_does_not_refresh_a_test_run(self) -> None:
+        self.track(self.shell("pytest -q"))
+        self.track(self.edit("src/app.py"))
+        self.track(self.shell("git status"))
+        self.assertNoticed(self.stop(CLAIM), "edited after the last test or build run")
+
+    def test_a_test_run_after_the_last_edit_needs_no_notice(self) -> None:
+        self.track(self.edit("src/app.py"))
+        self.track(self.shell("python -m unittest discover -s tests"))
+        self.track(self.shell("git status"))
+        self.assertQuiet(self.stop(CLAIM))
+
+    def test_a_build_run_backs_a_build_claim(self) -> None:
+        self.track(self.shell("npm run build"))
+        self.assertQuiet(self.stop("Done, the build passes."))
+
+    def test_a_state_claim_needs_only_a_status_query(self) -> None:
+        self.track(self.shell("git status"))
+        self.assertQuiet(self.stop("Confirmed: the branch is clean and pushed."))
+
+    def test_a_conditional_test_phrase_is_not_a_test_claim(self) -> None:
+        for message in ("I will rebase once the tests pass.",
+                        "測試通過後我會先 rebase。"):
+            with self.subTest(message=message):
+                self.track(self.shell("git status"))  # each Stop empties the ledger
+                self.assertQuiet(self.stop(message))
+
+    def test_the_second_pass_still_shows_the_notice(self) -> None:
+        self.track(self.shell("git status"))
+        self.assertNoticed(self.stop(CLAIM, stop_active=True), "no test or build command")
+
+    def test_the_test_ledger_is_cleaned_up(self) -> None:
+        self.track(self.shell("pytest -q"))
+        self.stop(CLAIM)
+        self.assertEqual(sorted(p.name for p in (self.home / "ledger").glob("flow.*")), [])
+
+    def test_an_extra_test_command_can_be_configured(self) -> None:
+        self.extra_env = {"CLAIM_GUARD_TEST_CMD": "mytestrunner"}
+        self.track(self.shell("git status"))
+        self.track(self.shell("mytestrunner --all"))
+        self.assertQuiet(self.stop(CLAIM))
+
+    def test_an_empty_ledger_still_blocks_a_test_claim(self) -> None:
+        # The notice is added on top; the first-tier rule it sits on is not relaxed.
+        self.assertBlocked(self.stop(CLAIM))
 
 
 class ClaudePythonLedgerFlow(LedgerFlowMixin, unittest.TestCase):
@@ -381,6 +460,162 @@ class AntigravityTrackerEditLedger(unittest.TestCase):
             self.assertFalse((Path(tmp) / "agy-flow.verify").exists())
 
 
+def load_tracker():
+    spec = importlib.util.spec_from_file_location("claim_ledger_tracker", TRACKER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+# Commands that run tests or a build (tier one) and commands that only look at
+# state (tier two). Drawn from what the 2026-11-21 transcript sample actually ran.
+TEST_OR_BUILD_COMMANDS = (
+    "pytest -q",
+    "cd repo && pytest tests/test_x.py",
+    "uv run pytest",
+    "python -m pytest -q",
+    "python -m unittest discover -s tests -p \"test_*.py\"",
+    "uv run --python 3.11 -m compileall scripts hooks",
+    "python -c \"import py_compile; py_compile.compile('a.py')\"",
+    "python hooks/claim-guard/tests/run-tests.py",
+    "python hooks/tests/run-agent-protocol-tests.py",
+    "python tests/test_fork_divergence.py",
+    "python scripts/verify-install.py --agent all",
+    "pwsh -NoProfile -File tools/dev_check.ps1",
+    "bash tools/dev_check.sh",
+    "& \"C:\\work\\tests\\Run-All.ps1\"",
+    "./run-tests.sh",
+    "Invoke-Pester -Path tests",
+    "npm test",
+    "npm run build -w @aihot/web",
+    "npm run typecheck",
+    "pnpm test",
+    "yarn build",
+    "bun test",
+    "npx vitest run",
+    "npx playwright test",
+    "node --test apps/web/tests/a.test.ts",
+    "npx tsc --noEmit",
+    "deno test",
+    "cargo test",
+    "cd C:\\GitHub\\buzz; & \"$env:USERPROFILE\\.cargo\\bin\\cargo.exe\" check -p buzz-agent",
+    "go test ./...",
+    "go vet ./...",
+    "dotnet test",
+    "dotnet build -c Release",
+    "mvn -q test",
+    "./gradlew build",
+    "make test",
+    "bash -n hooks/x.sh",
+    "gh run watch 123 --exit-status",
+    "gh pr checks 42",
+)
+STATUS_QUERY_COMMANDS = (
+    "git status",
+    "git status --short",
+    "git diff --stat",
+    "git log --oneline -5",
+    "git add tests/test_x.py",
+    "ls tests/",
+    "cat tests/test_x.py",
+    "wc -l tests/run-tests.py",
+    "grep -n pytest README.md",
+    "pip install pytest",
+    "Test-Path C:\\work\\a.txt",
+    "Get-Process python",
+    "Get-Command npm",
+    "python --version",
+    "python -c \"print(1)\"",
+    "python -m json.tool a.json",
+    "curl -sI https://example.invalid",
+    "echo latest.py contest.py",
+    "python tools/check_divergence.py",
+)
+
+
+class TestTierPatterns(unittest.TestCase):
+    """Which commands count as a test or build run (the tracker's tier one)."""
+
+    def test_test_and_build_commands_are_tier_one(self) -> None:
+        tracker = load_tracker()
+        for command in TEST_OR_BUILD_COMMANDS:
+            with self.subTest(command=command):
+                self.assertTrue(tracker.is_test_command(command))
+
+    def test_status_queries_are_not_tier_one(self) -> None:
+        tracker = load_tracker()
+        for command in STATUS_QUERY_COMMANDS:
+            with self.subTest(command=command):
+                self.assertFalse(tracker.is_test_command(command))
+
+    def test_an_invalid_extra_pattern_is_ignored(self) -> None:
+        tracker = load_tracker()
+        self.assertFalse(tracker.is_test_command("git status", extra="(unclosed"))
+        self.assertTrue(tracker.is_test_command("pytest", extra="(unclosed"))
+
+    def test_test_commands_still_count_only_where_they_did_for_verification(self) -> None:
+        # Tier one is a separate ledger. It must not make anything count as
+        # verification that did not count before.
+        tracker = load_tracker()
+        self.assertIsNone(tracker.VERIFY_CMD.search("python tools/check_divergence.py"))
+
+
+class AntigravityTestTier(unittest.TestCase):
+    """Antigravity's Stop allows with {} exactly, so the notice goes to stderr."""
+
+    def test_status_only_then_a_test_claim_allows_with_a_notice_on_stderr(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env = os.environ.copy()
+            env.pop("CLAIM_GUARD_TEST_CMD", None)
+            env["CLAIM_GUARD_LEDGER_DIR"] = tmp
+            env["HARNESS_GUARD_STATE_DIR"] = tmp
+            transcript = Path(tmp) / "t.jsonl"
+            transcript.write_text(json.dumps({"type": "PLANNER_RESPONSE", "text": "The tests pass."}) + "\n",
+                                  encoding="utf-8")
+            post = {"conversationId": "agy-tier", "workspacePaths": [tmp], "stepIdx": 2,
+                    "toolCall": {"name": "run_command", "args": {"CommandLine": "git status"}}}
+            subprocess.run([sys.executable, str(TRACKER)], input=json.dumps(post).encode("utf-8"),
+                           env=env, capture_output=True, check=True)
+            self.assertTrue((Path(tmp) / "agy-tier.verify").exists())
+            self.assertFalse((Path(tmp) / "agy-tier.test").exists())
+            stop = {"conversationId": "agy-tier", "workspacePaths": [tmp], "transcriptPath": str(transcript),
+                    "terminationReason": "NO_TOOL_CALL"}
+            proc = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(stop).encode("utf-8"),
+                                  env=env, capture_output=True, check=True)
+            self.assertEqual(proc.stdout.decode("utf-8").strip(), "{}")
+            self.assertIn("no test or build command", proc.stderr.decode("utf-8"))
+
+    def test_a_test_run_is_written_to_the_test_ledger(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env = os.environ.copy()
+            env["CLAIM_GUARD_LEDGER_DIR"] = tmp
+            post = {"conversationId": "agy-tier", "workspacePaths": [tmp],
+                    "toolCall": {"name": "run_command", "args": {"CommandLine": "python -m pytest -q"}}}
+            subprocess.run([sys.executable, str(TRACKER)], input=json.dumps(post).encode("utf-8"),
+                           env=env, capture_output=True, check=True)
+            self.assertIn("pytest", (Path(tmp) / "agy-tier.test").read_text(encoding="utf-8"))
+
+
+class CursorTestTier(unittest.TestCase):
+    """Cursor's stop cannot veto; a follow-up would start a new turn, so the notice stays off stdout."""
+
+    def test_the_notice_is_not_sent_as_a_follow_up(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            env = os.environ.copy()
+            env.pop("CLAIM_GUARD_TEST_CMD", None)
+            env["CLAIM_GUARD_LEDGER_DIR"] = tmp
+            post = {"conversation_id": "cur-tier", "hook_event_name": "afterShellExecution",
+                    "cursor_version": "1.7", "command": "git status", "output": ""}
+            subprocess.run([sys.executable, str(TRACKER)], input=json.dumps(post).encode("utf-8"),
+                           env=env, capture_output=True, check=True)
+            stop = {"conversation_id": "cur-tier", "hook_event_name": "stop", "cursor_version": "1.7",
+                    "status": "completed", "last_assistant_message": CLAIM}
+            proc = subprocess.run([sys.executable, str(HOOK)], input=json.dumps(stop).encode("utf-8"),
+                                  env=env, capture_output=True, check=True)
+            self.assertNotIn("followup_message", proc.stdout.decode("utf-8"))
+            self.assertIn("no test or build command", proc.stderr.decode("utf-8"))
+
+
 @unittest.skipIf(os.name == "nt" or not shutil.which("jq"), "POSIX shell builds need bash and jq")
 class ClaudeShellLedgerFlow(ClaudePythonLedgerFlow):
     tracker_command = ["bash", str(REPO / "hooks/claim-guard/claude-code/claim-ledger-tracker.sh")]
@@ -435,6 +670,65 @@ def posix_bash():
         git_bash = Path(r"C:\Program Files\Git\bin\bash.exe")
         return str(git_bash) if git_bash.exists() else None
     return shutil.which("bash")
+
+
+def shell_block(script: Path, name: str) -> str:
+    """The text between `# >>> name` and `# <<< name` in a shell script."""
+    text = script.read_text(encoding="utf-8")
+    start = text.index("# >>> %s\n" % name) + len("# >>> %s\n" % name)
+    return text[start:text.index("# <<< %s" % name, start)]
+
+
+SHELL_TRACKERS = ("claude-code/claim-ledger-tracker.sh", "codex/claim-ledger-tracker.sh")
+SHELL_GUARDS = ("claude-code/claim-evidence-guard.sh", "codex/claim-evidence-guard.sh")
+
+
+@unittest.skipIf(not posix_bash(), "needs bash (Git Bash on Windows)")
+class ShellTestTierParity(unittest.TestCase):
+    """The POSIX builds' grep -E patterns sort the same commands and claims as Python.
+
+    The two dialects differ (no lookbehind, POSIX classes), so the patterns
+    cannot be compared as text; they are run on the same samples instead. This
+    needs bash and grep only, not jq, so it runs on Windows too.
+    """
+
+    def grep(self, block: str, var: str, samples, flags: str = "-qiE", pre: str = "") -> list:
+        script = block + "\n" + (
+            'while IFS= read -r -d "" s; do '
+            'if printf "%%s" "$s" %s| grep %s -- "$%s"; then echo 1; else echo 0; fi; done' % (pre, flags, var))
+        proc = subprocess.run([posix_bash(), "-c", script], input="\0".join(samples).encode("utf-8") + b"\0",
+                              capture_output=True, check=True)
+        return [line == "1" for line in proc.stdout.decode("utf-8").split()]
+
+    def test_tracker_test_pattern(self) -> None:
+        samples = TEST_OR_BUILD_COMMANDS + STATUS_QUERY_COMMANDS
+        expected = [True] * len(TEST_OR_BUILD_COMMANDS) + [False] * len(STATUS_QUERY_COMMANDS)
+        for script in SHELL_TRACKERS:
+            with self.subTest(script=script):
+                block = shell_block(REPO / "hooks" / "claim-guard" / script, "test-cmd-ere")
+                got = self.grep(block, "TEST_CMD_ERE", samples)
+                wrong = [s for s, g, e in zip(samples, got, expected) if g != e]
+                self.assertEqual(wrong, [])
+
+    def test_guard_test_claim_pattern(self) -> None:
+        guard = load_guard()
+        samples = (CLAIM, "Done, the build passes.", "全部 413 項測試通過。",
+                   "All green.", "Confirmed: the branch is clean and pushed.", "Verified on the live box.",
+                   "I will rebase once the tests pass.", "測試通過後我會先 rebase。")
+        expected = [guard.is_test_claim(s) for s in samples]
+        self.assertEqual(expected, [True, True, True, True, False, False, False, False])
+        for script in SHELL_GUARDS:
+            with self.subTest(script=script):
+                block = shell_block(REPO / "hooks" / "claim-guard" / script, "test-claim-ere")
+                got = self.grep(block, "TEST_CLAIM_ERE", samples, pre='| sed -E "$TEST_CLAIM_NOT_SED" ')
+                self.assertEqual(got, expected)
+
+
+def load_guard():
+    spec = importlib.util.spec_from_file_location("claim_evidence_guard_tier", HOOK)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @unittest.skipIf(not posix_bash(), "needs bash (Git Bash on Windows)")

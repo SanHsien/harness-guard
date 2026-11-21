@@ -445,6 +445,14 @@ def live_fire_antigravity_claim(tracker, guard):
     record(agy_silent(after), "Antigravity claim-guard allows the same claim once the ledger has a test run",
            process_detail(after))
 
+    say("verify-agy-status", "I ran the tests, all passing.")
+    status = run_hook(tracker, dict(agy_pre("run_command", {"CommandLine": "git status"}, "verify-agy-status"),
+                                    stepIdx=2), env=agy_env())
+    noticed = run_hook(guard, agy_stop("verify-agy-status"), env=agy_env())
+    record(agy_silent(noticed) and "no test or build command" in (noticed.stderr or ""),
+           "Antigravity claim-guard allows a test claim backed only by git status, notice on stderr",
+           process_detail(status, noticed))
+
 
 def trust_as_own_repo(directory):
     """Give `directory` a GitHub origin under the trusted owner.
@@ -836,6 +844,42 @@ def check_codex_live_fire():
                     not alias_failures,
                     "Codex claim tracker accepts exec_command and shell_command",
                     "" if not alias_failures else "failed: %s" % ", ".join(alias_failures),
+                )
+
+                status = run_hook(
+                    tracker,
+                    {
+                        "session_id": "verify-codex-claim-status",
+                        "turn_id": "verify-codex-claim-status",
+                        "hook_event_name": "PostToolUse",
+                        "tool_name": "exec_command",
+                        "tool_input": {"cmd": "git status"},
+                        "tool_response": {"exit_code": 0},
+                    },
+                    args=registered_args(*tracker_names),
+                )
+                noticed = run_hook(
+                    guard,
+                    {
+                        "session_id": "verify-codex-claim-status",
+                        "turn_id": "verify-codex-claim-status",
+                        "hook_event_name": "Stop",
+                        "last_assistant_message": "I ran the tests; all passing.",
+                    },
+                    args=registered_args(*guard_names),
+                )
+                notice_ok = (
+                    status is not None
+                    and noticed is not None
+                    and noticed.returncode == 0
+                    and not codex_blocks(noticed)
+                    and "no test or build command" in (noticed.stdout or "")
+                    and "systemMessage" in (noticed.stdout or "")
+                )
+                record(
+                    notice_ok,
+                    "Codex claim-guard shows a notice, not a block, for a test claim backed only by git status",
+                    "" if notice_ok else process_detail(*(p for p in (status, noticed) if p is not None)),
                 )
 
     lint_names = ("lint_gate.py", "lint-gate.sh")
@@ -1232,6 +1276,33 @@ def check_claim_guard():
     record(
         '"block"' not in (after.stdout or ""),
         "claim-guard allows the same claim once the ledger has a test run",
+    )
+
+    status = run_hook(
+        tracker,
+        {
+            "session_id": "verify-status-only",
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "git status"},
+        },
+    )
+    noticed = run_hook(
+        guard,
+        {
+            "session_id": "verify-status-only",
+            "hook_event_name": "Stop",
+            "last_assistant_message": "I ran the tests, all passing.",
+        },
+    )
+    if status is None or noticed is None:
+        record(False, "claim-guard test tier runs")
+        return
+    out = noticed.stdout or ""
+    record(
+        '"block"' not in out and "systemMessage" in out and "no test or build command" in out,
+        "claim-guard shows a notice, not a block, for a test claim backed only by git status",
+        "" if "systemMessage" in out else process_detail(status, noticed),
     )
 
 

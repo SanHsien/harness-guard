@@ -171,11 +171,11 @@ python scripts/verify-install.py
 
 - `PreToolUse` + matcher `Write|Edit|MultiEdit` → no-emoji-guard
 - `PreToolUse` + matcher `Bash|PowerShell` → test-gate-guard、danger-zone-guard
-- `PostToolUse` + matcher `Bash|PowerShell|Grep|Glob|WebSearch|WebFetch|Write|Edit|MultiEdit|NotebookEdit|mcp__claude-in-chrome__.*` → claim-ledger-tracker（記驗證、搜尋與改檔；改檔晚於最後一次驗證 = 該驗證過期）
+- `PostToolUse` + matcher `Bash|PowerShell|Grep|Glob|WebSearch|WebFetch|Write|Edit|MultiEdit|NotebookEdit|mcp__claude-in-chrome__.*` → claim-ledger-tracker（記驗證、搜尋與改檔；改檔晚於最後一次驗證 = 該驗證過期；跑測試或建置的指令另記一本 `.test` 帳，說「測試通過」卻只有狀態查詢時 claim-evidence-guard 提醒、不擋）
 - `Stop` → claim-evidence-guard、lint-gate
 
 放行是安靜結束（exit 0），攔截是 `exit 2` + 訊息寫 stderr；claim-evidence-guard 例外，
-它印 `{"decision":"block","reason":"..."}`。專案目錄從環境變數 `CLAUDE_PROJECT_DIR` 讀。
+它印 `{"decision":"block","reason":"..."}`，放行但要提醒時印 `{"systemMessage":"..."}`。專案目錄從環境變數 `CLAUDE_PROJECT_DIR` 讀。
 
 ## 維護 repo 本身
 

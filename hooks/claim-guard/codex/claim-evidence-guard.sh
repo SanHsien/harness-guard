@@ -17,7 +17,40 @@ turn_id="${turn_id:-default}"
 verify_ledger="$ledger_dir/${turn_id}.verify"
 search_ledger="$ledger_dir/${turn_id}.search"
 edit_ledger="$ledger_dir/${turn_id}.edit"
-cleanup() { rm -f "$verify_ledger" "$search_ledger" "$edit_ledger"; }
+test_ledger="$ledger_dir/${turn_id}.test"
+cleanup() { rm -f "$verify_ledger" "$search_ledger" "$edit_ledger" "$test_ledger"; }
+
+# >>> test-claim-ere
+# Tier two of a verification claim: "tests pass" / "the build passes" wants a
+# test or build run (the tracker's .test ledger), not only status queries. Same
+# words as TEST_CLAIM_TRIGGERS / TEST_CLAIM_NOT in windows/claim_evidence_guard.py.
+# A notice (systemMessage), never a block: see that file for the measurement.
+TEST_CLAIM_ERE='tests? pass|all passing|build passes|all green|測試通過|建置通過|全數通過|所有測試已通過|全部測試通過|編譯成功|建置成功'
+TEST_CLAIM_NOT_SED='s/(^|[^[:alnum:]_])([Oo][Nn][Cc][Ee]|[Ii][Ff]|[Uu][Nn][Tt][Ii][Ll]|[Ww][Hh][Ee][Nn]|[Aa][Ff][Tt][Ee][Rr]|[Bb][Ee][Ff][Oo][Rr][Ee]|[Uu][Nn][Ll][Ee][Ss][Ss])[[:space:]]+(([Aa][Ll][Ll]|[Tt][Hh][Ee])[[:space:]]+)*[Tt][Ee][Ss][Tt][Ss]?[[:space:]]+[Pp][Aa][Ss][Ss]/\1 /g; s/測試通過(後|之後|再|才)/ /g; s/(等到|等|待|直到)(全部)?測試通過/ /g'
+# <<< test-claim-ere
+
+notice=""
+test_tier_notice() {
+  printf '%s' "$last_message" | sed -E "$TEST_CLAIM_NOT_SED" | grep -iqE -- "$TEST_CLAIM_ERE" || return 0
+  if [ ! -s "$test_ledger" ]; then
+    last_verify="$(tail -1 "$verify_ledger" 2>/dev/null)"
+    printf 'CLAIM-EVIDENCE GUARD (notice): you said tests or a build pass, but no test or build command ran this turn -- only status queries such as git status, ls or Test-Path.\n  Last verification: %s\nIf the tests ran in an earlier turn or in another agent, say where; otherwise run them before saying they pass.' "${last_verify:-(none)}"
+  elif [ -s "$edit_ledger" ] && [ "$edit_ledger" -nt "$test_ledger" ]; then
+    printf 'CLAIM-EVIDENCE GUARD (notice): you said tests or a build pass, but files were edited after the last test or build run, so it did not cover the current code.\n  Last test run: %s\n  Later edit: %s' "$(tail -1 "$test_ledger")" "$(tail -1 "$edit_ledger")"
+  fi
+}
+
+# Let the turn end: {} or, with a notice, {"systemMessage": ...} (Codex shows it to the user).
+allow() {
+  cleanup
+  if [ -n "$notice" ]; then
+    printf '%s\n' "$notice" >&2
+    jq -n --arg m "$notice" '{systemMessage:$m}'
+  else
+    printf '{}\n'
+  fi
+  exit 0
+}
 
 stop_active="$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null)"
 last_message="$(printf '%s' "$input" | jq -r '.last_assistant_message // empty' 2>/dev/null)"
@@ -137,14 +170,13 @@ Re-run the verification before claiming; if this change needs none (docs or comm
   fi
   quality_error="$(check_quality_summary_gate)"
   [ -z "$quality_error" ] || block_reason "$quality_error"
+  notice="$(test_tier_notice)"
 fi
 
 # A second pass relaxes only the session-ledger requirement. Machine evidence
 # remains fail-closed until Full verification is current.
 if [ "$stop_active" = "true" ]; then
-  cleanup
-  printf '{}\n'
-  exit 0
+  allow
 fi
 
 negative_triggers="doesn't exist|does not exist|not found|no such|couldn't find|cannot find|can't find|nothing matching|no evidence|there is no|不存在|找不到|沒有找到|查無|沒有任何(相關|紀錄|檔案)|從未出現"
@@ -154,6 +186,4 @@ if printf '%s' "$last_message" | grep -iqE "$negative_triggers" && [ ! -s "$sear
   exit 0
 fi
 
-cleanup
-printf '{}\n'
-exit 0
+allow
