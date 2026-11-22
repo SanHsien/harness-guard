@@ -359,7 +359,7 @@ MESSAGE_TEMPLATE = (
     "Command: {cmd}\n\n"
     "Guidance:\n"
     "  - If cleaning artifacts, scope deletions strictly to workspace subdirectories.\n"
-    "  - If pushing changes, avoid forced pushes to main/master; use standard branches.\n"
+    "  - If pushing changes, push normally without --force to main/master.\n"
     "  - Never transmit .env or private key files externally.\n"
 )
 

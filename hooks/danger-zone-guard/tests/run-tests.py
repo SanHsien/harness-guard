@@ -617,6 +617,21 @@ def test_length_cap():
     return failures
 
 
+def test_message_does_not_steer_to_branches():
+    """The block message must not tell the model to switch to a branch.
+
+    The maintainer works on main without branches or PRs. The old guidance line
+    "use standard branches" pushed models into opening branches after a block.
+    The force-push advice stays; only the branch steer is gone.
+    """
+    print("-- Block message keeps force-push advice without steering to branches")
+    msg = _HOOK.MESSAGE_TEMPLATE
+    ok = "branches" not in msg.lower() and "--force" in msg
+    print("%-4s no branch steer, force-push advice kept" % ("PASS" if ok else "FAIL"))
+    print("failures: %d\n" % (not ok))
+    return int(not ok)
+
+
 def test_codex_copy_in_sync():
     """The Codex build's detection code is a copy of the Claude Code build's.
 
@@ -703,7 +718,8 @@ def main():
     total = (claude_failures + codex_failures + cursor_failures + test_antigravity_payload()
              + test_redos()
              + test_wrapper_redos() + test_wrapper_mix_timing() + test_length_cap()
-             + test_codex_copy_in_sync() + test_codex_tool_names())
+             + test_codex_copy_in_sync() + test_codex_tool_names()
+             + test_message_does_not_steer_to_branches())
     print("total failures: %d" % total)
     return 1 if total else 0
 
