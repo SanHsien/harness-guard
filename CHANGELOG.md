@@ -8,6 +8,11 @@
 
 ---
 
+## 2026-11-22
+
+- 修正 Python claim-guard：已辨識的測試或建置命令會同時寫入測試和驗證紀錄。Codex 在 Windows 執行 `pwsh -NoProfile -File tools/dev_check.ps1` 後，收尾檢查可讀到驗證紀錄。
+- Codex 收尾缺少 hook 紀錄時，Python guard 可從同一回合的原生事件補讀成功的 PowerShell 開發檢查或 Python 測試。後續改檔、失敗或包在管線裡的命令不算。
+
 ## 2026-11-21
 
 ### 安全修正

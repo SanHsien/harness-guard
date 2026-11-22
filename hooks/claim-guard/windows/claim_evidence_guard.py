@@ -609,6 +609,82 @@ def block(payload, reason, *ledgers):
     return 0
 
 
+CODEX_TEST_COMMAND = re.compile(
+    r"(?i)(?:pwsh(?:\.exe)? (?:-NoProfile )?-File [\w./\\-]*\bdev_check\.ps1"
+    r"|python(?:\.exe)? (?:-B )?[\w./-]*tests?/run-tests\.py)"
+)
+CODEX_ROLLOUT_TAIL_BYTES = 4 * 1024 * 1024
+
+
+def codex_transcript_test(payload, edit_ledger):
+    """Recover a successful, standalone check from native current-turn events."""
+    sid, turn = payload.get("session_id"), payload.get("turn_id")
+    path = payload.get("transcript_path")
+    if not all(isinstance(value, str) and value for value in (sid, turn, path)):
+        return False
+    if payload.get("hook_event_name") != "Stop":
+        return False
+
+    # Require the turn start inside the bounded window. In particular, do not
+    # mistake a prior turn's successful run or text printed by a tool for evidence.
+    started = False
+    last_command_ms = None
+    try:
+        with Path(path).open("rb") as stream:
+            size = stream.seek(0, os.SEEK_END)
+            if size > CODEX_ROLLOUT_TAIL_BYTES:
+                stream.seek(size - CODEX_ROLLOUT_TAIL_BYTES)
+                stream.readline(CODEX_ROLLOUT_TAIL_BYTES)
+            else:
+                stream.seek(0)
+            lines = stream.read(CODEX_ROLLOUT_TAIL_BYTES).splitlines()
+    except (OSError, ValueError):
+        return False
+
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except (ValueError, UnicodeError):
+            continue
+        if not isinstance(event, dict) or event.get("type") != "event_msg":
+            continue
+        data = event.get("payload")
+        if not isinstance(data, dict):
+            continue
+        if data.get("type") == "task_started":
+            started = data.get("turn_id") == turn
+            last_command_ms = None
+            continue
+        if (not started or data.get("type") != "item_completed"
+                or data.get("thread_id") != sid or data.get("turn_id") != turn):
+            continue
+        item = data.get("item")
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "FileChange":
+            last_command_ms = None
+        if item.get("type") != "CommandExecution":
+            continue
+        # An intervening shell command could have edited files or failed a
+        # rerun. Recover only when the last native command is a successful check.
+        last_command_ms = None
+        argv = item.get("command")
+        milliseconds = data.get("completed_at_ms")
+        if (isinstance(argv, list) and len(argv) == 3
+                and all(isinstance(arg, str) for arg in argv)
+                and Path(argv[0].replace("\\", "/")).name.lower() == "pwsh.exe"
+                and argv[1].lower() == "-command" and CODEX_TEST_COMMAND.fullmatch(argv[2].strip())
+                and item.get("source") == "unified_exec_startup"
+                and item.get("status") == "completed" and type(item.get("exit_code")) is int
+                and item["exit_code"] == 0 and type(milliseconds) is int):
+            last_command_ms = milliseconds
+
+    edit_ns = mtime_ns(edit_ledger)
+    return last_command_ms is not None and (
+        edit_ns is None or last_command_ms * 1_000_000 >= edit_ns
+    )
+
+
 def evaluate(payload, last, second_pass, verify_ledger, search_ledger, edit_ledger=None,
              notices=None, test_ledger=None):
     """Reconcile the last message with the ledger. Returns a block reason, or None.
@@ -627,10 +703,14 @@ def evaluate(payload, last, second_pass, verify_ledger, search_ledger, edit_ledg
     last = NOT_A_CLAIM.sub(" ", last)
     notice = None
     if VERIFY_TRIGGERS.search(last):
-        if not has_records(verify_ledger) and not second_pass:
+        recovered_test = (
+            not second_pass and not has_records(verify_ledger)
+            and codex_transcript_test(payload, edit_ledger)
+        )
+        if not has_records(verify_ledger) and not second_pass and not recovered_test:
             cleanup(*ledgers)
             return VERIFY_BLOCK
-        if not second_pass and edited_since_verify(verify_ledger, edit_ledger):
+        if not second_pass and not recovered_test and edited_since_verify(verify_ledger, edit_ledger):
             reason = STALE_BLOCK % (last_line(verify_ledger), last_line(edit_ledger))
             cleanup(*ledgers)
             return reason
@@ -639,7 +719,8 @@ def evaluate(payload, last, second_pass, verify_ledger, search_ledger, edit_ledg
         if quality_err:
             cleanup(*ledgers)
             return quality_err
-        notice = test_tier_notice(last, verify_ledger, test_ledger, edit_ledger)
+        if not recovered_test:
+            notice = test_tier_notice(last, verify_ledger, test_ledger, edit_ledger)
 
     def allow():
         cleanup(*ledgers)

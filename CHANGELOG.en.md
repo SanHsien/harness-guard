@@ -8,6 +8,11 @@ Entries marked `fork` are this fork's changes relative to
 
 ---
 
+## 2026-11-22
+
+- The Python claim guard records recognized test and build commands in both ledgers. On Windows, the Codex Stop hook can now find verification evidence for `pwsh -NoProfile -File tools/dev_check.ps1`.
+- When the Codex hook ledger is empty, the Python Stop guard can recover a successful PowerShell development check or Python test from a native event in the current turn. Later edits, failures, and piped commands do not qualify.
+
 ## 2026-11-21
 
 ### Security

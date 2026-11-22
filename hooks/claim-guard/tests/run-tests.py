@@ -582,6 +582,66 @@ class CodexPythonLedgerFlow(ClaudePythonLedgerFlow):
     def edit(self, path: str) -> dict:
         return self.tool("apply_patch", {"command": "*** Begin Patch\n*** Update File: %s" % path})
 
+    def test_powershell_dev_check_backs_a_first_stop_test_claim(self) -> None:
+        command = "pwsh -NoProfile -File tools/dev_check.ps1"
+        self.track(self.shell(command))
+        ledger = self.home / "ledger"
+        for kind in ("test", "verify"):
+            record = ledger / ("flow." + kind)
+            self.assertTrue(record.is_file(), f"missing {kind} record")
+            lines = record.read_text(encoding="utf-8").splitlines()
+            self.assertEqual([line.partition(" ")[2] for line in lines], [command])
+        self.assertAllowed(self.stop("All tests pass."))
+
+
+class CodexNativeTranscriptFlow(unittest.TestCase):
+    def test_only_current_successful_native_check_backs_a_claim(self) -> None:
+        command = {
+            "type": "CommandExecution",
+            "command": [r"C:\runtime\pwsh.exe", "-Command", "pwsh -NoProfile -File tools/dev_check.ps1"],
+            "source": "unified_exec_startup", "status": "completed", "exit_code": 0,
+        }
+
+        def event(kind, **fields):
+            return {"type": "event_msg", "payload": {"type": kind, "turn_id": "turn", **fields}}
+
+        def completed(item, **fields):
+            data = {"thread_id": "thread", "item": item, "completed_at_ms": 1000}
+            return event("item_completed", **(data | fields))
+
+        start = event("task_started")
+        passed = completed(command)
+        cases = {
+            "success": ([start, passed], True),
+            "missing turn start": ([passed], False),
+            "wrong thread": ([start, completed(command, thread_id="other")], False),
+            "previous turn": ([start, completed(command, turn_id="other")], False),
+            "failed": ([start, completed(command | {"exit_code": 1})], False),
+            "masked failure": ([start, completed(command | {
+                "command": command["command"][:2] + [command["command"][2] + " | Out-Null"],
+            })], False),
+            "stdout alone": ([start, {"type": "response_item", "payload": passed}], False),
+            "later edit": ([start, passed, completed({"type": "FileChange"})], False),
+            "later command": ([start, passed, completed(command | {"exit_code": 1})], False),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            transcript = root / "rollout.jsonl"
+            payload = {"session_id": "thread", "turn_id": "turn",
+                       "hook_event_name": "Stop", "transcript_path": str(transcript),
+                       "cwd": tmp, "last_assistant_message": "All tests pass."}
+            env = dict(os.environ, CLAIM_GUARD_LEDGER_DIR=tmp)
+            for name, (events, allowed) in cases.items():
+                with self.subTest(name=name):
+                    transcript.write_text("".join(json.dumps(x) + "\n" for x in events),
+                                          encoding="utf-8")
+                    result = subprocess.run([sys.executable, str(HOOK), "--codex"],
+                                            input=json.dumps(payload).encode(), capture_output=True,
+                                            env=env, check=True)
+                    self.assertEqual(b'"decision": "block"' not in result.stdout, allowed, result)
+                    if allowed:
+                        self.assertEqual(result.stderr, b"")
+
 
 class AntigravityTrackerEditLedger(unittest.TestCase):
     """Antigravity's edit tools land in the edit ledger the Stop check reads."""
@@ -694,12 +754,6 @@ class TestTierPatterns(unittest.TestCase):
         tracker = load_tracker()
         self.assertFalse(tracker.is_test_command("git status", extra="(unclosed"))
         self.assertTrue(tracker.is_test_command("pytest", extra="(unclosed"))
-
-    def test_test_commands_still_count_only_where_they_did_for_verification(self) -> None:
-        # Tier one is a separate ledger. It must not make anything count as
-        # verification that did not count before.
-        tracker = load_tracker()
-        self.assertIsNone(tracker.VERIFY_CMD.search("python tools/check_divergence.py"))
 
 
 class AntigravityTestTier(unittest.TestCase):

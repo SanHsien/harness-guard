@@ -116,8 +116,8 @@ VERIFY_CMD = re.compile(
 # that checks something, status queries included (`git status`, `ls`,
 # `Test-Path`, `--version`); claim_evidence_guard.py wants one of these, written
 # to a separate `.test` ledger, before a claim that tests or a build pass.
-# This list never changes what counts as verification: `.verify` is written
-# from VERIFY_CMD alone, as before.
+# Test and build commands also count as verification. Status queries can still
+# write only to the broader verification ledger.
 #
 # Add your own runner without editing this file: set CLAIM_GUARD_TEST_CMD to one
 # more regular expression (Python syntax here; the POSIX builds pass it to
@@ -400,9 +400,10 @@ def main():
             if codex:
                 sys.stdout.write("{}\n")
             return 0
-        if VERIFY_CMD.search(command):
+        ran_test = is_test_command(command)
+        if ran_test or VERIFY_CMD.search(command):
             log("verify", command[:120])
-        if is_test_command(command):
+        if ran_test:
             log("test", command[:120])
         if SEARCH_CMD.search(command):
             log("search", command[:120])
