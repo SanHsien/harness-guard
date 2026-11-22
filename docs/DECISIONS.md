@@ -53,3 +53,14 @@
 | `.claude-plugin/marketplace.json`、`README.md`、`README.zh-TW.md`：上述新版 checkpoint 宣傳 | **不採用**。本 fork 沒採用 marketplace 或此新版流程，不能在雙語 README 宣稱具備這些能力。 | 對應功能實作與四個 agent 驗收完成，且維護者決定提供 marketplace 安裝時。 |
 
 PR／issue 2026-11-02 沒有新項目（`--state all` 實查仍僅 PR #2、issue #1），既有決策不變。
+
+## 上游 b47f3e9 → 25175b8（2026-11-22 審視）
+
+來源：[25175b8](https://github.com/agentcrew-academy/harness-starter-kit/commit/25175b8092979b361a84eaa4640b165ae7b64b27)。
+上游自 `e9a4734^` 還原 `skills/phantom-pushback/` 與 `skills/review-loop/`，並於 `README.md`／`README.zh-TW.md` 標註為不進市集、不再更新、需手動複製的 unlisted skills。
+
+| 項目／檔案 | 結論與理由 | 重查條件 |
+| --- | --- | --- |
+| `skills/phantom-pushback/`、`skills/review-loop/`、`README.md`、`README.zh-TW.md` | **拒絕（不採用／無需移植）**。本 fork 從未跟進 `e9a4734` 退役這兩個 skill（仍由 `scripts/install.py` 安裝並納入 CI compile）。以 `git diff HEAD 25175b8 -- skills/phantom-pushback skills/review-loop` 比對，10 檔中 9 檔與本 fork 完全一致；僅 `skills/review-loop/SKILL.md` 本 fork 已改為不寫死 `~/.claude/skills/` 與 `python3` 的跨 agent 寫法，而 `25175b8` 還原的是舊版。上游 `README.zh-TW.md` 與「手動複製、不再更新」說明亦不符本 fork 雙語檔案結構與安裝契約。 | 上游日後對 `review-loop` 或 `phantom-pushback` 做出實質程式／規格修正，或本 fork 決定改為退役／下架這兩個 skill 時再重審。 |
+
+PR／issue 2026-11-22 沒有新項目（維持 PR #2、issue #1）。

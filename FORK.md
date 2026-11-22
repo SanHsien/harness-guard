@@ -102,6 +102,7 @@ python scripts/verify-install.py
 | `7474dfd` docs: lead with claim-guard, split closure skills into their own plugin | 2026-10-22 | **不採用**。只改 marketplace 與上游 README 版面，見 `docs/DECISIONS.md`。 |
 | `365f5c3` chore: remove retired/ folder | 2026-10-22 | **不採用**。本 fork 沒有退役那些項目；上游保存在 tag `retired-archive-2026-10-22`。 |
 | `adc8928` refactor(closure): merge neat-freak into checkpoint | 2026-10-25 | **不採用**（暫緩）。建立在 checkpoint 新版（依賴 write-manifest）之上，與該項一起處理，見 `docs/DECISIONS.md`。 |
+| `25175b8` docs: keep review-loop and phantom-pushback as unlisted skills for old blog links | 2026-11-22 | **不採用**（無需移植）。本 fork 從未退役 `review-loop` 與 `phantom-pushback`；除 `skills/review-loop/SKILL.md` 本 fork 已維持跨 agent 路徑寫法外，其餘恢復檔與本 fork 現況一致。見 `docs/DECISIONS.md`。 |
 
 審視後才推進 `scripts/upstream_baseline.json`；不要為了讓紅燈消失直接改 SHA。
 
@@ -189,3 +190,15 @@ commit 逐筆決策見上表與 [`docs/DECISIONS.md`](docs/DECISIONS.md)；水�
   只在重跑子程序移除該變數後，同批 75 tests exit 0（`OK (skipped=2)`）。
   claim suite 在 Windows 依原規則跳過 13 個 POSIX 案例；2026-11-02 沒有驗證 Linux runtime。
 - baseline 推進後 `python scripts/check_upstream_updates.py --strict` exit 0：無新增 commit／PR／issue 待審。
+
+## 2026-11-22：上游 b47f3e9 → 25175b8
+
+已讀 [25175b8092979b361a84eaa4640b165ae7b64b27](https://github.com/agentcrew-academy/harness-starter-kit/commit/25175b8092979b361a84eaa4640b165ae7b64b27)
+的完整 diff（12 個檔案）。**不採用，不修改任何產品檔案**；理由與重查條件見
+[`docs/DECISIONS.md`](docs/DECISIONS.md#上游-b47f3e9--25175b82026-11-22-審視)。
+這次是審查水位推進，不代表採用該 commit 的文案或舊版路徑。
+
+- 更新前本機 `python scripts/check_upstream_updates.py --strict` exit 1，列出唯一新增 commit `25175b8`。
+- `scripts/check_upstream_updates.py --strict` 實查 PR 水位 `#2`、issue 水位 `#1` 均無新增項目，維持 PR **#2**／issue **#1**。
+- 比對 `git diff HEAD 25175b8 -- skills/phantom-pushback skills/review-loop`：除 `skills/review-loop/SKILL.md` 本 fork 已改為跨 agent 相對腳本解析（不寫死 `python3 ~/.claude/skills/...`）外，其餘 9 個 skill 檔案皆與本 fork 現況一致；未見安全拒收項目。
+- 本機驗證：`unittest` 106 tests（`OK (skipped=2)`）、`compileall` 與 `python scripts/check_upstream_updates.py --strict` 均 exit 0。
